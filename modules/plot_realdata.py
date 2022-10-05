@@ -56,7 +56,7 @@ class PlotOutput():
 
     """
 
-    def __init__(self, fname, model, fig, nrows, ncols, axnum, **kwargs):
+    def __init__(self, fname, model, fig, nrows, ncols, axnum):
 
         self.model = model
         self.fig = fig
@@ -97,6 +97,8 @@ class PlotOutput():
         coords : list
             List of coordinates for data.
                 For a horizontal cross section, this list is [lats, lons]
+        ptype : string
+            Plot type. Used as the key to store metadata
 
         """
 
@@ -116,14 +118,20 @@ class PlotOutput():
                 raw = wrf.getvar(self.fptr, var, units=units) 
             else: 
                 raw = wrf.getvar(self.fptr, var)
+            
+            # Save metadata
+            self.metadata[ptype]['var'] = var
+            self.metadata[ptype]['name'] = raw.description
+            self.metadata[ptype]['units'] = raw.units
 
             # Interpolate, if desired
             if interp_field != None:
-                ifield = wrf.getvar(self.fptr, var)
+                ifield = wrf.getvar(self.fptr, interp_field)
                 data = wrf.interplevel(raw, ifield, interp_lvl)
-                self.metadata[ptype]['interp'] = '%d-%s' % (interp_lvl, ifield.units)
+                self.metadata[ptype]['interp'] = '%d-%s ' % (interp_lvl, ifield.units)
             else:
                 data = raw
+                self.metadata[ptype]['interp'] = ''
  
             # Get lat/lon coordinates
             lat, lon = wrf.latlon_coords(data)
@@ -135,7 +143,7 @@ class PlotOutput():
         if not hasattr(self, 'time'):
            self.time = np.datetime_as_string(data.Time.values)[:-10] + ' UTC'
  
-        return data, coords
+        return data, coords, ptype
 
 
     def _create_hcrsxn_ax(self, data):
@@ -180,8 +188,7 @@ class PlotOutput():
             self.ax.gridlines()
 
 
-    def contourf(self, var, units=None, interp_field=None, interp_lvl=None, cmap='viridis', 
-                 lvls=None, extend='neither'):
+    def contourf(self, var, ingest_kw={}, cntf_kw={}, cbar_kw={}, label_kw={}):
         """
         Plot data using a filled contour plot
 
@@ -189,38 +196,121 @@ class PlotOutput():
         ----------
         var : string
             Variable from model output file to plot
-        units : string, optional
-            Units for var
-        interp_field : string, optional
-            Interpolate var to a surface with a constant value of interp_field
-        interp_lvl : string, optional
-            Value of constant-interp_field used during interpolaton
-        cmap : optional
-            Colormap for filled contour plot 
-        lvls : array
-            Contour levels (setting to None uses default levels)
-        extend : string
-            Option to extend colorbar. Options are 'max', 'min', 'both', or 'neither'
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        cntf_kw : dict, optional
+            Other keyword arguments passed to contourf (key must be a string)
+        cbar_kw : dict, optional
+            Other keyword arguments passed to colorbar (key must be a string)
+        label_kw : dict, optional
+            Other keyword arguments passed to colorbar.set_label (key must be a string)
 
         """
 
-        data, coords = self._ingest_data(var, units=units, interp_field=interp_field, 
-                                         interp_lvl=interp_lvl, ptype='contourf0')
+        data, coords, ptype = self._ingest_data(var, ptype='contourf0', **ingest_kw)
 
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
         if self.model == 'wrf':
             self.cax = self.ax.contourf(wrf.to_np(coords[1]), wrf.to_np(coords[0]), 
-                                        wrf.to_np(data), levels=lvls, cmap=cmap, extend=extend,
-                                        transform=ccrs.PlateCarree())
+                                        wrf.to_np(data), transform=ccrs.PlateCarree(), **cntf_kw)
 
-        self.cbar = plt.colorbar(self.cax, ax=self.ax, orientation='horizontal', aspect=30)
-        if interp_field != None:
-            self.cbar.set_label('%s = %.1f %s (%s)' % (interp_field, interp_lvl, data.description, 
-                                data.units))
-        else:
-            self.cbar.set_label('%s (%s)' % (data.description, data.units))
+        self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
+        self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
+                                           self.metadata[ptype]['name'], 
+                                           self.metadata[ptype]['units']), **label_kw)
+
+
+    def contour(self, var, ingest_kw={}, cnt_kw={}):
+        """
+        Plot data using contours
+
+        Parameters
+        ----------
+        var : string
+            Variable from model output file to plot
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        cnt_kw : dict, optional
+            Other keyword arguments passed to contour (key must be a string)
+
+        """
+
+        data, coords, ptype = self._ingest_data(var, ptype='contour0', **ingest_kw)
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        if self.model == 'wrf':
+            self.cax = self.ax.contour(wrf.to_np(coords[1]), wrf.to_np(coords[0]), 
+                                       wrf.to_np(data), transform=ccrs.PlateCarree(), **cnt_kw)
+
+    
+    def barbs(self, xvar, yvar, thin=1, ingest_kw={}, barb_kw={}):
+        """
+        Plot data using wind barbs
+
+        Parameters
+        ----------
+        xvar, yvar : string
+            Variables from model output file to plot
+        thin : integer, optional
+            Option to plot every nth barb
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        barb_kw : dict, optional
+            Other keyword arguments passed to barb (key must be a string)
+
+        """
+
+        xdata, coords, ptype = self._ingest_data(xvar, ptype='barb0', **ingest_kw)
+        ydata, coords, ptype = self._ingest_data(yvar, ptype='barb0', **ingest_kw)
+
+        self.metadata.pop('barb1')
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        if self.model == 'wrf':
+            self.cax = self.ax.barbs(wrf.to_np(coords[1])[::thin, ::thin], 
+                                     wrf.to_np(coords[0])[::thin, ::thin], 
+                                     wrf.to_np(xdata)[::thin, ::thin], 
+                                     wrf.to_np(ydata)[::thin, ::thin], transform=ccrs.PlateCarree(), 
+                                     **barb_kw)
+
+    
+    def quiver(self, xvar, yvar, thin=1, ingest_kw={}, qv_kw={}):
+        """
+        Plot data using vectors
+
+        Parameters
+        ----------
+        xvar, yvar : string
+            Variables from model output file to plot
+        thin : integer, optional
+            Option to plot every nth barb
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        qv_kw : dict, optional
+            Other keyword arguments passed to quiver (key must be a string)
+
+        """
+
+        xdata, coords, ptype = self._ingest_data(xvar, ptype='vector0', **ingest_kw)
+        ydata, coords, ptype = self._ingest_data(yvar, ptype='vector0', **ingest_kw)
+
+        self.metadata.pop('vector1')
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        if self.model == 'wrf':
+            self.cax = self.ax.quiver(wrf.to_np(coords[1])[::thin, ::thin], 
+                                      wrf.to_np(coords[0])[::thin, ::thin], 
+                                      wrf.to_np(xdata)[::thin, ::thin], 
+                                      wrf.to_np(ydata)[::thin, ::thin], transform=ccrs.PlateCarree(), 
+                                      **qv_kw)
 
     
     def set_lim(self, minlat, maxlat, minlon, maxlon):
@@ -229,14 +319,10 @@ class PlotOutput():
 
         Parameters
         ----------
-        minlat : float
-            Minimum latitude
-        maxlat : float
-            Maximum latitude
-        minlon : float
-            Minimum longitude
-        maxlon : float
-            Maximum longitude
+        minlat, maxlat : float
+            Latitude limits
+        minlon, maxlon : float
+            Longitude limits
 
         """
 
@@ -244,17 +330,19 @@ class PlotOutput():
         self.ax.set_ylim([minlat, maxlat])
 
 
-    def ax_title(self, size=14):
+    def ax_title(self, **kwargs):
         """
         Create a title for the axes
 
         """
 
-        s = self.time 
-        for p in self.plots:
-            s = '%s %s' % (s, p)
+        s = self.time
+        for k in self.metadata.keys():
+            if k[:-1] != 'contourf':
+                s = s + '\n%s: %s%s (%s)' % (k, self.metadata[k]['interp'], 
+                                             self.metadata[k]['name'], self.metadata[k]['units']) 
 
-        self.ax.set_title(s, size=size)
+        self.ax.set_title(s, **kwargs)
         
 
 """
