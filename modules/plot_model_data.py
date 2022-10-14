@@ -346,5 +346,5 @@ class PlotOutput():
         
 
 """
-End plot_realdata.py
+End plot_model_data.py
 """

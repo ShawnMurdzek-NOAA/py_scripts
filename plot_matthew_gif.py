@@ -10,7 +10,7 @@ Date Created: 4 October 2022
 #---------------------------------------------------------------------------------------------------
 
 import matplotlib.pyplot as plt
-import plot_realdata as pr
+import plot_model_data as pmd
 import numpy as np
 import os
 import datetime as dt
@@ -30,7 +30,7 @@ for n in range(ntimes):
 
     fig = plt.figure(figsize=(8, 8))
 
-    out = pr.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
+    out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
     out.contourf('slp', cntf_kw={'cmap':'inferno', 'levels':np.arange(970, 1035, 5), 'extend':'both'})
     out.barbs('ua', 'va', thin=8, ingest_kw={'interp_field':'z', 'interp_lvl':500}, barb_kw={'length':6})
     out.config_ax()
