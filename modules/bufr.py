@@ -16,6 +16,7 @@ import json
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import numpy as np
 
 
 #---------------------------------------------------------------------------------------------------
@@ -41,8 +42,70 @@ class bufrCSV():
         # Set missing values (1e11) to NaN
         self.df = df.where(df != 1e11)
 
+        # Remove space before nmsg
+        self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
+
         # Load metadata from JSON file
-        self.meta = json.load(open('/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/modules/bufr_meta.json', 'r'))
+        self.meta = json.load(open('/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/modules/bufr_meta.json', 
+                                   'r'))
+
+    def sample(self, fname):
+        """
+        Create a sample prepbufr CSV using only two lines from each unique prepbufr report type
+
+        Parameters
+        ----------
+        fname : string
+            Filename for sample bufr CSV file
+
+        Returns
+        -------
+        None
+
+        """
+
+        # Extract the first two obs for each prepbufr report type
+        typ = self.df['TYP'].unique()
+        df = self.df.loc[self.df['TYP'] == typ[0]].iloc[:2]
+        for t in typ[1:]:
+            df = pd.concat([df, self.df.loc[self.df['TYP'] == t].iloc[:2]])
+
+        # Replace NaNs with 1e11
+        df = df.fillna(1e11)
+
+        # Reorder message numbers
+        nmsg = df['nmsg'].values
+        for i, msg in enumerate(df['nmsg'].unique()):
+            nmsg[np.where(nmsg == msg)] = i+1
+        df['nmsg'] = nmsg        
+
+        # Overwrite aircraft and ship SIDs
+        sid = df['SID'].values
+        sub = df['subset'].values
+        for i, s in enumerate(sub):
+            if s in ['AIRCAR', 'AIRCFT', 'SFCSHP']:
+                sid[i] = 'SMPL%02d' % i
+        df['SID'] = sid
+
+        # Write to CSV
+        df.to_csv(fname, index=False)
+   
+        # Add leading blank spaces and remove the .1 and .2 from the various NUL fields
+        fptr = open(fname, 'r')
+        contents = fptr.readlines()
+        fptr.close()
+
+        items = contents[0].split(',')
+        for i, it in enumerate(items):
+            if it[:3] == 'NUL':
+                items[i] = 'NUL'
+
+        contents[0] = ','.join(items)
+
+        fptr = open(fname, 'w')
+        for l in contents:
+            fptr.write(' ' + l.strip() + ',\n')
+        fptr.close() 
 
 
 #---------------------------------------------------------------------------------------------------
