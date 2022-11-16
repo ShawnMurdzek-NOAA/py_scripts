@@ -1,6 +1,8 @@
 """
 Plot Horizontal Cross Section from a WRF Simulation
 
+This script uses raw wrfout files rather than UPP output.
+
 shawn.s.murdzek@noaa.gov
 Date Created: 4 October 2022
 """
