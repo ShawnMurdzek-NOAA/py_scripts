@@ -10,6 +10,7 @@ Date Created: 22 November 2022
 #---------------------------------------------------------------------------------------------------
 
 import numpy as np
+import pandas as pd
 
 
 #---------------------------------------------------------------------------------------------------
@@ -54,6 +55,55 @@ def wrf_coords(lat, lon, ds):
         xi = close[1] + (lon - clon) / (ds['XLONG'][close[0], close[1]+1].values - clon)
 
     return xi, yi
+
+
+def read_ob_errors(fname):
+    """
+    Parse out obbservation errors from an errtable file in GSI
+
+    Parameters
+    ----------
+    fname : string
+        Name of errtable text file
+
+    Returns
+    -------
+    errors: dictionary
+        A dictionary of pd.DataFrame objects containing the observation errors
+
+    Notes
+    -----
+    More information about the errtable format in GSI can be found here: 
+    https://dtcenter.ucar.edu/com-GSI/users/docs/users_guide/html_v3.7/gsi_ch4.html#conventional-observation-errors
+
+    """
+
+    # Extract contents of file
+    fptr = open(fname, 'r')
+    contents = fptr.readlines()
+    fptr.close()
+
+    # Loop over each line
+    errors = {}
+    headers = ['prs', 'Terr', 'RHerr', 'UVerr', 'PSerr', 'PWerr']
+    for l in contents:
+        if l[5:21] == 'OBSERVATION TYPE':
+            key = int(l[1:4])
+            errors[key] = {}
+            for h in headers:
+                errors[key][h] = []
+        else:
+            vals = l.strip().split(' ')
+            for k, h in enumerate(headers):
+                errors[key][h].append(float(vals[k]))
+
+    # Convert to DataFrame
+    for key in errors.keys():
+        errors[key] = pd.DataFrame(errors[key])
+        for h in headers[1:]:
+            errors[key][h].where(errors[key][h] < 5e8, inplace=True)
+
+    return errors
 
 
 """
