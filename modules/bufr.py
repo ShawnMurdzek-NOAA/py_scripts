@@ -155,6 +155,53 @@ def plot_obs_locs(x, y, fig=None, nrows=1, ncols=1, axnum=1, proj=ccrs.PlateCarr
     return ax
 
 
+def df_to_csv(df, fname):
+    """
+    Write a DataFrame to a BUFR CSV file
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+    fname : string
+        Filename for bufr CSV file
+
+    Returns
+    -------
+    None
+
+    """
+
+    # Replace NaNs with 1e11
+    df = df.fillna(1e11)
+
+    # Reorder message numbers
+    nmsg = df['nmsg'].values
+    for i, msg in enumerate(df['nmsg'].unique()):
+        nmsg[np.where(nmsg == msg)] = i+1
+    df['nmsg'] = nmsg        
+
+    # Write to CSV
+    df.to_csv(fname, index=False)
+   
+    # Add leading blank spaces and remove the .1 and .2 from the various NUL fields
+    fptr = open(fname, 'r')
+    contents = fptr.readlines()
+    fptr.close()
+
+    items = contents[0].split(',')
+    for i, it in enumerate(items):
+        if it[:3] == 'NUL':
+            items[i] = 'NUL'
+
+    contents[0] = ','.join(items)
+
+    fptr = open(fname, 'w')
+    for l in contents:
+        fptr.write(' ' + l.strip() + ',\n')
+    fptr.close() 
+
+
 """
 End bufr.py
 """
