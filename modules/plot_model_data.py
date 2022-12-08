@@ -25,10 +25,12 @@ Date Created: 4 October 2022
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import netCDF4 as nc
 import wrf
+from metpy.plots import SkewT, Hodograph
 
 
 #---------------------------------------------------------------------------------------------------
@@ -144,6 +146,28 @@ class PlotOutput():
            self.time = np.datetime_as_string(data.Time.values)[:-10] + ' UTC'
  
         return data, coords, ptype
+
+
+    def _closest_gpt(self, lon, lat):
+        """
+        Determine the indices for the model gridpoint closest to the given (lat, lon) coordinate
+
+        Parameters
+        ----------
+        lon, lat : float
+            (lat, lon) coordinate with units of (deg N, deg E)
+
+        Returns
+        -------
+        i, j : integer
+            Indices of the gridpoint closest to (lat, lon)
+
+        """
+
+        wrflat = wrf.getvar(self.fptr, 'lat')
+        wrflon = wrf.getvar(self.fptr, 'lon')
+
+        return np.unravel_index(np.argmin((wrflat - lat)**2 + (wrflon - lon)**2), wrflat.shape)
 
 
     def _create_hcrsxn_ax(self, data):
@@ -312,7 +336,89 @@ class PlotOutput():
                                       wrf.to_np(ydata)[::thin, ::thin], transform=ccrs.PlateCarree(), 
                                       **qv_kw)
 
+
+    def plot(self, lon, lat, plt_kw={}):
+        """
+        Plot (lat, lon) coordinates
+
+        Parameters
+        ----------
+        lon, lat : float
+            Longitude and latitude coordinates to plot
+        plt_kw : dict, optional
+            Other keyword arguments passed to plot (key must be a string)
+
+        """
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        self.cax = self.ax.plot(lon, lat, transform=ccrs.PlateCarree(), **plt_kw)
+
+
+    def skewt(self, lon, lat, hodo=True, barbs=True, thin=5):
+        """
+        Plot a Skew-T, log-p diagram for the gridpoint closest to (lat, lon)
+
+        Parameters
+        ----------
+        lon, lat : float
+            Longitude and latitude coordinates for Skew-T (Skew-T is plotted for model gridpoint
+            closest to this coordinate)
+        hodo : boolean, optional
+            Option to plot hodograph inset
+        barbs : boolean, optional
+            Option to plot wind barbs
+        thin : integer, optional
+            Plot every x wind barb, where x = thin
     
+        """
+
+        # Determine indices closest to (lat, lon) coordinate
+        i, j = self._closest_gpt(lon, lat)
+
+        # Extract variables
+        p = wrf.getvar(self.fptr, 'p', units='mb')[:, i, j] 
+        T = wrf.getvar(self.fptr, 'temp', units='degC')[:, i, j] 
+        Td = wrf.getvar(self.fptr, 'td', units='degC')[:, i, j] 
+        if (barbs or hodo):
+            u = wrf.getvar(self.fptr, 'ua', units='m s-1')[:, i, j]
+            v = wrf.getvar(self.fptr, 'va', units='m s-1')[:, i, j]
+
+        # Create figure
+        skew = SkewT(self.fig, rotation=45)
+
+        skew.plot(p, T, 'r', linewidth=2.5)        
+        skew.plot(p, Td, 'b', linewidth=2.5)        
+
+        skew.plot_dry_adiabats(linewidth=0.75)
+        skew.plot_moist_adiabats(linewidth=0.75)
+        skew.plot_mixing_lines(linewidth=0.75)
+
+        skew.ax.set_xlim(-40, 60)
+        skew.ax.set_ylim(1000, 100)
+
+        if hodo:
+            hod = inset_axes(skew.ax, '35%', '35%', loc=1) 
+            h = Hodograph(hod, component_range=50.)
+            h.add_grid(increment=10) 
+            h.plot(u[0], v[0], marker='o', c='k', markersize=10)
+            h.plot(u, v, c='k', linewidth=1) 
+
+        if barbs:
+            imax = np.where(p < 100)[0][0]
+            skew.plot_barbs(p[:imax:thin], u[:imax:thin], v[:imax:thin])
+
+        # Add title
+        loc = '(%.3f $^{\circ}$N, %.3f $^{\circ}$E)' % (lat, lon)
+        time = np.datetime_as_string(p.Time.values)[:-10] + ' UTC:\n'
+        if (hodo or barbs):
+            ttl = r'%s$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C), wind (m s$^{-1}$) at %s' % (time, loc)
+        else:
+            ttl = r'%s$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C) at %s' % (time, loc)
+        skew.ax.set_title(ttl)
+ 
+
     def set_lim(self, minlat, maxlat, minlon, maxlon):
         """
         Set plotting limits
@@ -326,8 +432,7 @@ class PlotOutput():
 
         """
 
-        self.ax.set_xlim([minlon, maxlon])
-        self.ax.set_ylim([minlat, maxlat])
+        self.ax.set_extent([minlon, maxlon, minlat, maxlat], crs=ccrs.PlateCarree())
 
 
     def ax_title(self, **kwargs):
