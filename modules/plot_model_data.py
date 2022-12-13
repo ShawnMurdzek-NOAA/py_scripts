@@ -167,7 +167,7 @@ class PlotOutput():
         wrflat = wrf.getvar(self.fptr, 'lat')
         wrflon = wrf.getvar(self.fptr, 'lon')
 
-        return np.unravel_index(np.argmin((wrflat - lat)**2 + (wrflon - lon)**2), wrflat.shape)
+        return np.unravel_index(np.argmin((wrflat.values - lat)**2 + (wrflon.values - lon)**2), wrflat.shape)
 
 
     def _create_hcrsxn_ax(self, data):
@@ -384,6 +384,8 @@ class PlotOutput():
         if (barbs or hodo):
             u = wrf.getvar(self.fptr, 'ua', units='m s-1')[:, i, j]
             v = wrf.getvar(self.fptr, 'va', units='m s-1')[:, i, j]
+        if hodo:
+            z = wrf.getvar(self.fptr, 'height_agl', units='m')[:, i, j]
 
         # Create figure
         skew = SkewT(self.fig, rotation=45)
@@ -399,11 +401,21 @@ class PlotOutput():
         skew.ax.set_ylim(1000, 100)
 
         if hodo:
+
+            # Create hodograph axes
             hod = inset_axes(skew.ax, '35%', '35%', loc=1) 
             h = Hodograph(hod, component_range=50.)
             h.add_grid(increment=10) 
-            h.plot(u[0], v[0], marker='o', c='k', markersize=10)
-            h.plot(u, v, c='k', linewidth=1) 
+ 
+            # Color-code hodograph based on height AGL
+            zbds = [0, 1000, 3000, 6000, 9000]
+            colors = ['k', 'r', 'b', 'g']
+            for zi, zf, c in zip(zbds[:-1], zbds[1:], colors):
+                ind = np.where(np.logical_and(z >= zi, z < zf))[0]
+                ind = np.append(ind, ind[-1]+1)
+                h.plot(u[ind], v[ind], c=c, linewidth=2)
+            ind = np.where(z >= zbds[-1])[0]
+            h.plot(u[ind], v[ind], c='goldenrod', linewidth=2) 
 
         if barbs:
             imax = np.where(p < 100)[0][0]

@@ -22,18 +22,19 @@ import datetime as dt
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies_smooth_terrain/WRF/run/'
-ntimes = 19
+#path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_3km/WRF/run/'
+path = '/scratch1/BMC/wrfruc/murdzek/nature_run_3km/WRF/run/'
+ntimes = 2
 start = dt.datetime(2021, 7, 24, 23)
 
 # Timestep between output files (s)
-step = 5
+step = 900
 
 # Location to plot Skew-Ts
-lat = 50.33566
-lon = -122.63756
+lat = 41.7658
+lon = -72.6734
 
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies_smooth_terrain/wrf_graphics/skewts.gif'
+save_fname = '/scratch1/BMC/wrfruc/murdzek/py_scripts/wrf/skewts.gif'
 
 #---------------------------------------------------------------------------------------------------
 # Create Plots
