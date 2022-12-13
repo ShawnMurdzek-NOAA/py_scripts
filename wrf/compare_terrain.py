@@ -24,10 +24,10 @@ import datetime as dt
 #---------------------------------------------------------------------------------------------------
 
 # wrfout files and titles for each simulation
-sims = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies/WPS/geo_em.d01.nc',  
-        '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies_geogrid_smooth/WPS/geo_em.d01.nc']
-ttls = ['No Smoothing',
-        '3-Pass 1-2-1 + Average Gridcell (25) + 4-Point']
+sims = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies/WPS/geo_em.d01.nc.original',  
+        '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies/WPS/geo_em.d01.nc']  
+ttls = ['Original',
+        'New']
 
 # Cartopy map projection
 proj = ccrs.PlateCarree()
@@ -35,7 +35,7 @@ proj = ccrs.PlateCarree()
 # Grid spacing (m)
 dx = 1000.
 
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/figs/terrain_compare_original_smooth1.png'
+save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/figs/terrain_compare_original_smooth.png'
 
 #---------------------------------------------------------------------------------------------------
 # Create Plots
