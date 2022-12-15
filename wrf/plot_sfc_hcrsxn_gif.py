@@ -22,18 +22,18 @@ import datetime as dt
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies_smooth_terrain/WRF/run/'
-ntimes = 19
-start = dt.datetime(2021, 7, 24, 23)
+path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_Detroit/WRF/run/'
+ntimes = 1
+start = dt.datetime(2021, 7, 24, 23, 15)
 
 # Timestep between output files (s)
-step = 5
+step = 900
 
 # Plotting bounds (set to None to use defaults)
-lat_lims = [50.2, 50.4]
-lon_lims = [-122.7, -122.5]
+lat_lims = None
+lon_lims = None
 
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies_smooth_terrain/wrf_graphics/psfc_wnd10_zoomed.gif'
+save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_Detroit/wrf_graphics/max_refl.gif'
 
 #---------------------------------------------------------------------------------------------------
 # Create Plots
@@ -49,9 +49,9 @@ for n in range(ntimes):
     fig = plt.figure(figsize=(8, 8))
 
     out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
-    out.contourf('PSFC', ingest_kw={},
-                 cntf_kw={'cmap':'inferno', 'levels':np.arange(68000, 104000, 1500), 'extend':'both'})
-    out.barbs('U10', 'V10', thin=1, ingest_kw={}, barb_kw={'length':6})
+    out.contourf('mdbz', ingest_kw={},
+                 cntf_kw={'cmap':'gist_ncar', 'levels':np.arange(0, 75, 5), 'extend':'max'})
+    #out.barbs('U10', 'V10', thin=1, ingest_kw={}, barb_kw={'length':6})
     out.config_ax()
     out.ax_title()
 
@@ -63,3 +63,8 @@ for n in range(ntimes):
 
 os.system('convert -delay 30 -loop 0 tmp*.png %s' % save_fname)
 os.system('rm *.png')
+
+
+"""
+End plot_sfc_hcrsxn_gif.py 
+"""
