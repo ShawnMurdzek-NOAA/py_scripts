@@ -15,6 +15,7 @@ Date Created: 15 December 2022
 import xarray as xr
 import numpy as np
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import matplotlib.pyplot as plt
 
 
@@ -23,7 +24,7 @@ import matplotlib.pyplot as plt
 #---------------------------------------------------------------------------------------------------
 
 # Input netCDF file
-infile = '/mnt/lfs4/BMC/wrfruc/murdzek/JOINER/wrfout_d01_2021-07-24_23:00:00'
+infile = '/mnt/lfs4/BMC/wrfruc/murdzek/JOINER2/wrfout_d01_2021-07-24_23:00:00'
 
 # Plot parameters
 field = 'HGT'
@@ -41,10 +42,10 @@ ds = xr.open_dataset(infile)
 
 # Create figure
 fig = plt.figure(figsize=(8, 8))
-ax = fig.add_subplot(1, 1, 1, proj=proj)
+ax = fig.add_subplot(1, 1, 1, projection=proj)
 
 cax = ax.contourf(ds['XLONG'][0, :, :], ds['XLAT'][0, :, :], ds[field][0, :, :], 
-                  np.arange(0, 3000, 100), cmap='inferno', extend='max')
+                  np.arange(0, 3200, 100), cmap='plasma', extend='max')
 
 cbar = plt.colorbar(cax, ax=ax, orientation='horizontal')
 cbar.set_label('%s (%s)' % (ds[field].attrs['description'], ds[field].attrs['units']), size=12)

@@ -1,5 +1,5 @@
 """
-Plot Underlying Terrain For Two WRF Simulations and Take the Difference
+Plot a 2-D Field For Two WRF Simulations and Take the Difference
 
 This script uses raw wrfout files rather than UPP output.
 
@@ -24,26 +24,25 @@ import datetime as dt
 #---------------------------------------------------------------------------------------------------
 
 # wrfout files and titles for each simulation
-sims = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies/WPS/geo_em.d01.nc.original',  
-        '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_CAN_rockies/WPS/geo_em.d01.nc']  
-ttls = ['Original',
-        'New']
+sims = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr/WRF/run/wrfout_d01_2021-07-25_00_00_00',  
+        '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr2/WRF/run/wrfout_d01_2021-07-25_00_00_00']  
+ttls = ['Deleted Fields',
+        'Original']
 
 # Cartopy map projection
 proj = ccrs.PlateCarree()
 
 # Grid spacing (m)
-dx = 1000.
+field = 'T2'
 
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/figs/terrain_compare_original_smooth.png'
+save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/figs/compare_T2m.png'
 
 #---------------------------------------------------------------------------------------------------
 # Create Plots
 #---------------------------------------------------------------------------------------------------
 
-lat = 'XLAT_M'
-lon = 'XLONG_M'
-hgt = 'HGT_M'
+lat = 'XLAT'
+lon = 'XLONG'
 
 fig = plt.figure(figsize=(8, 10))
 
@@ -52,35 +51,33 @@ axes = []
 for i, (s, t) in enumerate(zip(sims, ttls)):
     ds[t] = xr.open_dataset(s)
 
-    # Plot terrain height
+    # Plot Field
     axes.append(fig.add_subplot(3, 1, i+1, projection=proj))
-    cax = axes[i].contourf(ds[t][lon][0, :, :], ds[t][lat][0, :, :], ds[t][hgt][0, :, :], 
-                           transform=proj, levels=np.arange(0, 2700, 100), cmap='inferno', 
-                           extend='max')
+    cax = axes[i].contourf(ds[t][lon][0, :, :], ds[t][lat][0, :, :], ds[t][field][0, :, :], 
+                           transform=proj, cmap='inferno', extend='both')
 
-    # Determine the maximum gradient
-    g = np.gradient(ds[t][hgt][0, :, :], dx)
-    gmax = np.amax(np.sqrt((g[0]*g[0]) + (g[1]*g[1])))
-
-    axes[i].set_title('%s\n(max gradient = %.3f)' % (t, gmax), size=12)
+    axes[i].set_title(t, size=12)
 
 # Add colorbar
 cbar = plt.colorbar(cax, ax=axes, orientation='vertical')
-cbar.set_label('terrain height (m)', size=12)
+cbar.set_label('%s (%s)' % (ds[t][field].attrs['description'], ds[t][field].attrs['units']), size=12)
+
+# Compute RMSD
+rmsd = np.sqrt(np.mean(ds[ttls[0]][field][0, :, :] - ds[ttls[1]][field][0, :, :]))
 
 # Plot difference
 ax = fig.add_subplot(3, 1, 3, projection=proj)
 cax = ax.contourf(ds[t][lon][0, :, :], ds[t][lat][0, :, :], 
-                  ds[ttls[0]][hgt][0, :, :] - ds[ttls[1]][hgt][0, :, :], 
-                  transform=proj, levels=np.arange(-1000, 1050, 50), cmap='bwr', extend='both')
-ax.set_title('%s $-$ %s' % (ttls[0], ttls[1]), size=12)
+                  ds[ttls[0]][field][0, :, :] - ds[ttls[1]][field][0, :, :], 
+                  transform=proj, levels=np.arange(-0.525, 0.526, 0.05), cmap='bwr', extend='both')
+ax.set_title('%s $-$ %s (RMSD = %.2e)' % (ttls[0], ttls[1], rmsd), size=12)
 cbar2 = plt.colorbar(cax, ax=ax, orientation='vertical')
-cbar2.set_label('height difference (m)', size=12)
+cbar2.set_label('difference', size=12)
 
 plt.savefig(save_fname)
 plt.close()
 
 
 """
-End compare_terrain.py
+End compare_field.py
 """

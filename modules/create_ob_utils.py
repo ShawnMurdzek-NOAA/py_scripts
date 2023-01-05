@@ -17,16 +17,18 @@ import pandas as pd
 # Functions
 #---------------------------------------------------------------------------------------------------
 
-def wrf_coords(lat, lon, ds):
+def wrf_coords(lat, lon, ds, ftype='UPP'):
     """
     Find the decimal (i.e., non-integer) x and y indices for a given (lat, lon) coordinate in WRF
  
     Parameters
     ----------
     lat, lon : float
-        Latitude and longitude coordinate (deg E and deg W)
+        Latitude and longitude coordinate (deg N and negative deg E)
     ds : XArray.dataset
         Dataset containing the WRF output data
+    ftype : string, optional
+        Type of input dataset ('WRF' or 'UPP')
 
     Returns
     -------
@@ -39,20 +41,29 @@ def wrf_coords(lat, lon, ds):
 
     """
 
+    # Latitude and longitude fields
+    if ftype == 'WRF':
+        latname = 'XLAT'
+        lonname = 'XLONG'
+    elif ftype == 'UPP':
+        latname = 'gridlat_0'
+        lonname = 'gridlon_0'
+
     # Find nearest neighbor in horizontal direction
-    close = np.unravel_index(np.argmin((ds['XLONG'] - lon)**2 + (ds['XLAT'] - lat)**2), ds['XLONG'].shape)
-    clat = ds['XLAT'][close[0], close[1]].values
-    clon = ds['XLONG'][close[0], close[1]].values
+    close = np.unravel_index(np.argmin((ds[lonname] - lon)**2 + (ds[latname] - lat)**2), 
+                             ds[lonname].shape)
+    clat = ds[latname][close[0], close[1]].values
+    clon = ds[lonname][close[0], close[1]].values
 
     # Perform pseudo-bilinear interpolation
     if lat < clat:
-        yi = close[0] + (lat - clat) / (clat - ds['XLAT'][close[0]-1, close[1]].values)
+        yi = close[0] + (lat - clat) / (clat - ds[latname][close[0]-1, close[1]].values)
     else:
-        yi = close[0] + (lat - clat) / (ds['XLAT'][close[0]+1, close[1]].values - clat)
+        yi = close[0] + (lat - clat) / (ds[latname][close[0]+1, close[1]].values - clat)
     if lon < clon:
-        xi = close[1] + (lon - clon) / (clon - ds['XLONG'][close[0], close[1]-1].values)
+        xi = close[1] + (lon - clon) / (clon - ds[lonname][close[0], close[1]-1].values)
     else:
-        xi = close[1] + (lon - clon) / (ds['XLONG'][close[0], close[1]+1].values - clon)
+        xi = close[1] + (lon - clon) / (ds[lonname][close[0], close[1]+1].values - clon)
 
     return xi, yi
 

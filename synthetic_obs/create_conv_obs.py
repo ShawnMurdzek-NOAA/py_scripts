@@ -8,11 +8,9 @@ Prepbufr CSV files for real observations can be created using GSI-utils/bin/prep
 This code uses UPP output on WRF native levels (wrfnat). This is likely more efficient than using 
 the wrfred files, which can take some time (and a lot of memory) to create.
 
-This code requires the Dask module, which is not part of the adb_graphics environment, so it must
-be installed separately and the location must be added to the PYTHONPATH variable
-
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
+Environment: adb_graphics
 """
 
 #---------------------------------------------------------------------------------------------------
@@ -34,13 +32,13 @@ import bufr
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-wrf_dir = '/lfs4/BMC/wrfruc/murdzek/nature_run_3km/WRF/run/'
+wrf_dir = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_3km/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = '/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+bufr_dir = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
 
 # File containing conventional observation error characteristics (use GSI errtable file)
-error_fname = '/lfs4/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
+error_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
@@ -69,6 +67,8 @@ errors = cou.read_ob_errors(error_fname)
 ntimes = int((bufr_end - bufr_start) / dt.timedelta(minutes=bufr_step) + 1)
 for i in range(ntimes):
     t = bufr_start + dt.timedelta(minutes=(i*bufr_step))
+    print()
+    print('t = %s' % t.strftime('%Y-%m-%d %H%M%S'))
     bufr_fname = bufr_dir + t.strftime('/%Y%m%d%H%M.rap.prepbufr.csv')
     bufr_csv = bufr.bufrCSV(bufr_fname)
 
@@ -96,21 +96,44 @@ for i in range(ntimes):
     hr_start = math.floor(out_df['DHR'].min()*4) / 4
     hr_end = math.ceil(out_df['DHR'].max()*4) / 4 + (wrf_step / 60.)
     wrf_ds = {}
+    wrf_hr = []
     for hr in np.arange(hr_start, hr_end, wrf_step / 60.):
         wrf_t = t + dt.timedelta(hours=hr)
-        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('/wrfnat_hrconus_%Y%m%d%H%M.grib2'),
+        print(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'))
+        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'),
                                      engine='pynio')
+        wrf_hr.append(hr)
  
-    # Loop over each station ID (SID)
-    # This approach is preferred over looping over each ob time b/c it will make it easier to add
-    # dynamic errors (owing to nonzero response times) and instrument bias
-    #for s in out_df['SID'].unique():
+    # Loop over each observation
+    wrf_hr = np.array(wrf_hr)
+    for j in range(len(out_df))[:3]:
         
+        subset = out_df.iloc[j]
+
+        # Determine WRF hour right before observation and weight for temporal interpolation
+        ihr = np.where((wrf_hr - subset['DHR']) <= 0)[0][-1]
+        twgt = wrf_hr[ihr] / (wrf_hr[ihr] - wrf_hr[ihr+1]) 
+
         # Interpolate horizontally
+        xi, yi = cou.wrf_coords(subset['YOB'], subset['XOB'] - 360., wrf_ds[wrf_hr[ihr]], ftype='UPP')        
 
         # Interpolate vertically
+        # Should probably add a conditional here to not interpolate vertically for 2-m and 10-m obs.
+        # Also need to add code to interpolate surface pressure (PRSS) and precipitable water (PWO)
+        zi = np.zeros(2)
+        for k in [ihr, ihr+1]:
+            z1d = wrf_ds[wrf_hr[k]]['HGT_P0_L105_GLC0'].interp(ygrid_0=yi, xgrid_0=xi)
+            z0i = np.where((z1d - subset['ZOB']) <= 0)[0][-1]
+            zi[k] = z0i + (subset['ZOB'] - z1d[z0i]) / (z1d[z0i+1] - z1d[z0i]) 
 
-        # Interpolate temporally (between the two datasets)
+        # Interpolate temporally
+        # Double check that these units are right!
+        obs_name = ['POB', 'QOB', 'TOB', 'UOB', 'VOB']
+        wrf_name = ['PRES_P0_L105_GLC0']
+        for o, m in zip(obs_name, wrf_name):
+            if not np.isnan(subset[o]):
+                out_df['POB'].iloc[j] =  (wgt * wrf_ds[wrf_hr[ihr]][m].interp(lv_HYBL1=zi, ygrid_0=yi, xgrid_0=xi) +
+                                         (1-wgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(lv_HYBL1=zi, ygrid_0=yi, xgrid_0=xi))
 
         # Add errors
 

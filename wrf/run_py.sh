@@ -7,9 +7,9 @@
 
 date
 . ~/.bashrc
-py_env
+adb_graphics
 
-python plot_upper_air_hcrsxn_gif.py
+python plot_hcrsxn_xarray.py
 
 report-mem
 date
