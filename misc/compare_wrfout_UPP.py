@@ -25,10 +25,10 @@ wrfout = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr/WRF/run/wrfout_d01_2
 upp = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr/UPP/out/wrfnat_202107242315.grib2'
 
 # Fields to compare (the _P0_L105_GLC0 suffix is added to the UPP fields later)
-wrf_fields = ['QVAPOR', 'QCLOUD', 'QRAIN',  'QICE',  'QSNOW',  'QGRAUP',  
-                        'QNDROP',                    'QNSNOW', 'QNGRAUPEL']
-upp_fields = ['SPFH',   'CLWMR',  'RWMR',   'ICMR',  'SNMR',   'GRLE',     
-                        'NCONCD',                    'SPNCS',  'SPNCG']
+wrf_fields = ['QVAPOR', 'QCLOUD', 'QRAIN',  'QICE',   'QSNOW',  'QGRAUP',  
+                        'QNDROP', 'QNRAIN', 'QNICE',  'QNSNOW', 'QNGRAUPEL']
+upp_fields = ['SPFH',   'CLWMR',  'RWMR',   'ICMR',   'SNMR',   'GRLE',     
+                        'NCONCD', 'SPNCR',  'NCCICE', 'SPNCS',  'SPNCG']
 
 #wrf_fields = ['QRAIN']
 #upp_fields = ['RWMR']
@@ -59,6 +59,11 @@ for wf, up in zip(wrf_fields, upp_fields):
         upp_data = upp_ds[up + '_P0_L105_GLC0'].values
     except KeyError:
         upp_data = upp_ds[up].values
+
+    # Convert specific humidity to mixing ratio in UPP
+    if up == 'SPFH':
+        upp_data = upp_data / (1. - upp_data)
+
     diff = wrf_data - upp_data
     diff[np.isclose(wrf_data, 0)] = np.nan
     diff[np.isclose(upp_data, 0)] = np.nan
