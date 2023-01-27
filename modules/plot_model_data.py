@@ -62,16 +62,19 @@ class PlotOutput():
         Number of columns of subplots
     axnum : integer
         Subplot number
+    proj : CartoPy projection, optional
+        Map projection
 
     """
 
-    def __init__(self, fname, dataset, fig, nrows, ncols, axnum):
+    def __init__(self, fname, dataset, fig, nrows, ncols, axnum, proj=ccrs.PlateCarree()):
 
         self.outtype = dataset
         self.fig = fig
         self.nrows = nrows
         self.ncols = ncols
         self.n = axnum
+        self.proj = proj
 
         # Dictionary used to hold metadata
         self.metadata = {}
@@ -225,12 +228,7 @@ class PlotOutput():
 
         """
 
-        if self.outtype == 'wrf':
-            proj = wrf.get_cartopy(data)
-        else:
-            proj = ccrs.PlateCarree()
-
-        self.ax = self.fig.add_subplot(self.nrows, self.ncols, self.n, projection=proj) 
+        self.ax = self.fig.add_subplot(self.nrows, self.ncols, self.n, projection=self.proj) 
 
 
     def config_ax(self, coastlines=True, states=True, grid=True):
@@ -284,8 +282,7 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        self.cax = self.ax.contourf(coords[1], coords[0], data, transform=ccrs.PlateCarree(), 
-                                    **cntf_kw)
+        self.cax = self.ax.contourf(coords[1], coords[0], data, transform=self.proj, **cntf_kw)
 
         self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
         self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
@@ -313,8 +310,7 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        self.cax = self.ax.contour(coords[1], coords[0], data, transform=ccrs.PlateCarree(), 
-                                   **cnt_kw)
+        self.cax = self.ax.contour(coords[1], coords[0], data, transform=self.proj, **cnt_kw)
 
     
     def barbs(self, xvar, yvar, thin=1, ingest_kw={}, barb_kw={}):
@@ -344,7 +340,7 @@ class PlotOutput():
 
         self.cax = self.ax.barbs(coords[1][::thin, ::thin], coords[0][::thin, ::thin], 
                                  xdata[::thin, ::thin], ydata[::thin, ::thin], 
-                                 transform=ccrs.PlateCarree(), **barb_kw)
+                                 transform=self.proj, **barb_kw)
 
     
     def quiver(self, xvar, yvar, thin=1, ingest_kw={}, qv_kw={}):
@@ -374,7 +370,7 @@ class PlotOutput():
 
         self.cax = self.ax.quiver(coords[1][::thin, ::thin], coords[0][::thin, ::thin], 
                                   xdata[::thin, ::thin], ydata[::thin, ::thin], 
-                                  transform=ccrs.PlateCarree(), **qv_kw)
+                                  transform=self.proj, **qv_kw)
 
 
     def plot(self, lon, lat, plt_kw={}):
@@ -393,7 +389,7 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        self.cax = self.ax.plot(lon, lat, transform=ccrs.PlateCarree(), **plt_kw)
+        self.cax = self.ax.plot(lon, lat, transform=self.proj, **plt_kw)
 
 
     def skewt(self, lon, lat, hodo=True, barbs=True, thin=5):
@@ -484,7 +480,7 @@ class PlotOutput():
 
         """
 
-        self.ax.set_extent([minlon, maxlon, minlat, maxlat], crs=ccrs.PlateCarree())
+        self.ax.set_extent([minlon, maxlon, minlat, maxlat], crs=self.proj)
 
 
     def ax_title(self, txt='', **kwargs):

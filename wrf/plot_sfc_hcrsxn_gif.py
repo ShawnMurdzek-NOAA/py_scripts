@@ -33,7 +33,7 @@ step = 900
 lat_lims = None
 lon_lims = None
 
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_1km_Detroit/wrf_graphics/max_refl.gif'
+save_fname = './T2m.gif'
 
 #---------------------------------------------------------------------------------------------------
 # Create Plots
@@ -49,8 +49,8 @@ for n in range(ntimes):
     fig = plt.figure(figsize=(8, 8))
 
     out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
-    out.contourf('mdbz', ingest_kw={},
-                 cntf_kw={'cmap':'gist_ncar', 'levels':np.arange(0, 75, 5), 'extend':'max'})
+    out.contourf('T2', ingest_kw={},
+                 cntf_kw={'cmap':'gist_ncar', 'levels':np.arange(285, 305, 1), 'extend':'both'})
     #out.barbs('U10', 'V10', thin=1, ingest_kw={}, barb_kw={'length':6})
     out.config_ax()
     out.ax_title()
