@@ -24,13 +24,20 @@ Date Created: 4 October 2022
 #---------------------------------------------------------------------------------------------------
 
 import numpy as np
+import datetime as dt
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import netCDF4 as nc
-import wrf
+import xarray as xr
 from metpy.plots import SkewT, Hodograph
+
+try:
+    import wrf
+except ImportError:
+    print('cannot load WRF-python module')
+    continue
 
 
 #---------------------------------------------------------------------------------------------------
@@ -39,14 +46,15 @@ from metpy.plots import SkewT, Hodograph
 
 class PlotOutput():
     """
-    Class that handles plotting real-data model output from either WRF or FV3.
+    Class that handles plotting real-data model output from either WRF or FV3 as well as gridded
+    observational data (e.g., Stage IV precip).
 
     Parameters
     ----------
     fname : string
         Output file name
-    model : string
-        Numerical model ('wrf' or 'fv3')
+    dataset : string
+        Dataset type ('wrf', 'fv3', 'upp', or 'stage4')
     fig : matplotlib.figure
         Figure that axes are added to
     nrows : integer
@@ -58,9 +66,9 @@ class PlotOutput():
 
     """
 
-    def __init__(self, fname, model, fig, nrows, ncols, axnum):
+    def __init__(self, fname, dataset, fig, nrows, ncols, axnum):
 
-        self.model = model
+        self.outtype = dataset
         self.fig = fig
         self.nrows = nrows
         self.ncols = ncols
@@ -69,13 +77,27 @@ class PlotOutput():
         # Dictionary used to hold metadata
         self.metadata = {}
 
-        if self.model == 'wrf':
+        if self.outtype == 'wrf':
             self.fptr = nc.Dataset(fname)
-        elif self.model == 'fv3':
-            raise ValueError('FV3 model is not supported yet')
+        elif self.outtype == 'fv3':
+            raise ValueError('Raw FV3 output is not supported yet')
+        elif self.outtype == 'upp':
+            raise ValueError('UPP output is not supported yet')
+        elif self.outtype == 'stage4':
+            self.ds = xr.open_dataset(fname, engine='pynio')
+            sample = list(ds.keys())[0]
+            itime = dt.datetime.strptime(ds[sample].attrs['initial_time'], '%m/%d/%Y (%H:%M)')
+            if ds[sample].attrs['forecast_time_units'] == 'hours':
+                delta = dt.timedelta(hours=ds[sample].attrs['forecast_time'][0])
+            elif ds[sample].attrs['forecast_time_units'] == 'minutes':
+                delta = dt.timedelta(minutes=ds[sample].attrs['forecast_time'][0])
+            elif ds[sample].attrs['forecast_time_units'] == 'days':
+                delta = dt.timedelta(days=ds[sample].attrs['forecast_time'][0])
+            self.time = (itime + delta).strftime('%Y%m%d %H:%M:%S UTC')
 
             
-    def _ingest_data(self, var, units=None, interp_field=None, interp_lvl=None, ptype='none0'):
+    def _ingest_data(self, var, zind=np.nan, units=None, interp_field=None, interp_lvl=None, 
+                     ptype='none0'):
         """
         Extract a single variable to plot and interpolate if needed.
 
@@ -83,12 +105,14 @@ class PlotOutput():
         ----------
         var : string
             Variable from model output file to plot
+        zind : integer, optional
+            Index in z-direction
         units : string, optional
-            Units for var
+            Units for var (WRF only)
         interp_field : string, optional
-            Interpolate var to a surface with a constant value of interp_field
+            Interpolate var to a surface with a constant value of interp_field (WRF only)
         interp_lvl : string, optional
-            Value of constant-interp_field used during interpolaton
+            Value of constant-interp_field used during interpolaton (WRF only)
         ptype : string, optional
             Plot type. Used as the key to store metadata
 
@@ -113,7 +137,7 @@ class PlotOutput():
             n = n + 1
         self.metadata[ptype] = {}
 
-        if self.model == 'wrf':
+        if self.outtype == 'wrf':
 
             # Extract raw variable from WRF output file
             if units != None:
@@ -134,16 +158,33 @@ class PlotOutput():
             else:
                 data = raw
                 self.metadata[ptype]['interp'] = ''
- 
+  
             # Get lat/lon coordinates
             lat, lon = wrf.latlon_coords(data)
-            coords = [lat, lon]
+            coords = [wrf.to_np(lat), wrf.to_np(lon)]
 
-        # Extract time if not done so already
-        # This should really be done in __init__, but it's a bit tricky finding the time in the 
-        # NetCDF4 object
-        if not hasattr(self, 'time'):
-           self.time = np.datetime_as_string(data.Time.values)[:-10] + ' UTC'
+            # Extract time if not done so already
+            # This should really be done in __init__, but it's a bit tricky finding the time in the 
+            # NetCDF4 object
+            if not hasattr(self, 'time'):
+                self.time = np.datetime_as_string(data.Time.values)[:-10] + ' UTC'
+
+            data = wrf.to_np(data)
+
+        elif (self.outtype == 'upp' or self.outtype == 'stage4'):
+            if np.isnan(zind):
+                data = self.ds[var]
+            else:
+                data = self.ds[var][zind, :, :]
+
+            # Save metadata
+            self.metadata[ptype]['var'] = var
+            self.metadata[ptype]['name'] = data.attrs['long_name']
+            self.metadata[ptype]['units'] = data.attrs['units']
+            self.metadata[ptype]['interp'] = ''
+
+            # Get lat/lon coordinates
+            coords = [self.ds['gridlat_0'].values, self.ds['gridlon_0'].values]
  
         return data, coords, ptype
 
@@ -164,8 +205,9 @@ class PlotOutput():
 
         """
 
-        wrflat = wrf.getvar(self.fptr, 'lat')
-        wrflon = wrf.getvar(self.fptr, 'lon')
+        if self.outtype == 'wrf':
+            lat2d = wrf.getvar(self.fptr, 'lat')
+            lon2d = wrf.getvar(self.fptr, 'lon')
 
         return np.unravel_index(np.argmin((wrflat.values - lat)**2 + (wrflon.values - lon)**2), wrflat.shape)
 
@@ -181,7 +223,11 @@ class PlotOutput():
 
         """
 
-        proj = wrf.get_cartopy(data)
+        if self.outtype == 'wrf':
+            proj = wrf.get_cartopy(data)
+        else:
+            proj = ccrs.PlateCarree()
+
         self.ax = self.fig.add_subplot(self.nrows, self.ncols, self.n, projection=proj) 
 
 
@@ -219,7 +265,7 @@ class PlotOutput():
         Parameters
         ----------
         var : string
-            Variable from model output file to plot
+            Variable to plot
         ingest_kw : dict, optional
             Other keyword arguments passed to _ingest_data (key must be a string)
         cntf_kw : dict, optional
@@ -236,9 +282,8 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        if self.model == 'wrf':
-            self.cax = self.ax.contourf(wrf.to_np(coords[1]), wrf.to_np(coords[0]), 
-                                        wrf.to_np(data), transform=ccrs.PlateCarree(), **cntf_kw)
+        self.cax = self.ax.contourf(coords[1], coords[0], data, transform=ccrs.PlateCarree(), 
+                                    **cntf_kw)
 
         self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
         self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
@@ -266,9 +311,8 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        if self.model == 'wrf':
-            self.cax = self.ax.contour(wrf.to_np(coords[1]), wrf.to_np(coords[0]), 
-                                       wrf.to_np(data), transform=ccrs.PlateCarree(), **cnt_kw)
+        self.cax = self.ax.contour(coords[1], coords[0], data, transform=ccrs.PlateCarree(), 
+                                   **cnt_kw)
 
     
     def barbs(self, xvar, yvar, thin=1, ingest_kw={}, barb_kw={}):
@@ -296,12 +340,9 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        if self.model == 'wrf':
-            self.cax = self.ax.barbs(wrf.to_np(coords[1])[::thin, ::thin], 
-                                     wrf.to_np(coords[0])[::thin, ::thin], 
-                                     wrf.to_np(xdata)[::thin, ::thin], 
-                                     wrf.to_np(ydata)[::thin, ::thin], transform=ccrs.PlateCarree(), 
-                                     **barb_kw)
+        self.cax = self.ax.barbs(coords[1][::thin, ::thin], coords[0][::thin, ::thin], 
+                                 xdata[::thin, ::thin], ydata[::thin, ::thin], 
+                                 transform=ccrs.PlateCarree(), **barb_kw)
 
     
     def quiver(self, xvar, yvar, thin=1, ingest_kw={}, qv_kw={}):
@@ -329,12 +370,9 @@ class PlotOutput():
         if not hasattr(self, 'ax'):
             self._create_hcrsxn_ax(data)
 
-        if self.model == 'wrf':
-            self.cax = self.ax.quiver(wrf.to_np(coords[1])[::thin, ::thin], 
-                                      wrf.to_np(coords[0])[::thin, ::thin], 
-                                      wrf.to_np(xdata)[::thin, ::thin], 
-                                      wrf.to_np(ydata)[::thin, ::thin], transform=ccrs.PlateCarree(), 
-                                      **qv_kw)
+        self.cax = self.ax.quiver(coords[1][::thin, ::thin], coords[0][::thin, ::thin], 
+                                  xdata[::thin, ::thin], ydata[::thin, ::thin], 
+                                  transform=ccrs.PlateCarree(), **qv_kw)
 
 
     def plot(self, lon, lat, plt_kw={}):
