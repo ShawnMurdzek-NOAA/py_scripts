@@ -37,7 +37,6 @@ try:
     import wrf
 except ImportError:
     print('cannot load WRF-python module')
-    continue
 
 
 #---------------------------------------------------------------------------------------------------
@@ -82,17 +81,20 @@ class PlotOutput():
         elif self.outtype == 'fv3':
             raise ValueError('Raw FV3 output is not supported yet')
         elif self.outtype == 'upp':
-            raise ValueError('UPP output is not supported yet')
+            self.ds = xr.open_dataset(fname, engine='pynio')
         elif self.outtype == 'stage4':
             self.ds = xr.open_dataset(fname, engine='pynio')
-            sample = list(ds.keys())[0]
-            itime = dt.datetime.strptime(ds[sample].attrs['initial_time'], '%m/%d/%Y (%H:%M)')
-            if ds[sample].attrs['forecast_time_units'] == 'hours':
-                delta = dt.timedelta(hours=ds[sample].attrs['forecast_time'][0])
-            elif ds[sample].attrs['forecast_time_units'] == 'minutes':
-                delta = dt.timedelta(minutes=ds[sample].attrs['forecast_time'][0])
-            elif ds[sample].attrs['forecast_time_units'] == 'days':
-                delta = dt.timedelta(days=ds[sample].attrs['forecast_time'][0])
+
+        # Extract time
+        if (self.outtype == 'stage4' or self.outtype == 'upp'):
+            sample = list(self.ds.keys())[0]
+            itime = dt.datetime.strptime(self.ds[sample].attrs['initial_time'], '%m/%d/%Y (%H:%M)')
+            if self.ds[sample].attrs['forecast_time_units'] == 'hours':
+                delta = dt.timedelta(hours=int(self.ds[sample].attrs['forecast_time'][0]))
+            elif self.ds[sample].attrs['forecast_time_units'] == 'minutes':
+                delta = dt.timedelta(minutes=int(self.ds[sample].attrs['forecast_time'][0]))
+            elif self.ds[sample].attrs['forecast_time_units'] == 'days':
+                delta = dt.timedelta(days=int(self.ds[sample].attrs['forecast_time'][0]))
             self.time = (itime + delta).strftime('%Y%m%d %H:%M:%S UTC')
 
             
@@ -485,13 +487,18 @@ class PlotOutput():
         self.ax.set_extent([minlon, maxlon, minlat, maxlat], crs=ccrs.PlateCarree())
 
 
-    def ax_title(self, **kwargs):
+    def ax_title(self, txt='', **kwargs):
         """
         Create a title for the axes
 
+        Parameters
+        ----------
+        txt : string, optional
+            Text to add to the beginning of the title
+
         """
 
-        s = self.time
+        s = '%s %s' % (txt, self.time)
         for k in self.metadata.keys():
             if k[:-1] != 'contourf':
                 s = s + '\n%s: %s%s (%s)' % (k, self.metadata[k]['interp'], 
