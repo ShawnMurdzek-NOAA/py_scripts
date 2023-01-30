@@ -22,13 +22,13 @@ import plot_model_data as pmd
 
 upp_files = []
 save_fnames = []
-for hr in range(12, 19):
-    upp_files.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (hr, hr+1))
-    save_fnames.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring/other_plots/20220429%d00/upp_APCP_20220429%d00.png' % (hr, hr+1))
+for hr in range(12, 18):
+    upp_files.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (hr, hr+1))
+    save_fnames.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/other_plots/20220429%d00/upp_APCP_20220429%d00.png' % (hr, hr+1))
 
 field = 'APCP_P8_L1_GLC0_acc'
 
-name = 'Nature Run'
+name = 'Nature Run HRRR-like'
 
 
 #---------------------------------------------------------------------------------------------------

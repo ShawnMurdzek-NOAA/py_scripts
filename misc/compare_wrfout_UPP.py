@@ -21,8 +21,8 @@ import cartopy.feature as cfeature
 #---------------------------------------------------------------------------------------------------
 
 # File names (use WRF output on native grid)
-wrfout = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr/WRF/run/wrfout_d01_2021-07-24_23_15_00'
-upp = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_10km_hrrr/UPP/out/wrfnat_202107242315.grib2'
+wrfout = '/scratch1/BMC/wrfruc/murdzek/nature_run_spring_v2/output/202204291700/JOIN/wrfout_d01_2022-04-29_18:00:00'
+upp = '/scratch1/BMC/wrfruc/murdzek/nature_run_spring_v2/output/202204291700/UPP/wrfnat_202204291800.grib2'
 
 # Fields to compare (the _P0_L105_GLC0 suffix is added to the UPP fields later)
 wrf_fields = ['QVAPOR', 'QCLOUD', 'QRAIN',  'QICE',   'QSNOW',  'QGRAUP',  
@@ -30,11 +30,11 @@ wrf_fields = ['QVAPOR', 'QCLOUD', 'QRAIN',  'QICE',   'QSNOW',  'QGRAUP',
 upp_fields = ['SPFH',   'CLWMR',  'RWMR',   'ICMR',   'SNMR',   'GRLE',     
                         'NCONCD', 'SPNCR',  'NCCICE', 'SPNCS',  'SPNCG']
 
-#wrf_fields = ['QRAIN']
-#upp_fields = ['RWMR']
+wrf_fields = ['COMPOSITE_REFL_10CM']
+upp_fields = ['REFC_P0_L200_GLC0']
 
-# Vertical level for difference plots
-zlvl = 8
+# Vertical level for difference plots (set to np.nan for a 2D field)
+zlvl = np.nan
 
 # Output filename for difference plots. Include %s placeholder for field name
 save_fname = 'upp_wrf_diffs_%s.png'
@@ -82,21 +82,28 @@ for wf, up in zip(wrf_fields, upp_fields):
     for j, (data, lat, lon, ttl) in enumerate(zip([wrf_data, upp_data], [wrflat, upplat], 
                                                   [wrflon, upplon], ['WRF', 'UPP'])):
         ax = fig.add_subplot(3, 1, j+1, projection=ccrs.PlateCarree())
-        cax = ax.contourf(lon, lat, data[zlvl, :, :])
+        if np.isnan(zlvl):
+            cax = ax.contourf(lon, lat, data)
+        else:
+            cax = ax.contourf(lon, lat, data[zlvl, :, :])
         cbar = plt.colorbar(cax, ax=ax, orientation='vertical')
         cbar.set_label(wf)
         ax.set_title(ttl, size=14)
         ax.coastlines('50m')
 
     ax = fig.add_subplot(3, 1, 3, projection=ccrs.PlateCarree()) 
-    mxd = np.nanmax(np.abs(diff[zlvl, :, :]))
-    cax = ax.contourf(wrflon, wrflat, diff[zlvl, :, :], np.linspace(-1*mxd, mxd, 12), 
-                      cmap='bwr')
+    if np.isnan(zlvl):
+        mxd = np.nanmax(np.abs(diff))
+        cax = ax.contourf(wrflon, wrflat, diff, np.linspace(-1*mxd, mxd, 12), cmap='bwr')
+    else:
+        mxd = np.nanmax(np.abs(diff[zlvl, :, :]))
+        cax = ax.contourf(wrflon, wrflat, diff[zlvl, :, :], np.linspace(-1*mxd, mxd, 12), 
+                          cmap='bwr')
+        plt.suptitle('z lvl = %d' % zlvl, size=16)
     cbar = plt.colorbar(cax, ax=ax, orientation='vertical')
     cbar.set_label('diff (WRF $-$ UPP)', size=14)
     ax.coastlines('50m')
 
-    plt.suptitle('z lvl = %d' % zlvl, size=16)
     plt.savefig(save_fname % wf)
     plt.close()
 
