@@ -50,8 +50,8 @@ class PlotOutput():
 
     Parameters
     ----------
-    fname : string
-        Output file name
+    data : List of NetCDF4 filepointers (for WRF) or XArray DataSets (all other options)
+        Actual data to plot
     dataset : string
         Dataset type ('wrf', 'fv3', 'upp', or 'stage4')
     fig : matplotlib.figure
@@ -65,9 +65,18 @@ class PlotOutput():
     proj : CartoPy projection, optional
         Map projection
 
+    Notes
+    -----
+
+    'wrf' datasets can be opened using the following command with netCDF4:
+    `nc.Dataset(filename)`
+
+    'upp' and 'stage4' datasets can be opened using the following xarray command:
+    `xr.open_dataset(filename, engine='pynio')`
+
     """
 
-    def __init__(self, fname, dataset, fig, nrows, ncols, axnum, proj=ccrs.PlateCarree()):
+    def __init__(self, data, dataset, fig, nrows, ncols, axnum, proj=ccrs.PlateCarree()):
 
         self.outtype = dataset
         self.fig = fig
@@ -79,14 +88,23 @@ class PlotOutput():
         # Dictionary used to hold metadata
         self.metadata = {}
 
+        # Extract first dataset
         if self.outtype == 'wrf':
-            self.fptr = nc.Dataset(fname)
+            self.fptr = data[0]
         elif self.outtype == 'fv3':
             raise ValueError('Raw FV3 output is not supported yet')
-        elif self.outtype == 'upp':
-            self.ds = xr.open_dataset(fname, engine='pynio')
-        elif self.outtype == 'stage4':
-            self.ds = xr.open_dataset(fname, engine='pynio')
+        elif (self.outtype == 'upp' or self.outtype == 'stage4'):
+            self.ds = data[0]
+
+        # Extract second dataset (if applicable)
+        if len(data) > 1:
+            if self.outtype == 'wrf':
+                self.fptr2 = data[1]
+            elif self.outtype == 'fv3':
+                raise ValueError('Raw FV3 output is not supported yet')
+            elif (self.outtype == 'upp' or self.outtype == 'stage4'):
+                self.ds2 = data[1]
+
 
         # Extract time
         if (self.outtype == 'stage4' or self.outtype == 'upp'):
@@ -102,7 +120,7 @@ class PlotOutput():
 
             
     def _ingest_data(self, var, zind=np.nan, units=None, interp_field=None, interp_lvl=None, 
-                     ptype='none0'):
+                     ptype='none0', diff=False):
         """
         Extract a single variable to plot and interpolate if needed.
 
@@ -120,6 +138,8 @@ class PlotOutput():
             Value of constant-interp_field used during interpolaton (WRF only)
         ptype : string, optional
             Plot type. Used as the key to store metadata
+        diff : boolean, optional
+            Is this a difference plot?
 
         Returns
         -------
@@ -190,6 +210,14 @@ class PlotOutput():
 
             # Get lat/lon coordinates
             coords = [self.ds['gridlat_0'].values, self.ds['gridlon_0'].values]
+            
+            # Create difference fields
+            if diff:
+                if np.isnan(zind):
+                    data2 = self.ds2[var]
+                else:
+                    data2 = self.ds2[var][zind, :, :]
+                data = data - data2
  
         return data, coords, ptype
 
@@ -288,6 +316,51 @@ class PlotOutput():
         self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
                                            self.metadata[ptype]['name'], 
                                            self.metadata[ptype]['units']), **label_kw)
+    
+
+    def plot_diff(self, var, ingest_kw={}, cntf_kw={}, cbar_kw={}, label_kw={}, auto=True):
+        """
+        Plot data using a filled contour plot
+
+        Parameters
+        ----------
+        var : string
+            Variable to plot
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        cntf_kw : dict, optional
+            Other keyword arguments passed to contourf (key must be a string)
+        cbar_kw : dict, optional
+            Other keyword arguments passed to colorbar (key must be a string)
+        label_kw : dict, optional
+            Other keyword arguments passed to colorbar.set_label (key must be a string)
+        auto : boolean, optional
+            Automatically use the 'bwr' colormap and scale the contour levels so they are centered
+            on zero and include the max differences
+
+        """
+
+        data, coords, ptype = self._ingest_data(var, ptype='contourf0', diff=True, **ingest_kw)
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        if auto:
+            mx = np.amax(np.abs(data))
+            lvls = np.linspace(-mx, mx, 20) 
+            self.cax = self.ax.contourf(coords[1], coords[0], data, lvls, transform=self.proj, 
+                                        cmap='bwr', **cntf_kw)
+        else:
+            self.cax = self.ax.contourf(coords[1], coords[0], data, transform=self.proj, **cntf_kw)
+
+        # Compute RMSD
+        rmsd = np.sqrt(np.mean(data*data))
+
+        self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
+        self.cbar.set_label('diff %s%s (%s)\n[RMSD = %.2e]' % (self.metadata[ptype]['interp'], 
+                                                               self.metadata[ptype]['name'], 
+                                                               self.metadata[ptype]['units'],
+                                                               rmsd), **label_kw)
 
 
     def contour(self, var, ingest_kw={}, cnt_kw={}):

@@ -16,6 +16,7 @@ import plot_model_data as pmd
 import numpy as np
 import os
 import datetime as dt
+import netCDF4 as nc
 
 
 #---------------------------------------------------------------------------------------------------
@@ -49,7 +50,8 @@ for n in range(ntimes):
 
     fig = plt.figure(figsize=(8, 8))
 
-    out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
+    fptr = nc.Dataset(fname)
+    out = pmd.PlotOutput([fptr], 'wrf', fig, 1, 1, 1)
     out.skewt(lon, lat, barbs=True)
 
     plt.savefig('tmp%02d.png' % n)

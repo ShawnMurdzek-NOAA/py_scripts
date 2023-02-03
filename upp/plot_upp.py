@@ -14,6 +14,7 @@ import datetime as dt
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
 import plot_model_data as pmd
+import xarray as xr
 
 
 #---------------------------------------------------------------------------------------------------
@@ -45,7 +46,8 @@ for fname, save_fname in zip(upp_files, save_fnames):
 
     fig = plt.figure(figsize=(8, 4))
     plt.subplots_adjust(left=0.02, bottom=0.04, right=0.98, top=0.97)
-    out = pmd.PlotOutput(fname, 'upp', fig, 1, 1, 1)
+    ds = xr.open_dataset(fname, engine='pynio')
+    out = pmd.PlotOutput([ds], 'upp', fig, 1, 1, 1)
     out.contourf(field, cntf_kw={'colors':colors, 'extend':'max', 'levels':plevels})
     out.config_ax(grid=False)
     out.ax_title(txt=name, size=14)

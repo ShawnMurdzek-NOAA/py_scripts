@@ -3,7 +3,12 @@ Create Synthetic Conventional Observations from WRF Nature Run Output
 
 Conventional obs are written into a new CSV file. UAS obs can then be added later.
 
-Prepbufr CSV files for real observations can be created using GSI-utils/bin/prepbufr_decode_csv.x
+Prepbufr CSV files for real observations can be created using GSI-utils/bin/prepbufr_decode_csv.x.
+To use this utility, do the following:
+
+1. Copy the prepbufr file you wish to decode to GSI-utils/bin and rename it 'prepbufr'
+2. Run ./prepbufr_decode_csv.x
+3. Move resulting CSV file to wherever you choose
 
 This code uses UPP output on WRF native levels (wrfnat). This is likely more efficient than using 
 the wrfred files, which can take some time (and a lot of memory) to create.
@@ -32,28 +37,28 @@ import bufr
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-wrf_dir = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_3km/UPP/'
+wrf_dir = '/scratch1/BMC/wrfruc/murdzek/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+bufr_dir = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
 
 # File containing conventional observation error characteristics (use GSI errtable file)
-error_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
+error_fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = 'lfs4/BMC/wrfruc/murdzek/nature_run_3km/synthetic_obs/'
+fake_bufr_dir = '/scratch1/wrfruc/murdzek/nature_run_spring_v2/output/202204291200/synthetic_obs/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime(2021, 7, 24, 23)
-bufr_end = dt.datetime(2021, 7, 25, 0)
+bufr_start = dt.datetime(2022, 4, 29, 12)
+bufr_end = dt.datetime(2022, 4, 29, 13)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2021, 7, 24, 23, 0)
-wrf_end = dt.datetime(2021, 7, 25, 0, 0)
+wrf_start = dt.datetime(2022, 4, 29, 12, 0)
+wrf_end = dt.datetime(2022, 4, 29, 13, 0)
 wrf_step = 15
 
 

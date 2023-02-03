@@ -30,8 +30,8 @@ wrf_fields = ['QVAPOR', 'QCLOUD', 'QRAIN',  'QICE',   'QSNOW',  'QGRAUP',
 upp_fields = ['SPFH',   'CLWMR',  'RWMR',   'ICMR',   'SNMR',   'GRLE',     
                         'NCONCD', 'SPNCR',  'NCCICE', 'SPNCS',  'SPNCG']
 
-wrf_fields = ['COMPOSITE_REFL_10CM']
-upp_fields = ['REFC_P0_L200_GLC0']
+wrf_fields = ['XLAT', 'XLONG']
+upp_fields = ['gridlat_0', 'gridlon_0']
 
 # Vertical level for difference plots (set to np.nan for a 2D field)
 zlvl = np.nan

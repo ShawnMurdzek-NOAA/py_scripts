@@ -16,6 +16,7 @@ import plot_model_data as pmd
 import numpy as np
 import os
 import datetime as dt
+import netCDF4 as nc
 
 
 #---------------------------------------------------------------------------------------------------
@@ -42,7 +43,8 @@ fname = path + start.strftime('wrfout_d01_%Y-%m-%d_%H_%M_%S')
 
 fig = plt.figure(figsize=(8, 8))
 
-out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
+fptr = nc.Dataset(fname)
+out = pmd.PlotOutput([fptr], 'wrf', fig, 1, 1, 1)
 out.contourf('HGT', cntf_kw={'cmap':'inferno', 'levels':np.arange(0, 2700, 100), 'extend':'max'})
 for i in range(len(pts['lat'])):
     out.plot(pts['lon'][i], pts['lat'][i], plt_kw={'c':pts['c'][i], 'marker':pts['m'][i],

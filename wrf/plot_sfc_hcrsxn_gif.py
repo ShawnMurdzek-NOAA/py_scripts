@@ -16,6 +16,7 @@ import plot_model_data as pmd
 import numpy as np
 import os
 import datetime as dt
+import netCDF4 as nc
 
 
 #---------------------------------------------------------------------------------------------------
@@ -48,7 +49,8 @@ for n in range(ntimes):
 
     fig = plt.figure(figsize=(8, 8))
 
-    out = pmd.PlotOutput(fname, 'wrf', fig, 1, 1, 1)
+    fptr = nc.Dataset(fname)
+    out = pmd.PlotOutput([fptr], 'wrf', fig, 1, 1, 1)
     out.contourf('T2', ingest_kw={},
                  cntf_kw={'cmap':'gist_ncar', 'levels':np.arange(285, 305, 1), 'extend':'both'})
     #out.barbs('U10', 'V10', thin=1, ingest_kw={}, barb_kw={'length':6})
