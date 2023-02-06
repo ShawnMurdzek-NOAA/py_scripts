@@ -17,8 +17,8 @@ import numpy as np
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/prepbufr.csv'
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/sample_prepbufr.csv'
+fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/202204291200.rap.prepbufr.csv'
+save_fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/sample_prepbufr.csv'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -26,7 +26,7 @@ save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/sample_prepbu
 #---------------------------------------------------------------------------------------------------
 
 bufr_df = bufr.bufrCSV(fname)
-bufr_df.sample(save_fname)
+bufr_df.sample(save_fname, n=20)
 
 
 """

@@ -28,25 +28,24 @@ upp1_files = []
 upp2_files = []
 home = '/scratch1/BMC/wrfruc/murdzek'
 for hr in range(12, 14):
-    upp1_files.append('%s/nature_run_spring_mynn/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
-    upp2_files.append('%s/nature_run_spring_v2/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
+    upp1_files.append('%s/nature_run_spring_iusewetsnow0/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
+    upp2_files.append('%s/nature_run_spring_esstem/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
 
 # Field and level to plot (set level to np.nan for a 2D field)
-#field = 'REFC_P0_L200_GLC0'
-field = 'UGRD_P0_L103_GLC0'
-zind = 0
+field = 'REFC_P0_L200_GLC0'
+zind = np.nan
 
 # Colorbar and contour levels
-cmap = 'plasma'
-lvls = np.arange(-20, 20, 2)
-extend = 'both'
+cmap = 'gist_ncar'
+lvls = np.arange(5, 76, 5)
+extend = 'max'
 
 # Titles
-name1 = 'NR: MYNN'
-name2 = 'NR: Shin-Hong'
+name1 = 'NR: iusewetsnow = 0'
+name2 = 'NR: esstem'
 
 # Output file name (must be a PDF)
-save_fname = './mynn_ShinHong_U10_diff.pdf'
+save_fname = './iusewetsnow0_esstem_cref_diff.pdf'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -71,7 +70,7 @@ for fname1, fname2 in zip(upp1_files, upp2_files):
 
     diff = pmd.PlotOutput(ds, 'upp', fig, 3, 1, 3)
     diff.plot_diff(field, auto=False, cntf_kw={'cmap':'bwr', 'extend':'both', 
-                                               'levels':np.linspace(-5, 5, 20)},
+                                               'levels':np.linspace(-15, 15, 20)},
                                       ingest_kw={'zind':zind})
     diff.config_ax(grid=False)
     diff.ax_title(txt='difference (top - bottom)', size=14)

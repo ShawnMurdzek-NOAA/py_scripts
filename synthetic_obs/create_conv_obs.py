@@ -37,10 +37,10 @@ import bufr
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-wrf_dir = '/scratch1/BMC/wrfruc/murdzek/nature_run_spring_v2/output/202204291200/UPP/'
+wrf_dir = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+bufr_dir = './'
 
 # File containing conventional observation error characteristics (use GSI errtable file)
 error_fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
@@ -61,6 +61,9 @@ wrf_start = dt.datetime(2022, 4, 29, 12, 0)
 wrf_end = dt.datetime(2022, 4, 29, 13, 0)
 wrf_step = 15
 
+# Option for debugging output (0 = none, 1 = some, 2 = a lot)
+debug = 2
+
 
 #---------------------------------------------------------------------------------------------------
 # Create Synthetic Observations
@@ -79,6 +82,8 @@ for i in range(ntimes):
 
     # Only keep platforms if we are creating synthetic obs for them
     obs = bufr_csv.df['subset'].unique()
+    if debug > 0:
+        print('available BUFR obs =', obs)
     for s in obs:
         if s not in ob_platforms:
             bufr_csv.df.drop(index=np.where(bufr_csv.df['subset'] == s)[0], inplace=True)
@@ -114,7 +119,7 @@ for i in range(ntimes):
     for j in range(len(out_df))[:3]:
         
         subset = out_df.iloc[j]
-
+     
         # Determine WRF hour right before observation and weight for temporal interpolation
         ihr = np.where((wrf_hr - subset['DHR']) <= 0)[0][-1]
         twgt = wrf_hr[ihr] / (wrf_hr[ihr] - wrf_hr[ihr+1]) 
@@ -122,28 +127,64 @@ for i in range(ntimes):
         # Interpolate horizontally
         xi, yi = cou.wrf_coords(subset['YOB'], subset['XOB'] - 360., wrf_ds[wrf_hr[ihr]], ftype='UPP')        
 
-        # Interpolate vertically
-        # Should probably add a conditional here to not interpolate vertically for 2-m and 10-m obs.
-        # Also need to add code to interpolate surface pressure (PRSS) and precipitable water (PWO)
-        zi = np.zeros(2)
-        for k in [ihr, ihr+1]:
-            z1d = wrf_ds[wrf_hr[k]]['HGT_P0_L105_GLC0'].interp(ygrid_0=yi, xgrid_0=xi)
-            z0i = np.where((z1d - subset['ZOB']) <= 0)[0][-1]
-            zi[k] = z0i + (subset['ZOB'] - z1d[z0i]) / (z1d[z0i+1] - z1d[z0i]) 
+        if subset['subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
+            # Surface obs. Don't need to interpolate vertically
 
-        # Interpolate temporally
-        # Double check that these units are right!
-        obs_name = ['POB', 'QOB', 'TOB', 'UOB', 'VOB']
-        wrf_name = ['PRES_P0_L105_GLC0']
-        for o, m in zip(obs_name, wrf_name):
-            if not np.isnan(subset[o]):
-                out_df['POB'].iloc[j] =  (wgt * wrf_ds[wrf_hr[ihr]][m].interp(lv_HYBL1=zi, ygrid_0=yi, xgrid_0=xi) +
-                                         (1-wgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(lv_HYBL1=zi, ygrid_0=yi, xgrid_0=xi))
+            if debug > 1:
+                print('2D field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
+                                                                      subset['subset'], 
+                                                                      subset['TYP']))
+                print('twgt = %.3f, xi = %.3f, yi = %.3f' % (twgt, xi, yi))
+
+            # Interpolate temporally (winds must be done separately b/c both 10-m and 80-m winds
+            # are reported in UPP)
+            obs_name = ['POB', 'QOB', 'TOB', 'PRSS', 'PWO']
+            wrf_name = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 
+                        'PRES_P0_L1_GLC0', 'PWAT_P0_L200_GLC0']
+            for o, m in zip(obs_name, wrf_name):
+                if not np.isnan(subset[o]):
+                    out_df[o].iloc[j] =  (twgt * wrf_ds[wrf_hr[ihr]][m].interp(ygrid_0=yi, xgrid_0=xi) +
+                                          (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(ygrid_0=yi, xgrid_0=xi))
+            obs_name = ['UOB', 'VOB']
+            wrf_name = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
+            for o, m in zip(obs_name, wrf_name):
+                if not np.isnan(subset[o]):
+                    out_df[o].iloc[j] =  (twgt * wrf_ds[wrf_hr[ihr]][m].interp(ygrid_0=yi, xgrid_0=xi)[0] +
+                                          (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(ygrid_0=yi, xgrid_0=xi)[0])
+
+        else:
+            # 3D fields. Need to interpolate in vertical
+            if debug > 1:
+                print('3D field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
+                                                                      subset['subset'], 
+                                                                      subset['TYP']))
+                print('twgt = %.3f, xi = %.3f, yi = %.3f' % (twgt, xi, yi))
+
+            zi = np.zeros(2)
+            for k in [ihr, ihr+1]:
+                z1d = wrf_ds[wrf_hr[k]]['HGT_P0_L105_GLC0'].interp(ygrid_0=yi, xgrid_0=xi)
+                z0i = np.where((z1d - subset['ZOB']) <= 0)[0][-1]
+                zi[k] = z0i + (subset['ZOB'] - z1d[z0i]) / (z1d[z0i+1] - z1d[z0i]) 
+
+            # Interpolate temporally
+            obs_name = ['POB', 'QOB', 'TOB', 'UOB', 'VOB']
+            wrf_name = ['PRES_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'UGRD_P0_L105_GLC0',
+                        'VGRD_P0_L105_GLC0']
+            for o, m in zip(obs_name, wrf_name):
+                if not np.isnan(subset[o]):
+                    out_df[o].iloc[j] =  (twgt * wrf_ds[wrf_hr[ihr]][m].interp(lv_HYBL1=zi[0], ygrid_0=yi, xgrid_0=xi) +
+                                          (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(lv_HYBL1=zi[1], ygrid_0=yi, xgrid_0=xi))
 
         # Add errors
 
+    # Convert to proper units
+    out_df['QOB'] = out_df['QOB'] * 1e6
+    out_df['POB'] = out_df['POB'] * 1e-2
+    out_df['TOB'] = out_df['TOB'] - 273.15
+    out_df['PWO'] = (out_df['PWO'] / 997.) * 1000.
+
     # Write output DataFrame to a CSV file
-    #bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.prepbufr.csv'))
+    bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.prepbufr.csv'))
 
 
 """

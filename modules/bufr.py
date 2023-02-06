@@ -46,17 +46,19 @@ class bufrCSV():
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
         # Load metadata from JSON file
-        self.meta = json.load(open('/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/modules/bufr_meta.json', 
+        self.meta = json.load(open('/scratch1/BMC/wrfruc/murdzek/src/py_scripts/modules/bufr_meta.json', 
                                    'r'))
 
-    def sample(self, fname):
+    def sample(self, fname, n=2):
         """
-        Create a sample prepbufr CSV using only two lines from each unique prepbufr report type
+        Create a sample prepbufr CSV using only n lines from each unique prepbufr report type
 
         Parameters
         ----------
         fname : string
             Filename for sample bufr CSV file
+        n : integer, optional
+            Number of lines to use from each unique prepbufr report type
 
         Returns
         -------
@@ -66,9 +68,9 @@ class bufrCSV():
 
         # Extract the first two obs for each prepbufr report type
         typ = self.df['TYP'].unique()
-        df = self.df.loc[self.df['TYP'] == typ[0]].iloc[:2]
+        df = self.df.loc[self.df['TYP'] == typ[0]].iloc[:n]
         for t in typ[1:]:
-            df = pd.concat([df, self.df.loc[self.df['TYP'] == t].iloc[:2]])
+            df = pd.concat([df, self.df.loc[self.df['TYP'] == t].iloc[:n]])
 
         # Replace NaNs with 1e11
         df = df.fillna(1e11)
