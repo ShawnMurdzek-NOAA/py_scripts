@@ -27,7 +27,10 @@ for hr in range(12, 18):
     upp_files.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (hr, hr+1))
     save_fnames.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/other_plots/20220429%d00/upp_APCP_20220429%d00.png' % (hr, hr+1))
 
-field = 'APCP_P8_L1_GLC0_acc'
+upp_files = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/wrfnat_202204291200.grib2']
+save_fnames = ['/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/upp/terrain.png']
+
+field = 'HGT_P0_L1_GLC0'
 
 name = 'Nature Run HRRR-like'
 
@@ -48,7 +51,7 @@ for fname, save_fname in zip(upp_files, save_fnames):
     plt.subplots_adjust(left=0.02, bottom=0.04, right=0.98, top=0.97)
     ds = xr.open_dataset(fname, engine='pynio')
     out = pmd.PlotOutput([ds], 'upp', fig, 1, 1, 1)
-    out.contourf(field, cntf_kw={'colors':colors, 'extend':'max', 'levels':plevels})
+    out.contourf(field, cntf_kw={'cmap':'plasma', 'extend':'max', 'levels':np.arange(0, 4000, 200)})
     out.config_ax(grid=False)
     out.ax_title(txt=name, size=14)
 

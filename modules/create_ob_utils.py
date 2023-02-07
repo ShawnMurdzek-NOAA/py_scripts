@@ -34,6 +34,7 @@ def wrf_coords(lat, lon, ds, ftype='UPP'):
     -------
     xi, yi : float
         Indices in the west-east and south-north directions for the input (lat, lon) coordinate
+        Indices are set to NaN if the (lat, lon) coordinate lies outside the model domain
 
     Notes
     -----
@@ -55,17 +56,26 @@ def wrf_coords(lat, lon, ds, ftype='UPP'):
     clat = ds[latname][close[0], close[1]].values
     clon = ds[lonname][close[0], close[1]].values
 
-    # Perform pseudo-bilinear interpolation
-    if lat < clat:
-        yi = close[0] + (lat - clat) / (clat - ds[latname][close[0]-1, close[1]].values)
-    else:
-        yi = close[0] + (lat - clat) / (ds[latname][close[0]+1, close[1]].values - clat)
-    if lon < clon:
-        xi = close[1] + (lon - clon) / (clon - ds[lonname][close[0], close[1]-1].values)
-    else:
-        xi = close[1] + (lon - clon) / (ds[lonname][close[0], close[1]+1].values - clon)
+    # Check to make sure that we are not extrapolating by excluding (lat, lon) coordinates that
+    # have an edge as their closest (lat, lon) coordinate in model space
+    if (close[0] == 0 or close[0] == (ds[latname].shape[0] - 1) or
+        close[1] == 0 or close[1] == (ds[lonname].shape[1] - 1)):
 
-    return xi, yi
+        return np.nan, np.nan
+
+    else:
+
+        # Perform pseudo-bilinear interpolation
+        if lat < clat:
+            yi = close[0] + (lat - clat) / (clat - ds[latname][close[0]-1, close[1]].values)
+        else:
+            yi = close[0] + (lat - clat) / (ds[latname][close[0]+1, close[1]].values - clat)
+        if lon < clon:
+            xi = close[1] + (lon - clon) / (clon - ds[lonname][close[0], close[1]-1].values)
+        else:
+            xi = close[1] + (lon - clon) / (ds[lonname][close[0], close[1]+1].values - clon)
+
+        return xi, yi
 
 
 def read_ob_errors(fname):
