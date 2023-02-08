@@ -130,11 +130,15 @@ for i in range(ntimes):
     
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start).total_seconds())
 
+    # Extract latitude and longitude grids
+    wrf_lat = wrf_ds[wrf_hr[0]]['gridlat_0'].values
+    wrf_lon = wrf_ds[wrf_hr[0]]['gridlon_0'].values
+
     # Remove obs outside of the spatial domain of the wrfnat files
-    latmin = wrf_ds[wrf_hr[0]]['gridlat_0'].attrs['corners'].min()
-    latmax = wrf_ds[wrf_hr[0]]['gridlat_0'].attrs['corners'].max()
-    lonmin = wrf_ds[wrf_hr[0]]['gridlon_0'].attrs['corners'].min() + 360.
-    lonmax = wrf_ds[wrf_hr[0]]['gridlon_0'].attrs['corners'].max() + 360.
+    latmin = wrf_lat.min()
+    latmax = wrf_lat.max()
+    lonmin = wrf_lon.min() + 360.
+    lonmax = wrf_lon.max() + 360.
     bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['XOB'] < lonmin, 
                                                   bufr_csv.df['XOB'] > lonmax))[0], inplace=True)
     bufr_csv.df.reset_index(drop=True, inplace=True)
@@ -151,8 +155,8 @@ for i in range(ntimes):
 
     # Loop over each observation
     wrf_hr = np.array(wrf_hr)
-    #for j in range(len(out_df)):
-    for j in range(14):
+    for j in range(len(out_df)):
+    #for j in range(14):
         
         if debug > 1:
             time1 = dt.datetime.now()
@@ -168,16 +172,37 @@ for i in range(ntimes):
             time2 = dt.datetime.now()
             print('done determining twgt (%.6f s)' % (time2 - time1).total_seconds())
 
-        # Interpolate horizontally
-        xi, yi = cou.wrf_coords(subset['YOB'], subset['XOB'] - 360., wrf_ds[wrf_hr[ihr]], ftype='UPP')   
-        if np.isnan(xi):
-            # ob location lies outside model domain
-            drop_idx.append(j)
+        # Interpolate horizontally (code here is adapted from cou.wrf_coords)
+        lat = subset['YOB']
+        lon = subset['XOB'] - 360.
+        close = np.unravel_index(np.argmin((wrf_lon - lon)**2 + (wrf_lat - lat)**2),
+                                 wrf_lon.shape)
+        clat = wrf_lat[close[0], close[1]]
+        clon = wrf_lon[close[0], close[1]]
+
+        # Check to make sure that we are not extrapolating by excluding (lat, lon) coordinates that
+        # have an edge as their closest (lat, lon) coordinate in model space
+        if (close[0] == 0 or close[0] == (wrf_lat.shape[0] - 1) or
+            close[1] == 0 or close[1] == (wrf_lon.shape[1] - 1)):
             continue
-     
+
+        # Determine pseudo-bilinear interpolation weights in horizontal
+        if lat < clat:
+            yi0 = close[0] - 1
+        else:
+            yi0 = close[0]
+        if lon < clon:
+            xi0 = close[1] -1
+        else:
+            xi0 = close[1]
+        ywgt1 = (wrf_lat[yi0+1, xi0] - lat) / (wrf_lat[yi0+1, xi0] - wrf_lat[yi0, xi0])
+        xwgt1 = (wrf_lon[yi0, xi0+1] - lon) / (wrf_lon[yi0, xi0+1] - wrf_lon[yi0, xi0])
+        ywgt2 = 1. - ywgt1
+        xwgt2 = 1. - xwgt1
+
         if debug > 1:
             time3 = dt.datetime.now()
-            print('done determining xi, yi (%.6f s)' % (time3 - time2).total_seconds())
+            print('done determining xi0, yi0 (%.6f s)' % (time3 - time2).total_seconds())
 
         if subset['subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
             # Surface obs. Don't need to interpolate vertically
@@ -186,7 +211,7 @@ for i in range(ntimes):
                 print('2D field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
                                                                       subset['subset'], 
                                                                       subset['TYP']))
-                print('twgt = %.3f, xi = %.3f, yi = %.3f' % (twgt, xi, yi))
+                print('twgt = %.3f, xi0 = %d, yi0 = %d' % (twgt, xi0, yi0))
                 print('DHR = %.3f, XOB = %.3f, YOB = %.3f' % (subset['DHR'], subset['XOB'], 
                                                               subset['YOB']))
 
@@ -199,8 +224,14 @@ for i in range(ntimes):
                 if not np.isnan(subset[o]):
                     if debug > 1:
                         time5 = dt.datetime.now()
-                    out_df.loc[j, o] = (twgt * wrf_ds[wrf_hr[ihr]][m].interp(ygrid_0=yi, xgrid_0=xi) +
-                                        (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(ygrid_0=yi, xgrid_0=xi))
+                    out_df.loc[j, o] = (twgt * (xwgt1 * ywgt1 * wrf_ds[wrf_hr[ihr]][m][yi0, xi0] +
+                                                xwgt2 * ywgt1 * wrf_ds[wrf_hr[ihr]][m][yi0, xi0+1] +
+                                                xwgt1 * ywgt2 * wrf_ds[wrf_hr[ihr]][m][yi0+1, xi0] +
+                                                xwgt2 * ywgt2 * wrf_ds[wrf_hr[ihr]][m][yi0+1, xi0+1]) +
+                                        (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[wrf_hr[ihr+1]][m][yi0, xi0] +
+                                                     xwgt2 * ywgt1 * wrf_ds[wrf_hr[ihr+1]][m][yi0, xi0+1] +
+                                                     xwgt1 * ywgt2 * wrf_ds[wrf_hr[ihr+1]][m][yi0+1, xi0] +
+                                                     xwgt2 * ywgt2 * wrf_ds[wrf_hr[ihr+1]][m][yi0+1, xi0+1]))
                     if debug > 1:
                         time6 = dt.datetime.now()
                         print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
@@ -211,8 +242,14 @@ for i in range(ntimes):
                 if not np.isnan(subset[o]):
                     if debug > 1:
                         time5 = dt.datetime.now()
-                    out_df.loc[j, o] = (twgt * wrf_ds[wrf_hr[ihr]][m][0, :, :].interp(ygrid_0=yi, xgrid_0=xi) +
-                                        (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m][0, :, :].interp(ygrid_0=yi, xgrid_0=xi))
+                    out_df.loc[j, o] = (twgt * (xwgt1 * ywgt1 * wrf_ds[wrf_hr[ihr]][m][0, yi0, xi0] +
+                                                xwgt2 * ywgt1 * wrf_ds[wrf_hr[ihr]][m][0, yi0, xi0+1] +
+                                                xwgt1 * ywgt2 * wrf_ds[wrf_hr[ihr]][m][0, yi0+1, xi0] +
+                                                xwgt2 * ywgt2 * wrf_ds[wrf_hr[ihr]][m][0, yi0+1, xi0+1]) +
+                                        (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[wrf_hr[ihr+1]][m][0, yi0, xi0] +
+                                                     xwgt2 * ywgt1 * wrf_ds[wrf_hr[ihr+1]][m][0, yi0, xi0+1] +
+                                                     xwgt1 * ywgt2 * wrf_ds[wrf_hr[ihr+1]][m][0, yi0+1, xi0] +
+                                                     xwgt2 * ywgt2 * wrf_ds[wrf_hr[ihr+1]][m][0, yi0+1, xi0+1]))
                     if debug > 1:
                         time6 = dt.datetime.now()
                         print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))

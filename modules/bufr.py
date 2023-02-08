@@ -46,7 +46,7 @@ class bufrCSV():
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
         # Load metadata from JSON file
-        self.meta = json.load(open('/scratch1/BMC/wrfruc/murdzek/src/py_scripts/modules/bufr_meta.json', 
+        self.meta = json.load(open('/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/modules/bufr_meta.json', 
                                    'r'))
 
     def sample(self, fname, n=2):
