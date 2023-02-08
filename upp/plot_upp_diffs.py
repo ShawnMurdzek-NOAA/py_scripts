@@ -26,10 +26,10 @@ import plot_model_data as pmd
 # UPP output files
 upp1_files = []
 upp2_files = []
-home = '/scratch1/BMC/wrfruc/murdzek'
+home = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests'
 for hr in range(12, 14):
-    upp1_files.append('%s/nature_run_spring_iusewetsnow0/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
-    upp2_files.append('%s/nature_run_spring_esstem/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
+    upp1_files.append('%s/nature_run_spring_esstem/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
+    upp2_files.append('%s/nature_run_spring_alphah1/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (home, hr, hr+1))
 
 # Field and level to plot (set level to np.nan for a 2D field)
 field = 'REFC_P0_L200_GLC0'
@@ -41,11 +41,11 @@ lvls = np.arange(5, 76, 5)
 extend = 'max'
 
 # Titles
-name1 = 'NR: iusewetsnow = 0'
-name2 = 'NR: esstem'
+name1 = 'NR: esstem'
+name2 = 'NR: alphah = 1'
 
 # Output file name (must be a PDF)
-save_fname = './iusewetsnow0_esstem_cref_diff.pdf'
+save_fname = './esstem_alphah1_cref_diff.pdf'
 
 
 #---------------------------------------------------------------------------------------------------

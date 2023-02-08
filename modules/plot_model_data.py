@@ -222,6 +222,55 @@ class PlotOutput():
         return data, coords, ptype
 
 
+    def _cfad_data(self, var, bins=[None], ptype='cfad0'):
+        """
+        Create bin counts for a Contoured Frequency by Altitude Diagram (CFAD)
+
+        Parameters
+        ----------
+        var : string
+            Field from file used to compute CFAD
+        bins : Array or list of floats, optional
+            List of left-most bin edges and the final right-most bin edges (so number of bins = 
+            len(bins) - 1). If set to None, bins will span the minimum to maximum value of the data
+
+        Returns
+        -------
+        cts : array of floats
+            Array containing bin counts with dimensions (count, altitude)
+        bin_edges : array of floats
+            Bin edges for cfad
+
+        """
+
+        # Append an integer to ptype if already in use
+        n = 1
+        while ptype in self.metadata.keys():
+            ptype = ptype[:-1] + str(n)
+            n = n + 1
+        self.metadata[ptype] = {}
+
+        # Determine bin edges if bins == None
+        if bins[0] == None:
+            if self.outtype == 'upp':
+                bins = np.linspace(self.ds[var].min(), self.ds[var].max(), 21)
+
+        if self.outtype == 'upp':
+
+            # Compute CFAD
+            s = self.ds[var].shape
+            cts = np.zeros([s[0], len(bins)-1])
+            for i in range(s[0]):
+                cts[i, :], bin_edges = np.histogram(self.ds[var][i, :, :], bins=bins)
+
+            # Save metadata
+            self.metadata[ptype]['var'] = var
+            self.metadata[ptype]['name'] = self.ds[var].attrs['long_name']
+            self.metadata[ptype]['units'] = self.ds[var].attrs['units']
+
+        return cts, bin_edges, ptype
+
+
     def _closest_gpt(self, lon, lat):
         """
         Determine the indices for the model gridpoint closest to the given (lat, lon) coordinate
@@ -465,6 +514,54 @@ class PlotOutput():
         self.cax = self.ax.plot(lon, lat, transform=self.proj, **plt_kw)
 
 
+    def cfad(self, var, zvar, bins=None, prs=False, cntf_kw={}, cbar_kw={}, label_kw={}):
+        """
+        Plot data using a CFAD
+
+        Parameters
+        ----------
+        var : string
+            Variable to plot
+        zvar : string
+            Variable to use in the vertical. Must be 1D
+        bins : None or list of floats, optional
+            List of left-most bin edges and the final right-most bin edges (so number of bins = 
+            len(bins) - 1). If set to None, bins will span the minimum to maximum value of the data
+        prs : Boolean, optional
+            Use pressure for vertical coordinate? If so, use a log scale 
+        cntf_kw : dict, optional
+            Other keyword arguments passed to contourf (key must be a string)
+        cbar_kw : dict, optional
+            Other keyword arguments passed to colorbar (key must be a string)
+        label_kw : dict, optional
+            Other keyword arguments passed to colorbar.set_label (key must be a string)
+
+        """
+
+        cts, bin_edges, ptype = self._cfad_data(var, bins=bins)
+        bin_ctrs = bin_edges[:-1] + 0.5 * (bin_edges[1:] - bin_edges[:-1])
+
+        if self.outtype == 'upp':
+            x, y = np.meshgrid(bin_ctrs, self.ds[zvar])
+            ylabel = '%s (%s)' % (self.ds[zvar].attrs['long_name'], self.ds[zvar].attrs['units'])
+
+        self.ax = self.fig.add_subplot(self.nrows, self.ncols, self.n)
+
+        if prs:
+            self.cax = self.ax.contourf(x, np.log10(y), cts, **cntf_kw)
+            self.ax.set_yticks(np.log10(y[::3, 0]))
+            self.ax.set_yticklabels(['%.0f' % p for p in y[::3, 0]])
+            self.ax.set_ylim([np.log10(y).max(), np.log10(y).min()])
+        else:
+            self.cax = self.ax.contourf(x, y, cts, **cntf_kw)
+
+        self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
+        self.cbar.set_label('counts', **label_kw)
+        self.ax.set_xlabel('%s (%s)' % (self.metadata[ptype]['name'], 
+                                        self.metadata[ptype]['units']))
+        self.ax.set_ylabel(ylabel)
+
+
     def skewt(self, lon, lat, hodo=True, barbs=True, thin=5):
         """
         Plot a Skew-T, log-p diagram for the gridpoint closest to (lat, lon)
@@ -569,7 +666,7 @@ class PlotOutput():
 
         s = '%s %s' % (txt, self.time)
         for k in self.metadata.keys():
-            if k[:-1] != 'contourf':
+            if (k[:-1] != 'contourf') and (k[:-1] != 'cfad'):
                 s = s + '\n%s: %s%s (%s)' % (k, self.metadata[k]['interp'], 
                                              self.metadata[k]['name'], self.metadata[k]['units']) 
 
