@@ -41,10 +41,11 @@ import bufr
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/mnt/lfs4'
+work = '/scratch1'
 
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
+#wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
+wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
 bufr_dir = './'
@@ -56,7 +57,7 @@ error_fname = work + '/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
+fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
 
 # Start and end times for prepbufrs. Step is in min
 bufr_start = dt.datetime(2022, 4, 29, 12)
