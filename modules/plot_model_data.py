@@ -120,7 +120,7 @@ class PlotOutput():
 
             
     def _ingest_data(self, var, zind=np.nan, units=None, interp_field=None, interp_lvl=None, 
-                     ptype='none0', diff=False):
+                     ptype='none0', diff=False, red_fct=None):
         """
         Extract a single variable to plot and interpolate if needed.
 
@@ -140,6 +140,8 @@ class PlotOutput():
             Plot type. Used as the key to store metadata
         diff : boolean, optional
             Is this a difference plot?
+        red_fct : function
+            Function for reduction in the z direction (e.g. np.amax, np.sum, etc.)
 
         Returns
         -------
@@ -197,10 +199,10 @@ class PlotOutput():
             data = wrf.to_np(data)
 
         elif (self.outtype == 'upp' or self.outtype == 'stage4'):
-            if np.isnan(zind):
-                data = self.ds[var]
-            else:
+            if not np.isnan(zind):
                 data = self.ds[var][zind, :, :]
+            else:
+                data = self.ds[var]
 
             # Save metadata
             self.metadata[ptype]['var'] = var
@@ -210,13 +212,19 @@ class PlotOutput():
 
             # Get lat/lon coordinates
             coords = [self.ds['gridlat_0'].values, self.ds['gridlon_0'].values]
-            
+           
+            # Perform reduction in vertical
+            if red_fct != None:
+                data = red_fct(data, axis=0)
+ 
             # Create difference fields
             if diff:
-                if np.isnan(zind):
-                    data2 = self.ds2[var]
-                else:
+                if not np.isnan(zind):
                     data2 = self.ds2[var][zind, :, :]
+                elif red_fct != None:
+                    data2 = red_fct(self.ds2[var], axis=0)
+                else:
+                    data2 = self.ds2[var]
                 data = data - data2
  
         return data, coords, ptype

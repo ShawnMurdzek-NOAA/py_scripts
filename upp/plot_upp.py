@@ -27,12 +27,12 @@ for hr in range(12, 18):
     upp_files.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/output/20220429%d00/UPP/wrfnat_20220429%d00.grib2' % (hr, hr+1))
     save_fnames.append('/scratch1/BMC/wrfruc/murdzek/nature_run_spring_hrrr/other_plots/20220429%d00/upp_APCP_20220429%d00.png' % (hr, hr+1))
 
-upp_files = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/wrfnat_202204291200.grib2']
-save_fnames = ['/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/upp/terrain.png']
+upp_files = ['/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_esstem/output/202204291300/UPP/wrfnat_202204291400.grib2']
+save_fnames = ['/scratch1/BMC/wrfruc/murdzek/src/py_scripts/upp/rain_sum.png']
 
-field = 'HGT_P0_L1_GLC0'
+field = 'RWMR_P0_L105_GLC0'
 
-name = 'Nature Run HRRR-like'
+name = 'NR: esstem'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -40,7 +40,7 @@ name = 'Nature Run HRRR-like'
 #---------------------------------------------------------------------------------------------------
 
 # Sample colors from plasma colorbar and define plotting levels
-plevels = np.array([0.002, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.0]) * 0.0254 * 997
+plevels = np.array([0.01, 0.1, 0.5, 1, 2, 3, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]) * 1e-3
 nlvl = len(plevels)
 colors = [mcm.plasma(i / (nlvl-1)) for i in range(nlvl)]
 
@@ -51,7 +51,8 @@ for fname, save_fname in zip(upp_files, save_fnames):
     plt.subplots_adjust(left=0.02, bottom=0.04, right=0.98, top=0.97)
     ds = xr.open_dataset(fname, engine='pynio')
     out = pmd.PlotOutput([ds], 'upp', fig, 1, 1, 1)
-    out.contourf(field, cntf_kw={'cmap':'plasma', 'extend':'max', 'levels':np.arange(0, 4000, 200)})
+    out.contourf(field, ingest_kw={'red_fct':np.sum}, cntf_kw={'cmap':'plasma', 'extend':'max', 
+                                                               'levels':np.arange(1e-3, 60e-3, 3e-3)})
     out.config_ax(grid=False)
     out.ax_title(txt=name, size=14)
 
