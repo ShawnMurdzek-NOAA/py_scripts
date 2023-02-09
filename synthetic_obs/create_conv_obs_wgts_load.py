@@ -114,16 +114,15 @@ for i in range(ntimes):
     bufr_csv.df.reset_index(drop=True, inplace=True)
 
     # Open wrfnat files
-    # Ideally this would be done using xr.open_mfdataset(), but the wrfnat files lack a time 
-    # dimension, which makes Xarray unable to combine them (and using concatenate requires a lot
-    # of memory, so that is not a viable option)
     fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'PRES_P0_L1_GLC0', 
-                'HGT_P0_L1_GLC0']
-    fields3D = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
+                'HGT_P0_L1_GLC0', 'PWAT_P0_L200_GLC0']
+    fields2D1 = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
+    fields3D = ['PRES_P0_L105_GLC0', 'HGT_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0',
+                'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
     hr_start = math.floor(bufr_csv.df['DHR'].min()*4) / 4
     hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + (wrf_step / 60.)
     wrf_ds = {}
-    for f in (fields2D + fields3D):
+    for f in (fields2D + fields2D1 + fields3D):
         wrf_ds[f] = {}
     wrf_hr = [] 
     for hr in np.arange(hr_start, hr_end + (wrf_step / 60.), wrf_step / 60.):
@@ -132,8 +131,10 @@ for i in range(ntimes):
         ds = xr.open_dataset(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'), engine='pynio')
         for f in fields2D:
             wrf_ds[f][hr] = ds[f].values
-        for f in fields3D:
+        for f in fields2D1:
             wrf_ds[f][hr] = ds[f][0, :, :].values
+        for f in fields3D:
+            wrf_ds[f][hr] = ds[f].values
         wrf_hr.append(hr)
     
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start).total_seconds())
@@ -175,7 +176,7 @@ for i in range(ntimes):
      
         # Determine WRF hour right before observation and weight for temporal interpolation
         ihr = np.where((wrf_hr - subset['DHR']) <= 0)[0][-1]
-        twgt = (subset['DHR'] - wrf_hr[ihr]) / (wrf_hr[ihr+1] - wrf_hr[ihr]) 
+        twgt = (wrf_hr[ihr+1] - subset['DHR']) / (wrf_hr[ihr+1] - wrf_hr[ihr]) 
 
         if debug > 1:
             time2 = dt.datetime.now()
@@ -193,6 +194,7 @@ for i in range(ntimes):
         # have an edge as their closest (lat, lon) coordinate in model space
         if (close[0] == 0 or close[0] == (wrf_lat.shape[0] - 1) or
             close[1] == 0 or close[1] == (wrf_lon.shape[1] - 1)):
+            drop_idx.append(j)
             continue
 
         # Determine pseudo-bilinear interpolation weights in horizontal
@@ -213,6 +215,30 @@ for i in range(ntimes):
             time3 = dt.datetime.now()
             print('done determining xi0, yi0 (%.6f s)' % (time3 - time2).total_seconds())
 
+        # Determine surface height above sea level and surface pressure
+        m = 'HGT_P0_L1_GLC0'
+        sfch = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0] +
+                        xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0+1] +
+                        xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0] +
+                        xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0+1]) +
+                (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0] +
+                             xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0+1] +
+                             xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0] +
+                             xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0+1]))
+        m = 'PRES_P0_L1_GLC0'
+        sfcp = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0] +
+                        xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0+1] +
+                        xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0] +
+                        xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0+1]) +
+                (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0] +
+                             xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0+1] +
+                             xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0] +
+                             xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0+1])) * 1e-2
+
+        if debug > 1:
+            time4 = dt.datetime.now()
+            print('done determining sfch (%.6f s)' % (time4 - time3).total_seconds())
+
         if subset['subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
             # Surface obs. Don't need to interpolate vertically
 
@@ -224,11 +250,14 @@ for i in range(ntimes):
                 print('DHR = %.3f, XOB = %.3f, YOB = %.3f' % (subset['DHR'], subset['XOB'], 
                                                               subset['YOB']))
 
-            # Interpolate temporally (winds must be done separately b/c both 10-m and 80-m winds
-            # are reported in UPP). Also adjust ELV and ZOB to match Nature Run terrain
-            obs_name = ['POB', 'QOB', 'TOB', 'PRSS', 'ZOB', 'ELV', 'UOB', 'VOB']
-            wrf_name = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 
-                        'PRES_P0_L1_GLC0', 'HGT_P0_L1_GLC0', 'HGT_P0_L1_GLC0', 'UGRD_P0_L103_GLC0',
+            # Reset surface values to match NR and assign surface pressure values
+            for o, v in zip(['ZOB', 'ELV', 'POB', 'PRSS'], [sfch, sfch, sfcp, sfcp]):
+                if not np.isnan(subset[o]):
+                    out_df.loc[j, o] = v
+
+            # Interpolate temporally
+            obs_name = ['QOB', 'TOB', 'UOB', 'VOB']
+            wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
                         'VGRD_P0_L103_GLC0']
             for o, m in zip(obs_name, wrf_name):
                 if not np.isnan(subset[o]):
@@ -260,8 +289,14 @@ for i in range(ntimes):
             if not np.isnan(subset['PWO']):
                 if debug > 1:
                     time5 = dt.datetime.now()
-                out_df.loc[j, 'PWO'] = (twgt * wrf_ds[wrf_hr[ihr]][m].interp(ygrid_0=yi, xgrid_0=xi) +
-                                        (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(ygrid_0=yi, xgrid_0=xi))
+                out_df.loc[j, 'PWO'] = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0] +
+                                                xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][yi0, xi0+1] +
+                                                xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0] +
+                                                xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][yi0+1, xi0+1]) +
+                                        (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0] +
+                                                     xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][yi0, xi0+1] +
+                                                     xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0] +
+                                                     xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][yi0+1, xi0+1]))
                 if debug > 1:
                     time6 = dt.datetime.now()
                     print('finished interp for PWO (%.6f s)' % (time6 - time5).total_seconds())
@@ -274,29 +309,57 @@ for i in range(ntimes):
                                                                       subset['TYP']))
                 print('twgt = %.3f, xi = %.3f, yi = %.3f' % (twgt, xi, yi))
 
-            zi = np.zeros(2)
-            for k in [ihr, ihr+1]:
-                z1d = wrf_ds[wrf_hr[k]]['HGT_P0_L105_GLC0'].interp(ygrid_0=yi, xgrid_0=xi)
-                z0i = np.where((z1d - subset['ZOB']) <= 0)[0][-1]
-                zi[k] = z0i + (subset['ZOB'] - z1d[z0i]) / (z1d[z0i+1] - z1d[z0i]) 
+            # Check whether ob from BUFR file lies underground
+            if (subset['ZOB'] < sfch) or (subset['POB'] > sfcp):
+                drop_idx.append(j)
+                continue
 
+            # Perform vertical interpolation in pressure rather than height b/c some obs don't 
+            # have height 
+            m = 'PRES_P0_L105_GLC0'
+            p1d = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][:, yi0, xi0] +
+                           xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][:, yi0, xi0+1] +
+                           xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][:, yi0+1, xi0] +
+                           xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][:, yi0+1, xi0+1]) +
+                   (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][:, yi0, xi0] +
+                                xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][:, yi0, xi0+1] +
+                                xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][:, yi0+1, xi0] +
+                                xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][:, yi0+1, xi0+1])) * 1e-2
+            pi0 = np.where(p1d > subset['POB'])[0][-1]
+            pwgt = (p1d[pi0+1] - subset['POB']) / (p1d[pi0+1] - p1d[pi0])
+ 
             if debug > 1:
-                time4 = dt.datetime.now()
-                print('done determining zi [%.2f, %.2f] (%.6f s)' % (zi[0], zi[1], (time4 - time3).total_seconds()))
+                time5 = dt.datetime.now()
+                print('done determining pi0 = %d (%.6f s)' % (pi0, (time5 - time4).total_seconds()))
 
             # Interpolate temporally
             obs_name = ['POB', 'QOB', 'TOB', 'UOB', 'VOB']
-            wrf_name = ['PRES_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'UGRD_P0_L105_GLC0',
-                        'VGRD_P0_L105_GLC0']
+            wrf_name = ['PRES_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 
+                        'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
             for o, m in zip(obs_name, wrf_name):
                 if not np.isnan(subset[o]):
                     if debug > 1:
-                        time5 = dt.datetime.now()
-                    out_df.loc[j, o] = (twgt * wrf_ds[wrf_hr[ihr]][m].interp(lv_HYBL1=zi[0], ygrid_0=yi, xgrid_0=xi) +
-                                        (1-twgt) * wrf_ds[wrf_hr[ihr+1]][m].interp(lv_HYBL1=zi[1], ygrid_0=yi, xgrid_0=xi))
-                    if debug > 1:
                         time6 = dt.datetime.now()
-                        print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
+                    v1 = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][pi0, yi0, xi0] +
+                                  xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][pi0, yi0, xi0+1] +
+                                  xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][pi0, yi0+1, xi0] +
+                                  xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][pi0, yi0+1, xi0+1]) +
+                          (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][pi0, yi0, xi0] +
+                                       xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][pi0, yi0, xi0+1] +
+                                       xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][pi0, yi0+1, xi0] +
+                                       xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][pi0, yi0+1, xi0+1]))
+                    v2 = (twgt * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][pi0+1, yi0, xi0] +
+                                  xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr]][pi0+1, yi0, xi0+1] +
+                                  xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][pi0+1, yi0+1, xi0] +
+                                  xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr]][pi0+1, yi0+1, xi0+1]) +
+                          (1.-twgt) * (xwgt1 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][pi0+1, yi0, xi0] +
+                                       xwgt2 * ywgt1 * wrf_ds[m][wrf_hr[ihr+1]][pi0+1, yi0, xi0+1] +
+                                       xwgt1 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][pi0+1, yi0+1, xi0] +
+                                       xwgt2 * ywgt2 * wrf_ds[m][wrf_hr[ihr+1]][pi0+1, yi0+1, xi0+1]))
+                    out_df.loc[j, o] = (v1**pwgt) * (v2**(1.-pwgt))
+                    if debug > 1:
+                        time7 = dt.datetime.now()
+                        print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
 
         # Add errors
 
@@ -312,7 +375,6 @@ for i in range(ntimes):
 
     # Convert to proper units
     out_df['QOB'] = out_df['QOB'] * 1e6
-    out_df['POB'] = out_df['POB'] * 1e-2
     out_df['TOB'] = out_df['TOB'] - 273.15
     out_df['PWO'] = (out_df['PWO'] / 997.) * 1000.
     out_df['ELV'] = np.int64(out_df['ELV'])
