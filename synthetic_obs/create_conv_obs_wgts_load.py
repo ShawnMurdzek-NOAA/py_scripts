@@ -91,7 +91,13 @@ errors = cou.read_ob_errors(error_fname)
 
 # List to save time spent on each BUFR entry
 if debug > 1:
-    entry_times = []
+    entry_times2d = []
+    entry_timesp1 = []
+    entry_timesp2 = []
+    entry_times3d = []
+
+# Convert wrf_step to decimal hours for ease of use
+wrf_step_dec = wrf_step / 60.
 
 ntimes = int((bufr_end - bufr_start) / dt.timedelta(minutes=bufr_step) + 1)
 for i in range(ntimes):
@@ -122,9 +128,9 @@ for i in range(ntimes):
 
     # Open wrfnat files
     hr_start = math.floor(bufr_csv.df['DHR'].min()*4) / 4
-    hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + (wrf_step / 60.)
+    hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + wrf_step_dec
     wrf_ds = {}
-    wrf_hr = np.arange(hr_start, hr_end + (wrf_step / 60.), wrf_step / 60.)
+    wrf_hr = np.arange(hr_start, hr_end + wrf_step_dec, wrf_step_dec)
     for hr in wrf_hr:
         wrf_t = t + dt.timedelta(hours=hr)
         print(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'))
@@ -134,8 +140,8 @@ for i in range(ntimes):
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start).total_seconds())
     
     # Extract latitude and longitude grids
-    wrf_lat = wrf_ds[0]['gridlat_0'].values
-    wrf_lon = wrf_ds[0]['gridlon_0'].values
+    wrf_lat = wrf_ds[0]['gridlat_0'][:, :].values
+    wrf_lon = wrf_ds[0]['gridlon_0'][:, :].values
 
     # Remove obs outside of the spatial domain of the wrfnat files
     latmin = wrf_lat.min()
@@ -162,11 +168,20 @@ for i in range(ntimes):
     for o in obs:
         ob_idx[o] = list(np.where(out_df['subset'] == o)[0]) 
 
+    # Initialize variables for 3D obs as zeros
+    for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
+        rows = np.intersect1d(np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']), 
+                              np.where(np.logical_not(np.isnan(out_df[v]))))
+        out_df.loc[rows, v] = 0.
+
     # Add some DataFrame columns
     nrow = len(out_df)
-    extra_col = ['twgt', 'xi0', 'yi0', 'xwgt1', 'xwgt2', 'ywgt1', 'ywgt2', 'pi0', 'pwgt']
-    for c in extra_col:
-        out_df[c] = np.zeros(nrow)
+    extra_col_int = ['xi0', 'yi0', 'pi0']
+    extra_col_float = ['twgt', 'xwgt1', 'xwgt2', 'ywgt1', 'ywgt2', 'pwgt']
+    for c in extra_col_int:
+        out_df[c] = np.zeros(nrow, dtype=int)
+    for c in extra_col_float:
+        out_df[c] = np.zeros(nrow, dtype=float)
 
 
     #-----------------------------------------------------------------------------------------------
@@ -181,7 +196,7 @@ for i in range(ntimes):
     for hr in wrf_hr:
         wrf_data[hr] = {}
         for f in fields2D:
-            wrf_data[hr][f] = wrf_ds[hr][f].values
+            wrf_data[hr][f] = wrf_ds[hr][f][:, :].values
         for f in fields2D1:
             wrf_data[hr][f] = wrf_ds[hr][f][0, :, :].values
     
@@ -196,7 +211,7 @@ for i in range(ntimes):
      
         # Determine WRF hour right before observation and weight for temporal interpolation
         ihr = np.where((wrf_hr - subset['DHR']) <= 0)[0][-1]
-        twgt = (wrf_hr[ihr+1] - subset['DHR']) / (wrf_hr[ihr+1] - wrf_hr[ihr]) 
+        twgt = (wrf_hr[ihr+1] - subset['DHR']) / wrf_step_dec 
 
         if debug > 1:
             time2 = dt.datetime.now()
@@ -294,6 +309,7 @@ for i in range(ntimes):
                     if debug > 1:
                         time6 = dt.datetime.now()
                         print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
+                        entry_times2d.append((dt.datetime.now() - time1).total_seconds())
 
         # GPS-Derived precipitable water
         elif subset['subset'] == 'GPSIPW':
@@ -320,11 +336,17 @@ for i in range(ntimes):
                 if debug > 1:
                     time6 = dt.datetime.now()
                     print('finished interp for PWO (%.6f s)' % (time6 - time5).total_seconds())
+                    entry_times2d.append((dt.datetime.now() - time1).total_seconds())
 
 
     #-----------------------------------------------------------------------------------------------
     # Create Obs Based on 3-D Fields (ADPUPA, AIRCAR, AIRCFT)
     #-----------------------------------------------------------------------------------------------
+
+    print()
+    print('3D Observations')
+    print('---------------')
+    print()
 
     # Remove data from wrf_data that we don't need so we can free up some memory
     for hr in wrf_hr:
@@ -335,8 +357,11 @@ for i in range(ntimes):
     # Call garbage collector to free up memory
     gc.collect()
 
+    # Create array to save p1d arrays in
+    p1d = np.zeros([100, len(out_df)])
+
     # We will extract 3D fields one at a time b/c these 3D arrays are massive (~6.5 GB each), so it 
-    # is not feasible to load all of them at once. Ideally, only 2 should be loaded at any given
+    # is not feasible to load all of them at once. Ideally, only 1 should be loaded at any given
     # time. Therefore, unlike the 2D obs, we will loop over each obs time interval and each WRF
     # field.
 
@@ -346,43 +371,54 @@ for i in range(ntimes):
     # consuming. Tests comparing the use of Xarray datasets to regular Numpy arrays show that the
     # Numpy array approach is ~23x faster.
 
-    # Loop over each WRF time interval
-    for hr1, hr2 in zip(wrf_hr[:-1], wrf_hr[1:]): 
+    # Loop over each variable (starting with pressure)
+    obs_name = ['POB', 'TOB', 'QOB', 'ZOB', 'UOB', 'VOB']
+    wrf_name = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 
+                'HGT_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
+    for o, f in zip(obs_name, wrf_name):
 
-        # Determine indices of obs in this time interval
-        ind = np.where(np.logical_and(out_df['DHR'] >= hr1, out_df['DHR'] < hr2))
-        ind = np.intersect1d(ind, np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']))
+        # Loop over each WRF time
+        for hr in wrf_hr: 
 
-        # If no indices, move to next time
-        if ind.size == 0:
-            continue
+            # Determine indices of obs within wrf_step of this output time
+            ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
+                                          out_df['DHR'] <= (hr + wrf_step_dec)))
+            ind = np.intersect1d(ind, np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']))
 
-        # Loop over each variable (starting with pressure)
-        obs_name = ['POB', 'TOB', 'QOB', 'ZOB', 'UOB', 'VOB']
-        wrf_name = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L103_GLC0', 
-                    'HGT_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
-        for o, f in zip(obs_name, wrf_name):
+            # If no indices, move to next time
+            if ind.size == 0:
+                continue
+
+            print()
             print('3D Interp: %s' % f)
+            print()
 
             # Extract field from UPP
-            wrf_data[hr1]['v3d'] = wrf_ds[hr1][f].values
-            wrf_data[hr2]['v3d'] = wrf_ds[hr2][f].values
+            # It seems rather silly to include [:, :, :] before calling .values, but this really
+            # helps with memory management. Including these indices allows the program to deallocate
+            # wrf3d when setting wrf3d = 0.
+            wrf3d = wrf_ds[hr][f][:, :, :].values
 
             # Loop over each ADPUPA, AIRCAR, and AIRCFT observation within this time interval
             for j in ind:
 
-                # Check to make sure that we didn't already drop this variable
+                # Check to make sure that we didn't already drop this row
                 if j in drop_idx:
+                    continue
+
+                # Drop row if POB is missing
+                if np.isnan(out_df.loc[j, 'POB']):
+                    drop_idx.append(j)
                     continue
 
                 if debug > 1:
                     time1 = dt.datetime.now()
                     print()
 
-                if o == 'POB':         
+                if (o == 'POB' and np.isclose(p1d[0, j], 0.)):         
 
                     # Determine weight for temporal interpolation
-                    twgt = (hr2 - out_df.loc[j, 'DHR']) / (hr2 - hr1) 
+                    twgt = 1. - (np.abs(hr - out_df.loc[j, 'DHR']) / wrf_step_dec) 
 
                     if debug > 1:
                         time2 = dt.datetime.now()
@@ -405,13 +441,13 @@ for i in range(ntimes):
 
                     # Determine pseudo-bilinear interpolation weights in horizontal
                     if lat < clat:
-                        yi0 = close[0] - 1
+                        yi0 = int(close[0] - 1)
                     else:
-                        yi0 = close[0]
+                        yi0 = int(close[0])
                     if lon < clon:
-                        xi0 = close[1] -1
+                        xi0 = int(close[1] - 1)
                     else:
-                        xi0 = close[1]
+                        xi0 = int(close[1])
                     ywgt1 = (wrf_lat[yi0+1, xi0] - lat) / (wrf_lat[yi0+1, xi0] - wrf_lat[yi0, xi0])
                     xwgt1 = (wrf_lon[yi0, xi0+1] - lon) / (wrf_lon[yi0, xi0+1] - wrf_lon[yi0, xi0])
                     ywgt2 = 1. - ywgt1
@@ -423,6 +459,12 @@ for i in range(ntimes):
 
                     # Determine surface height above sea level and surface pressure
                     m = 'HGT_P0_L1_GLC0'
+                    if hr > out_df.loc[j, 'DHR']:
+                        hr1 = hr - wrf_step_dec
+                        hr2 = hr
+                    else:
+                        hr1 = hr
+                        hr2 = hr + wrf_step_dec
                     sfch = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][yi0, xi0] +
                                     xwgt2 * ywgt1 * wrf_data[hr1][m][yi0, xi0+1] +
                                     xwgt1 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0] +
@@ -451,73 +493,104 @@ for i in range(ntimes):
                         print('done determining sfch and sfcp (%.6f s)' % (time4 - time3).total_seconds())
             
                     # Perform vertical interpolation in pressure rather than height b/c some obs don't 
-                    # have height 
-                    m = 'PRES_P0_L105_GLC0'
-                    p1d = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][yi0, xi0] +
-                                   xwgt2 * ywgt1 * wrf_data[hr1][m][yi0, xi0+1] +
-                                   xwgt1 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0] +
-                                   xwgt2 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0+1]) +
-                           (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[hr2][m][yi0, xi0] +
-                                        xwgt2 * ywgt1 * wrf_data[hr2][m][yi0, xi0+1] +
-                                        xwgt1 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0] +
-                                        xwgt2 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0+1])) * 1e-2
-                    pi0 = np.where(p1d > out_df.loc[j, 'POB'])[0][-1]
-                    pwgt = (p1d[pi0+1] - out_df.loc[j, 'POB']) / (p1d[pi0+1] - p1d[pi0])
+                    # have height. The calculation below only gives use part of the p1d array. The 
+                    # rest of this of this array will be determined when we loop over the other 3D
+                    # pressure array
+                    p1d[:, j] = twgt * (xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
+                                        xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
+                                        xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
+                                        xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1])
  
                     if debug > 1:
                         time5 = dt.datetime.now()
-                        print('done determining pi0 = %d (%.6f s)' % (pi0, (time5 - time4).total_seconds()))
+                        print('done computing first part of p1d (%.6f s)' % (time5 - time4).total_seconds())
 
-                else:
-                    # Extract indicies and weights saved from POB
-                    twgt = out_df.loc[j, 'twgt'] 
-                    xi0 = out_df.loc[j, 'xi0'] 
-                    yi0 = out_df.loc[j, 'yi0'] 
+                    # save some stuff
+                    out_df.loc[j, 'twgt']  = twgt 
+                    out_df.loc[j, 'xi0']   = xi0
+                    out_df.loc[j, 'yi0']   = yi0
+                    out_df.loc[j, 'xwgt1'] = xwgt1
+                    out_df.loc[j, 'xwgt2'] = xwgt2
+                    out_df.loc[j, 'ywgt1'] = ywgt1
+                    out_df.loc[j, 'ywgt2'] = ywgt2
+
+                    if debug > 1:
+                        print('total time for p1 = %.6f s' % (dt.datetime.now() - time1).total_seconds())
+                        entry_timesp1.append((dt.datetime.now() - time1).total_seconds())
+
+                elif o == 'POB':
+
+                    # Extract indicies and weights saved from first POB
+                    twgt =  out_df.loc[j, 'twgt'] 
+                    xi0 =   out_df.loc[j, 'xi0'] 
+                    yi0 =   out_df.loc[j, 'yi0'] 
                     xwgt1 = out_df.loc[j, 'xwgt1'] 
                     xwgt2 = out_df.loc[j, 'xwgt2'] 
                     ywgt1 = out_df.loc[j, 'ywgt1'] 
                     ywgt2 = out_df.loc[j, 'ywgt2'] 
-                    pi0 = out_df.loc[j, 'pi0'] 
-                    pwgt = out_df.loc[j, 'pwgt'] 
 
-                # Interpolate in 4 dimensions
-                if not np.isnan(subset[o]):
+                    # Finish computing p1d
+                    p1d[:, j] = p1d[:, j] + ((1.-twgt)*1e-2*(xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
+                                                             xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
+                                                             xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
+                                                             xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1]))
+
+                    pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
+                    pwgt = (p1d[pi0+1, j] - out_df.loc[j, 'POB']) / (p1d[pi0+1, j] - p1d[pi0, j])
+
+                    # Interpolate POB
+                    out_df.loc[j, 'POB'] = (p1d[pi0, j]**pwgt)*(p1d[pi0+1, j]**(1.-pwgt))
+
+                    # save some stuff
+                    out_df.loc[j, 'pwgt']  = pwgt 
+                    out_df.loc[j, 'pi0']   = pi0
+
                     if debug > 1:
-                        time6 = dt.datetime.now()
-                    v1 = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][pi0, yi0, xi0] +
-                                  xwgt2 * ywgt1 * wrf_data[hr1][m][pi0, yi0, xi0+1] +
-                                  xwgt1 * ywgt2 * wrf_data[hr1][m][pi0, yi0+1, xi0] +
-                                  xwgt2 * ywgt2 * wrf_data[hr1][m][pi0, yi0+1, xi0+1]) +
-                          (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[hr2][m][pi0, yi0, xi0] +
-                                       xwgt2 * ywgt1 * wrf_data[hr2][m][pi0, yi0, xi0+1] +
-                                       xwgt1 * ywgt2 * wrf_data[hr2][m][pi0, yi0+1, xi0] +
-                                       xwgt2 * ywgt2 * wrf_data[hr2][m][pi0, yi0+1, xi0+1]))
-                    v2 = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][pi0+1, yi0, xi0] +
-                                  xwgt2 * ywgt1 * wrf_data[hr1][m][pi0+1, yi0, xi0+1] +
-                                  xwgt1 * ywgt2 * wrf_data[hr1][m][pi0+1, yi0+1, xi0] +
-                                  xwgt2 * ywgt2 * wrf_data[hr1][m][pi0+1, yi0+1, xi0+1]) +
-                          (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[hr2][m][pi0+1, yi0, xi0] +
-                                       xwgt2 * ywgt1 * wrf_data[hr2][m][pi0+1, yi0, xi0+1] +
-                                       xwgt1 * ywgt2 * wrf_data[hr2][m][pi0+1, yi0+1, xi0] +
-                                       xwgt2 * ywgt2 * wrf_data[hr2][m][pi0+1, yi0+1, xi0+1]))
-                    out_df.loc[j, o] = (v1**pwgt) * (v2**(1.-pwgt))
+                        print('total time for p2 = %.6f s' % (dt.datetime.now() - time1).total_seconds())
+                        entry_timesp2.append((dt.datetime.now() - time1).total_seconds())
+
+                else:
+                    # Extract indicies and weights saved from POB
+                    twgt =  out_df.loc[j, 'twgt'] 
+                    xi0 =   out_df.loc[j, 'xi0'] 
+                    yi0 =   out_df.loc[j, 'yi0'] 
+                    xwgt1 = out_df.loc[j, 'xwgt1'] 
+                    xwgt2 = out_df.loc[j, 'xwgt2'] 
+                    ywgt1 = out_df.loc[j, 'ywgt1'] 
+                    ywgt2 = out_df.loc[j, 'ywgt2'] 
+                    pi0 =   out_df.loc[j, 'pi0'] 
+                    pwgt =  out_df.loc[j, 'pwgt'] 
+
+                    # Interpolate
+                    if not np.isnan(subset[o]):
+                        if debug > 1:
+                            time6 = dt.datetime.now()
+                        v1 = (xwgt1 * ywgt1 * wrf3d[pi0, yi0, xi0] +
+                              xwgt2 * ywgt1 * wrf3d[pi0, yi0, xi0+1] +
+                              xwgt1 * ywgt2 * wrf3d[pi0, yi0+1, xi0] +
+                              xwgt2 * ywgt2 * wrf3d[pi0, yi0+1, xi0+1])
+                        v2 = (xwgt1 * ywgt1 * wrf3d[pi0+1, yi0, xi0] +
+                              xwgt2 * ywgt1 * wrf3d[pi0+1, yi0, xi0+1] +
+                              xwgt1 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0] +
+                              xwgt2 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0+1])
+                        out_df.loc[j, o] = out_df.loc[j, o] + (v1**pwgt) * (v2**(1.-pwgt))
+                        if debug > 1:
+                            time7 = dt.datetime.now()
+                            print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
+
+                    # Add errors
+
                     if debug > 1:
-                        time7 = dt.datetime.now()
-                        print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
+                        print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())
+                        entry_times3d.append((dt.datetime.now() - time1).total_seconds())
 
-                # Add errors
-
-                if debug > 1:
-                    print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())
-                    entry_times.append((dt.datetime.now() - time1).total_seconds())
-
-                # Memory management
-                del wrf_data[hr1]['v3d']
-                del wrf_data[hr2]['v3d']
-                gc.collect()
+            # Free up memory (this doesn't actually work)
+            wrf3d = 0.
+            #gc.collect()
 
     # Drop rows that we skipped as well as the extra columns we added
-    out_df.drop(labels=extra_col, inplace=True)
+    out_df.drop(labels=extra_col_int, axis=1, inplace=True)
+    out_df.drop(labels=extra_col_float, axis=1, inplace=True)
     out_df.drop(index=drop_idx, inplace=True)
     out_df.reset_index(drop=True, inplace=True)
     bufr_csv.df.drop(index=drop_idx, inplace=True)
@@ -534,9 +607,10 @@ for i in range(ntimes):
     bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.prepbufr.csv'))
 
 if debug > 1:
-    entry_times = np.array(entry_times)
     print()
-    print('avg time per entry = %.6f s' % np.mean(entry_times))
+    for a, s in zip([entry_times2d, entry_timesp1, entry_timesp2, entry_times3d],
+                    ['2D', 'P1', 'P2', '3D']):
+        print('avg time per %s entries = %.6f s' % (s, np.mean(np.array(a))))
 
 
 """
