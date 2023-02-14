@@ -23,7 +23,7 @@ Resources:
 
 Hera - An interactive session on a regular node is sufficient
 Jet - 4 GB of memory on tjet is sufficient if only interpolating 2D fields
-    - 60 GB of memory on xjet is sufficient if interpolating 3D fields
+    - 30 GB of memory on xjet is sufficient if interpolating 3D fields
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -39,7 +39,9 @@ import numpy as np
 import datetime as dt
 import json
 import math
-import gc
+import os
+import scipy.spatial as ss
+import pickle
 
 import create_ob_utils as cou 
 import bufr
@@ -60,9 +62,15 @@ bufr_dir = './'
 
 # File containing conventional observation error characteristics (use GSI errtable file)
 error_fname = work + '/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
+add_errors = False
+
+# Optional path to pickle containing KDTree for WRF (lat, lon) grid
+use_pkl = True
+path_pkl = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/wrf_latlon_kdtree.pkl'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+#ob_platforms = ['AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
@@ -86,8 +94,22 @@ debug = 2
 # Create Synthetic Observations
 #---------------------------------------------------------------------------------------------------
 
+# Timing
+begin = dt.datetime.now()
+
 # Open up obs error file
 errors = cou.read_ob_errors(error_fname)
+
+# Extract KDTree
+tree = None
+if use_pkl:
+    try:
+        fptr = open(path_pkl, 'rb')
+        tree = pickle.load(fptr)
+        fptr.close()
+        print('Found KDTree pickle')
+    except FileNotFoundError:
+        print('KDTree pickle not found')
 
 # List to save time spent on each BUFR entry
 if debug > 1:
@@ -102,10 +124,10 @@ wrf_step_dec = wrf_step / 60.
 ntimes = int((bufr_end - bufr_start) / dt.timedelta(minutes=bufr_step) + 1)
 for i in range(ntimes):
     t = bufr_start + dt.timedelta(minutes=(i*bufr_step))
-    start = dt.datetime.now()
+    start_loop = dt.datetime.now()
     print()
     print('t = %s' % t.strftime('%Y-%m-%d %H:%M:%S'))
-    print('start time = %s' % start.strftime('%Y%m%d %H:%M:%S'))
+    print('start time = %s' % start_loop.strftime('%Y%m%d %H:%M:%S'))
     bufr_fname = bufr_dir + t.strftime('/%Y%m%d%H%M.rap.prepbufr.csv')
     bufr_csv = bufr.bufrCSV(bufr_fname)
 
@@ -137,11 +159,24 @@ for i in range(ntimes):
         wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'), 
                                      engine='pynio')
 
-    print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start).total_seconds())
+    print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
     # Extract latitude and longitude grids
     wrf_lat = wrf_ds[0]['gridlat_0'][:, :].values
     wrf_lon = wrf_ds[0]['gridlon_0'][:, :].values
+
+    # Create KDTree and save for future use
+    if tree == None:
+        print()
+        print('creating KDTree...')
+        start_kdtree = dt.datetime.now()
+        tree = ss.KDTree(np.array([wrf_lon.ravel(), wrf_lat.ravel()]).T)
+        print('done creating KDTree (%.6f s)' % (dt.datetime.now() - start_kdtree).total_seconds())
+        print()
+        if use_pkl:
+            fptr = open(path_pkl, 'wb')
+            pickle.dump(tree, fptr)
+            fptr.close()
 
     # Remove obs outside of the spatial domain of the wrfnat files
     latmin = wrf_lat.min()
@@ -220,8 +255,7 @@ for i in range(ntimes):
         # Interpolate horizontally (code here is adapted from cou.wrf_coords)
         lat = subset['YOB']
         lon = subset['XOB'] - 360.
-        close = np.unravel_index(np.argmin((wrf_lon - lon)**2 + (wrf_lat - lat)**2),
-                                 wrf_lon.shape)
+        close = np.unravel_index(tree.query([lon, lat])[1], wrf_lon.shape)
         clat = wrf_lat[close[0], close[1]]
         clon = wrf_lon[close[0], close[1]]
 
@@ -354,9 +388,6 @@ for i in range(ntimes):
                   'VGRD_P0_L103_GLC0']:
             del wrf_data[hr][f]
 
-    # Call garbage collector to free up memory
-    gc.collect()
-
     # Create array to save p1d arrays in
     p1d = np.zeros([100, len(out_df)])
 
@@ -397,7 +428,14 @@ for i in range(ntimes):
             # It seems rather silly to include [:, :, :] before calling .values, but this really
             # helps with memory management. Including these indices allows the program to deallocate
             # wrf3d when setting wrf3d = 0.
+            if debug > 0:
+                time_3d = dt.datetime.now()
             wrf3d = wrf_ds[hr][f][:, :, :].values
+            if debug > 0:
+                print('time to extract %s = %.6f s' % (f, (dt.datetime.now() - time_3d).total_seconds()))
+                for l in os.popen('free -t -m -h').readlines():
+                    print(l)
+                print()
 
             # Loop over each ADPUPA, AIRCAR, and AIRCFT observation within this time interval
             for j in ind:
@@ -427,8 +465,7 @@ for i in range(ntimes):
                     # Interpolate horizontally (code here is adapted from cou.wrf_coords)
                     lat = out_df.loc[j, 'YOB']
                     lon = out_df.loc[j, 'XOB'] - 360.
-                    close = np.unravel_index(np.argmin((wrf_lon - lon)**2 + (wrf_lat - lat)**2),
-                                             wrf_lon.shape)
+                    close = np.unravel_index(tree.query([lon, lat])[1], wrf_lon.shape)
                     clat = wrf_lat[close[0], close[1]]
                     clon = wrf_lon[close[0], close[1]]
 
@@ -584,9 +621,8 @@ for i in range(ntimes):
                         print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())
                         entry_times3d.append((dt.datetime.now() - time1).total_seconds())
 
-            # Free up memory (this doesn't actually work)
+            # Free up memory (shouldn't have to call garbage collector after this)
             wrf3d = 0.
-            #gc.collect()
 
     # Drop rows that we skipped as well as the extra columns we added
     out_df.drop(labels=extra_col_int, axis=1, inplace=True)
@@ -603,14 +639,24 @@ for i in range(ntimes):
     out_df['ELV'] = np.int64(out_df['ELV'])
 
     # Write output DataFrame to a CSV file
+    # .real_red.prepbufr.csv file can be used for assessing interpolation accuracy
     bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.prepbufr.csv'))
     bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.prepbufr.csv'))
+
+    # Timing
+    print()
+    print('time for this BUFR file = %.6f s' % (dt.datetime.now() - start_loop).total_seconds())
 
 if debug > 1:
     print()
     for a, s in zip([entry_times2d, entry_timesp1, entry_timesp2, entry_times3d],
                     ['2D', 'P1', 'P2', '3D']):
-        print('avg time per %s entries = %.6f s' % (s, np.mean(np.array(a))))
+        if len(a) > 0:
+            print('avg time per %s entries = %.6f s' % (s, np.mean(np.array(a))))
+
+# Total timing
+print()
+print('time for entire program = %.6f s' % (dt.datetime.now() - begin).total_seconds())
 
 
 """

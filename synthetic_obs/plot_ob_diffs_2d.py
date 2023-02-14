@@ -86,5 +86,5 @@ for v in obs_vars:
 
 
 """
-End plot_ob_diffs.py  
+End plot_ob_diffs_2d.py  
 """
