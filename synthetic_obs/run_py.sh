@@ -1,10 +1,10 @@
 #!/bin/sh
 
 #SBATCH -A wrfruc
-#SBATCH -t 03:00:00
+#SBATCH -t 02:00:00
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --partition=xjet
-#SBATCH --mem=30GB
+#SBATCH --mem=25GB
 
 date
 . ~/.bashrc

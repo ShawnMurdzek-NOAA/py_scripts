@@ -80,7 +80,7 @@ def wrf_coords(lat, lon, ds, ftype='UPP'):
 
 def read_ob_errors(fname):
     """
-    Parse out obbservation errors from an errtable file in GSI
+    Parse out observation errors from an errtable file in GSI
 
     Parameters
     ----------

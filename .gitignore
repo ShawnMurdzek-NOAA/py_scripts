@@ -1,0 +1,6 @@
+
+# Ignore slurm output files
+slurm*.out
+
+# Ignore swp files
+*.swp

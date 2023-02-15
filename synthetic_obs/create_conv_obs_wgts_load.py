@@ -79,7 +79,7 @@ bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
 wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-wrf_end = dt.datetime(2022, 4, 29, 13, 0)
+wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
@@ -92,9 +92,6 @@ debug = 2
 
 # Timing
 begin = dt.datetime.now()
-
-# Open up obs error file
-errors = cou.read_ob_errors(error_fname)
 
 # Extract KDTree
 tree = None
@@ -146,9 +143,11 @@ for i in range(ntimes):
 
     # Open wrfnat files
     hr_start = math.floor(bufr_csv.df['DHR'].min()*4) / 4
-    hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + wrf_step_dec
+    hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + (2*wrf_step_dec)
+    print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
+    print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
     wrf_ds = {}
-    wrf_hr = np.arange(hr_start, hr_end + wrf_step_dec, wrf_step_dec)
+    wrf_hr = np.arange(hr_start, hr_end, wrf_step_dec)
     for hr in wrf_hr:
         wrf_t = t + dt.timedelta(hours=hr)
         print(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'))
@@ -577,6 +576,10 @@ for i in range(ntimes):
                     # Check for extrapolation
                     if (p1d[0, j] > out_df.loc[j, 'POB']):
                         pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
+                        if pi0 >= (p1d.shape[0] - 1):
+                            # Prevent extrapolation in vertical
+                            drop_idx.append(j)
+                            continue
                         pwgt = (p1d[pi0+1, j] - out_df.loc[j, 'POB']) / (p1d[pi0+1, j] - p1d[pi0, j])
                     else:
                         drop_idx.append(j)
@@ -609,7 +612,7 @@ for i in range(ntimes):
                     pwgt =  out_df.loc[j, 'pwgt'] 
 
                     # Interpolate
-                    if not np.isnan(subset[o]):
+                    if not np.isnan(out_df.loc[j, o]):
                         if debug > 1:
                             time6 = dt.datetime.now()
                         v1 = (xwgt1 * ywgt1 * wrf3d[pi0, yi0, xi0] +
@@ -627,6 +630,7 @@ for i in range(ntimes):
                         if debug > 1:
                             time7 = dt.datetime.now()
                             print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
+                            print('v1, v2 = %.2f, %.2f' % (v1, v2))
 
                     if debug > 1:
                         print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())

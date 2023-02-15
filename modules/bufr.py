@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
+import scipy.interpolate as si
+
+import meteo_util as mu
 
 
 #---------------------------------------------------------------------------------------------------
@@ -202,6 +205,144 @@ def df_to_csv(df, fname):
     for l in contents:
         fptr.write(' ' + l.strip() + ',\n')
     fptr.close() 
+
+
+def read_ob_errors(fname):
+    """
+    Parse out observation errors from an errtable file in GSI
+
+    Parameters
+    ----------
+    fname : string
+        Name of errtable text file
+
+    Returns
+    -------
+    errors: dictionary
+        A dictionary of pd.DataFrame objects containing the observation errors
+
+    Notes
+    -----
+    More information about the errtable format in GSI can be found here: 
+    https://dtcenter.ucar.edu/com-GSI/users/docs/users_guide/html_v3.7/gsi_ch4.html#conventional-observation-errors
+
+    """
+
+    # Extract contents of file
+    fptr = open(fname, 'r')
+    contents = fptr.readlines()
+    fptr.close()
+
+    # Loop over each line
+    errors = {}
+    headers = ['prs', 'Terr', 'RHerr', 'UVerr', 'PSerr', 'PWerr']
+    for l in contents:
+        if l[5:21] == 'OBSERVATION TYPE':
+            key = int(l[1:4])
+            errors[key] = {}
+            for h in headers:
+                errors[key][h] = []
+        else:
+            vals = l.strip().split(' ')
+            for k, h in enumerate(headers):
+                errors[key][h].append(float(vals[k]))
+
+    # Convert to DataFrame
+    for key in errors.keys():
+        errors[key] = pd.DataFrame(errors[key])
+        for h in headers[1:]:
+            errors[key][h].where(errors[key][h] < 5e8, inplace=True)
+
+    return errors
+
+
+def add_obs_err_uncorr(df, errtable, typ='all'):
+    """
+    Add random, uncorrelated Gaussian errors to observations based on error standard deviations in 
+    errtable
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+    errtable : string
+        Name of errtable text file
+    typ: 'all' or list, optional
+        List of observation types to apply errors to 
+
+    Returns
+    -------
+    out_df : pd.DataFrame
+        DataFrame of observations with random errors added
+
+    Notes
+    -----
+    Observation errors are assumed to be uncorrelated in both space and time
+
+    """
+    
+    # Make copy of DataFrame
+    out_df = df.copy()
+
+    # Determine list of all observation types
+    if typ == 'all':
+        typ = np.int32(out_df['TYP'].unique())
+
+    # Read in error table file 
+    etable = read_ob_errors(errtable)
+    eprs = etable[100]['prs'].values
+
+    # Convert specific humidities to relative humidities in BUFR CSV
+    out_df['QOB'] = out_df['QOB'] * 1e-6
+    mix = out_df['QOB']  / (1. - out_df['QOB'])
+    out_df['RHOB'] = 10 * (mix / mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2))  
+
+    # Convert surface pressures from Pa to hPa in BUFR CSV
+    out_df['PRSS'] = out_df['PRSS'] * 1e-2
+
+    # Loop over each observation type
+    for t in typ:
+        print()
+        print('TYP = %d' % t)
+        for ob, err in zip(['TOB', 'RHOB', 'UOB', 'VOB', 'PRSS', 'PWO'],
+                           ['Terr', 'RHerr', 'UVerr', 'UVerr', 'PSerr', 'PWerr']):
+            
+            print(ob)
+            # Check to see if errors are defined
+            if np.all(np.isnan(etable[t][err].values)):
+                print('no errors for typ = %d, ob = %s' % (t, ob))
+                continue
+
+            # Determine indices where errors are not NaN
+            eind = np.where(np.logical_not(np.isnan(etable[t][err])))[0]
+            
+            # Determine indices in out_df for this ob type
+            oind = np.where((out_df['TYP'] == t) & (out_df['POB'] <= eprs[eind[0]]) & 
+                            (out_df['POB'] >= eprs[eind[-1]]))[0]
+
+            # Determine if errors vary with pressure. If so, create a function for interpolation
+            # Then add observation errors
+            if len(np.unique(etable[t].loc[eind, err])) == 1:
+                error = etable[t].loc[eind[0], err]
+                out_df.loc[oind, ob] = (out_df.loc[oind, ob] +
+                                        np.random.normal(scale=error, size=len(oind)))
+            else:
+                fct = si.interp1d(eprs[eind], etable[t].loc[eind, err])
+                for k in oind:
+                    error = fct(out_df.loc[k, 'POB'])
+                    out_df.loc[k, ob] = out_df.loc[k, ob] + np.random.normal(scale=error)
+
+    # Set relative humidities > 100% to 100%
+    out_df.loc[out_df['RHOB'] > 10, 'RHOB'] = 10.
+
+    # Compute specific humidity from relative humidity
+    mix = 0.1 * out_df['RHOB'] * mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2)
+    out_df['QOB'] = 1e6 * (mix / (1. + mix))
+        
+    # Convert surface pressure back to Pa
+    out_df['PRSS'] = out_df['PRSS'] * 1e-2
+    
+    return out_df
 
 
 """

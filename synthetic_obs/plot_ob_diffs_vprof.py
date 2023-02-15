@@ -31,7 +31,7 @@ save_fname = './ob_diffs_vprof.png'
 subsets = ['ADPUPA']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'ZOB', 'VOB', 'UOB']
 
 # Title
 title = 'synthetic obs $-$ real obs'
@@ -40,6 +40,15 @@ title = 'synthetic obs $-$ real obs'
 #---------------------------------------------------------------------------------------------------
 # Plot BUFR Observation Differences
 #---------------------------------------------------------------------------------------------------
+
+# Dictionary giving quality marker fields for each variable (only plot quality markers 0-2)
+qm = {'POB':'PQM',
+      'QOB':'QQM',
+      'TOB':'TQM',
+      'ZOB':'ZQM',
+      'UOB':'WQM',
+      'VOB':'WQM',
+      'PWQ':'PWO'}
 
 # Open files
 bufr_df1 = bufr.bufrCSV(fname1)
@@ -53,16 +62,21 @@ ind = np.where(boo)
 bufr_df1.df = bufr_df1.df.loc[ind]
 bufr_df2.df = bufr_df2.df.loc[ind]
 
-pres = bufr_df1.df['POB'].values
-
 fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(8, 6), sharey=True)
 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9, hspace=0.3, wspace=0.3)
 for i, v in enumerate(obs_vars):
     print('Plotting %s' % v)
     ax = axes[int(i/4), i%4]
 
-    diff = bufr_df1.df[v] - bufr_df2.df[v]
-
+    # Only plot if the quality marker is <= 2
+    if v in qm.keys():
+        cond = np.logical_and(bufr_df1.df[qm[v]] <= 2, bufr_df2.df[qm[v]])
+        diff = bufr_df1.df.loc[cond, v] - bufr_df2.df.loc[cond, v]
+        pres = bufr_df1.df.loc[cond, 'POB'].values
+    else:
+        diff = bufr_df1.df[v] - bufr_df2.df[v]
+        pres = bufr_df1.df['POB'].values
+    
     ax.plot(diff, np.log10(pres), 'bo')
     ax.axvline(0, c='k', lw='1')
     ax.grid()

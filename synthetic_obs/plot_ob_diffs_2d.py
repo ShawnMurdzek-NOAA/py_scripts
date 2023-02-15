@@ -43,6 +43,15 @@ title = 'synthetic obs $-$ real obs'
 # Plot BUFR Observation Differences
 #---------------------------------------------------------------------------------------------------
 
+# Dictionary giving quality marker fields for each variable (only plot quality markers 0-2)
+qm = {'POB':'PQM',
+      'QOB':'QQM',
+      'TOB':'TQM',
+      'ZOB':'ZQM',
+      'UOB':'WQM',
+      'VOB':'WQM',
+      'PWQ':'PWO'}
+
 # Open files
 bufr_df1 = bufr.bufrCSV(fname1)
 bufr_df2 = bufr.bufrCSV(fname2)
@@ -55,15 +64,22 @@ ind = np.where(boo)
 bufr_df1.df = bufr_df1.df.loc[ind]
 bufr_df2.df = bufr_df2.df.loc[ind]
 
-lat = bufr_df1.df['YOB'].values
-lon = bufr_df1.df['XOB'].values
-
 for v in obs_vars:
     print('Plotting %s' % v)
     fig = plt.figure(figsize=(10, 6))
     ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
 
-    diff = bufr_df1.df[v] - bufr_df2.df[v]
+    # Only plot if the quality marker is <= 2
+    if v in qm.keys():
+        cond = np.logical_and(bufr_df1.df[qm[v]] <= 2, bufr_df2.df[qm[v]])
+        diff = bufr_df1.df.loc[cond, v] - bufr_df2.df.loc[cond, v]
+        lat = bufr_df1.df.loc[cond, 'YOB'].values
+        lon = bufr_df1.df.loc[cond, 'XOB'].values
+    else:
+        diff = bufr_df1.df[v] - bufr_df2.df[v]
+        lat = bufr_df1.df['YOB'].values
+        lon = bufr_df1.df['XOB'].values
+
     maxdiff = np.amax(np.abs(diff))
 
     cax = ax.scatter(lon, lat, s=75, c=diff, cmap='bwr', vmin=-maxdiff, vmax=maxdiff,
