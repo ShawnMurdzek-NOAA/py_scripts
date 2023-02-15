@@ -58,11 +58,7 @@ wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
 #wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = './'
-
-# File containing conventional observation error characteristics (use GSI errtable file)
-error_fname = work + '/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
-add_errors = False
+bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
 
 # Optional path to pickle containing KDTree for WRF (lat, lon) grid
 use_pkl = True
@@ -412,8 +408,14 @@ for i in range(ntimes):
         for hr in wrf_hr: 
 
             # Determine indices of obs within wrf_step of this output time
-            ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
-                                          out_df['DHR'] <= (hr + wrf_step_dec)))
+            if hr == wrf_hr[1]:
+                # Include obs that occur right at the first WRF hour, otherwise the P2 conditional
+                # below does not execute, which means that pwgt and pi0 are not computed
+                ind = np.where(np.logical_and(out_df['DHR'] >= (hr - wrf_step_dec), 
+                                              out_df['DHR'] <= (hr + wrf_step_dec)))
+            else:
+                ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
+                                              out_df['DHR'] <= (hr + wrf_step_dec)))
             ind = np.intersect1d(ind, np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']))
 
             # If no indices, move to next time
@@ -460,7 +462,7 @@ for i in range(ntimes):
 
                     if debug > 1:
                         time2 = dt.datetime.now()
-                        print('done determining twgt (%.6f s)' % (time2 - time1).total_seconds())
+                        print('done determining twgt (%.3f, %.6f s)' % (twgt, (time2 - time1).total_seconds()))
 
                     # Interpolate horizontally (code here is adapted from cou.wrf_coords)
                     lat = out_df.loc[j, 'YOB']
@@ -533,10 +535,10 @@ for i in range(ntimes):
                     # have height. The calculation below only gives use part of the p1d array. The 
                     # rest of this of this array will be determined when we loop over the other 3D
                     # pressure array
-                    p1d[:, j] = twgt * (xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
-                                        xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
-                                        xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
-                                        xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1])
+                    p1d[:, j] = twgt * 1e-2 * (xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
+                                               xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
+                                               xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
+                                               xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1])
  
                     if debug > 1:
                         time5 = dt.datetime.now()
@@ -572,11 +574,19 @@ for i in range(ntimes):
                                                              xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
                                                              xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1]))
 
-                    pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
-                    pwgt = (p1d[pi0+1, j] - out_df.loc[j, 'POB']) / (p1d[pi0+1, j] - p1d[pi0, j])
+                    # Check for extrapolation
+                    if (p1d[0, j] > out_df.loc[j, 'POB']):
+                        pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
+                        pwgt = (p1d[pi0+1, j] - out_df.loc[j, 'POB']) / (p1d[pi0+1, j] - p1d[pi0, j])
+                    else:
+                        drop_idx.append(j)
+                        continue
 
                     # Interpolate POB
                     out_df.loc[j, 'POB'] = (p1d[pi0, j]**pwgt)*(p1d[pi0+1, j]**(1.-pwgt))
+                    if debug > 1: 
+                        print('interpolated P = %.2f' % out_df.loc[j, 'POB'])
+                        print('actual P = %.2f' % bufr_csv.df.loc[j, 'POB'])
 
                     # save some stuff
                     out_df.loc[j, 'pwgt']  = pwgt 
@@ -610,12 +620,13 @@ for i in range(ntimes):
                               xwgt2 * ywgt1 * wrf3d[pi0+1, yi0, xi0+1] +
                               xwgt1 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0] +
                               xwgt2 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0+1])
-                        out_df.loc[j, o] = out_df.loc[j, o] + (v1**pwgt) * (v2**(1.-pwgt))
+                        if np.isclose(out_df.loc[j, o], 0):
+                            out_df.loc[j, o] = twgt * (v1**pwgt) * (v2**(1.-pwgt))
+                        else:
+                            out_df.loc[j, o] = out_df.loc[j, o] + (1.-twgt) * (v1**pwgt) * (v2**(1.-pwgt))
                         if debug > 1:
                             time7 = dt.datetime.now()
                             print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
-
-                    # Add errors
 
                     if debug > 1:
                         print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())

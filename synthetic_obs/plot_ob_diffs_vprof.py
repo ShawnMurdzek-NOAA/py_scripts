@@ -4,7 +4,7 @@ Plot Observation Differences Between Two Prepbufr CSV
 This script should ideally be used to compare synthetic obs vs. real obs
 
 shawn.s.murdzek@noaa.gov
-Date Created: 7 February 2023
+Date Created: 14 February 2023
 """
 
 #---------------------------------------------------------------------------------------------------
@@ -14,8 +14,6 @@ Date Created: 7 February 2023
 import bufr
 import matplotlib.pyplot as plt
 import numpy as np
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
 
 
 #---------------------------------------------------------------------------------------------------
@@ -26,11 +24,11 @@ import cartopy.feature as cfeature
 fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
 fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
 
-# Output file name (include %s placeholder for variable)
-save_fname = './ob_diffs_%s.png'
+# Output file name
+save_fname = './ob_diffs_vprof.png'
 
 # Observation subsets
-subsets = ['SHPSFC', 'ADPSFC', 'MSONET']
+subsets = ['ADPUPA']
 
 # Variables to plot
 obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
@@ -55,36 +53,34 @@ ind = np.where(boo)
 bufr_df1.df = bufr_df1.df.loc[ind]
 bufr_df2.df = bufr_df2.df.loc[ind]
 
-lat = bufr_df1.df['YOB'].values
-lon = bufr_df1.df['XOB'].values
+pres = bufr_df1.df['POB'].values
 
-for v in obs_vars:
+fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(8, 6), sharey=True)
+plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9, hspace=0.3, wspace=0.3)
+for i, v in enumerate(obs_vars):
     print('Plotting %s' % v)
-    fig = plt.figure(figsize=(10, 6))
-    ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+    ax = axes[int(i/4), i%4]
 
     diff = bufr_df1.df[v] - bufr_df2.df[v]
-    maxdiff = np.amax(np.abs(diff))
 
-    cax = ax.scatter(lon, lat, s=75, c=diff, cmap='bwr', vmin=-maxdiff, vmax=maxdiff,
-                     transform=ccrs.PlateCarree(), edgecolors='k', linewidths=0.5)
-    cbar = plt.colorbar(cax, ax=ax, orientation='horizontal')
-    cbar.set_label('%s diffs (%s)' % (v, bufr_df1.meta[v]['units']), size=14)
+    ax.plot(diff, np.log10(pres), 'bo')
+    ax.axvline(0, c='k', lw='1')
+    ax.grid()
 
-    ax.coastlines('50m')
-    borders = cfeature.NaturalEarthFeature(category='cultural',
-                                           scale='50m',
-                                           facecolor='none',
-                                           name='admin_1_states_provinces')
-    ax.add_feature(borders, linewidth=0.5, edgecolor='k')
-    ax.set_xlim([-135, -50])
-    ax.set_ylim([20, 55])
-    ax.set_title(title, size=18)
+    ax.set_ylim([np.log10(1050), np.log10(100)])
+    ticks = np.array([1000, 850, 700, 500, 400, 300, 200, 100])
+    ax.set_yticks(np.log10(ticks))
+    ax.set_yticklabels(ticks)
+    ax.set_xlabel('%s (%s)' % (v, bufr_df1.meta[v]['units']), size=12)
 
-    plt.savefig(save_fname % v)
-    plt.close()
+for i in range(2):
+    axes[i, 0].set_ylabel('pressure (%s)' % bufr_df1.meta['POB']['units'], size=12)
+
+plt.suptitle(title, size=16)
+plt.savefig(save_fname)
+plt.close()
 
 
 """
-End plot_ob_diffs_2d.py  
+End plot_ob_diffs_vprof.py  
 """
