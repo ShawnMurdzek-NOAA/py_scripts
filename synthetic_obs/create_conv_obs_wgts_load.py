@@ -23,7 +23,7 @@ Resources:
 
 Hera - An interactive session on a regular node is sufficient
 Jet - 4 GB of memory on tjet is sufficient if only interpolating 2D fields
-    - 30 GB of memory on xjet is sufficient if interpolating 3D fields
+    - 25 GB of memory on sjet is sufficient if interpolating 3D fields
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -59,6 +59,7 @@ wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
 
 # Directory containing real prepbufr CSV output
 bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
 
 # Optional path to pickle containing KDTree for WRF (lat, lon) grid
 use_pkl = True
@@ -237,7 +238,7 @@ for i in range(ntimes):
             time1 = dt.datetime.now()
             print()
 
-        subset = out_df.iloc[j]
+        subset = out_df.loc[j]
      
         # Determine WRF hour right before observation and weight for temporal interpolation
         ihr = np.where((wrf_hr - subset['DHR']) <= 0)[0][-1]
@@ -407,14 +408,8 @@ for i in range(ntimes):
         for hr in wrf_hr: 
 
             # Determine indices of obs within wrf_step of this output time
-            if hr == wrf_hr[1]:
-                # Include obs that occur right at the first WRF hour, otherwise the P2 conditional
-                # below does not execute, which means that pwgt and pi0 are not computed
-                ind = np.where(np.logical_and(out_df['DHR'] >= (hr - wrf_step_dec), 
-                                              out_df['DHR'] <= (hr + wrf_step_dec)))
-            else:
-                ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
-                                              out_df['DHR'] <= (hr + wrf_step_dec)))
+            ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
+                                          out_df['DHR'] < (hr + wrf_step_dec)))
             ind = np.intersect1d(ind, np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']))
 
             # If no indices, move to next time
@@ -543,6 +538,33 @@ for i in range(ntimes):
                         time5 = dt.datetime.now()
                         print('done computing first part of p1d (%.6f s)' % (time5 - time4).total_seconds())
 
+                    # Special case: twgt = 1. In this case, we don't need to interpolate in time, so 
+                    # we can skip the P2 section of the conditional
+                    if np.isclose(twgt, 1):
+                        # Check for extrapolation
+                        if (p1d[0, j] > out_df.loc[j, 'POB']):
+                            pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
+                            if debug > 1:
+                                print('pi0 = %d' % pi0)
+                            if pi0 >= (p1d.shape[0] - 1):
+                                # Prevent extrapolation in vertical
+                                drop_idx.append(j)
+                                continue
+                            pwgt = (p1d[pi0+1, j] - out_df.loc[j, 'POB']) / (p1d[pi0+1, j] - p1d[pi0, j])
+                        else:
+                            drop_idx.append(j)
+                            continue
+
+                        # Interpolate POB
+                        out_df.loc[j, 'POB'] = (p1d[pi0, j]**pwgt)*(p1d[pi0+1, j]**(1.-pwgt))
+                        if debug > 1: 
+                            print('interpolated P = %.2f' % out_df.loc[j, 'POB'])
+                            print('actual P = %.2f' % bufr_csv.df.loc[j, 'POB'])
+
+                        # save some stuff
+                        out_df.loc[j, 'pwgt']  = pwgt 
+                        out_df.loc[j, 'pi0']   = pi0
+
                     # save some stuff
                     out_df.loc[j, 'twgt']  = twgt 
                     out_df.loc[j, 'xi0']   = xi0
@@ -576,6 +598,8 @@ for i in range(ntimes):
                     # Check for extrapolation
                     if (p1d[0, j] > out_df.loc[j, 'POB']):
                         pi0 = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
+                        if debug > 1:
+                            print('pi0 = %d' % pi0)
                         if pi0 >= (p1d.shape[0] - 1):
                             # Prevent extrapolation in vertical
                             drop_idx.append(j)

@@ -28,10 +28,10 @@ fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204
 save_fname = './ob_diffs_vprof.png'
 
 # Observation subsets
-subsets = ['ADPUPA']
+subsets = ['ADPUPA', 'AIRCAR', 'AIRCFT']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'ZOB', 'VOB', 'UOB']
+obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
 
 # Title
 title = 'synthetic obs $-$ real obs'
@@ -77,7 +77,7 @@ for i, v in enumerate(obs_vars):
         diff = bufr_df1.df[v] - bufr_df2.df[v]
         pres = bufr_df1.df['POB'].values
     
-    ax.plot(diff, np.log10(pres), 'bo')
+    ax.plot(diff, np.log10(pres), 'b.')
     ax.axvline(0, c='k', lw='1')
     ax.grid()
 
