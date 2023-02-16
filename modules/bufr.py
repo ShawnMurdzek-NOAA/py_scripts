@@ -338,7 +338,8 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
     # Compute specific humidity from relative humidity
     mix = 0.1 * out_df['RHOB'] * mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2)
     out_df['QOB'] = 1e6 * (mix / (1. + mix))
-        
+    out_df.drop(label='RHOB', axis=1, inplace=True)    
+    
     # Convert surface pressure back to Pa
     out_df['PRSS'] = out_df['PRSS'] * 1e-2
     
