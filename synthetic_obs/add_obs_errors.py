@@ -43,8 +43,8 @@ start = dt.datetime.now()
 print('start time = %s' % start.strftime('%H:%M:%S'))
 
 bufr_csv = bufr.bufrCSV(bufr_fname)
-out_df = pd.read_csv('out_bufr_errs.csv')
 #out_df = bufr.add_obs_err_uncorr(bufr_csv.df, errtable)
+out_df = pd.read_csv('out_bufr_errs.csv')
 
 end = dt.datetime.now()
 print('elapsed time = %s s' % (end - start).total_seconds()) 
@@ -79,7 +79,10 @@ if plot_diff_hist:
 
     for t in typ:
 
-        if t < 200:
+        if t == 153:
+            obs = ['PWO']
+            errs = ['PWerr']
+        elif t < 200:
             obs = ['TOB', 'RHOB']
             errs = ['Terr', 'RHerr']
         else:
@@ -89,7 +92,8 @@ if plot_diff_hist:
         # Check to see if errors vary with pressure
         vprof = False
         for e in errs:
-            if len(np.unique(etable[t][e])) > 2:
+            if ((len(np.unique(etable[t][e])) > 2) and 
+                (np.sum(np.isnan(etable[t][e])) < (len(etable[t][e])-1))):
                 vprof = True
                 continue
 

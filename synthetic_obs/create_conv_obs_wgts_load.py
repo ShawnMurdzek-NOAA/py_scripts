@@ -66,8 +66,8 @@ use_pkl = True
 path_pkl = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/wrf_latlon_kdtree.pkl'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
-ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
-#ob_platforms = ['AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+#ob_platforms = ['AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
@@ -85,6 +85,10 @@ wrf_step = 15
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
 debug = 2
+
+# Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
+# Helpful for debugging, but should usually be set to False b/c it increases runtime
+interp_latlon = True
 
 
 #---------------------------------------------------------------------------------------------------
@@ -222,6 +226,9 @@ for i in range(ntimes):
     # Extract 2D fields ONLY
     fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'HGT_P0_L1_GLC0', 
                 'PWAT_P0_L200_GLC0']
+    if interp_latlon:
+        fields2D.append('gridlat_0')
+        fields2D.append('gridlon_0')
     fields2D1 = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
     wrf_data = {}
     for hr in wrf_hr:
@@ -324,6 +331,11 @@ for i in range(ntimes):
             obs_name = ['QOB', 'TOB', 'UOB', 'VOB']
             wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
                         'VGRD_P0_L103_GLC0']
+            if interp_latlon:
+                obs_name.append('XOB')
+                obs_name.append('YOB')
+                wrf_name.append('gridlon_0')
+                wrf_name.append('gridlat_0')
             for o, m in zip(obs_name, wrf_name):
                 if not np.isnan(subset[o]):
                     if debug > 1:
@@ -676,6 +688,10 @@ for i in range(ntimes):
     out_df['TOB'] = out_df['TOB'] - 273.15
     out_df['PWO'] = (out_df['PWO'] / 997.) * 1000.
     out_df['ELV'] = np.int64(out_df['ELV'])
+    if interp_latlon:
+        idx = np.where((out_df['subset'] == 'ADPSFC') | (out_df['subset'] == 'SFCSHP') |
+                       (out_df['subset'] == 'MSONET'))[0] 
+        out_df.loc[idx, 'XOB'] = out_df.loc[idx, 'XOB'] + 360.
 
     # Write output DataFrame to a CSV file
     # .real_red.prepbufr.csv file can be used for assessing interpolation accuracy
