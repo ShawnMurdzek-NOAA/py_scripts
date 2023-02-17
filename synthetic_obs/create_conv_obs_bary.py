@@ -93,6 +93,85 @@ interp_latlon = True
 
 
 #---------------------------------------------------------------------------------------------------
+# Functions (Should move to separate file at some point)
+#---------------------------------------------------------------------------------------------------
+
+def bary_wgts(gridx, gridy, x, y):
+    """
+    Compute weights for barycentric linear interpolation using 3 gridpoints
+
+    Inputs
+    ------
+    gridx : array 
+        X-coordinates for the 3 gridpoints
+    gridy : array
+        Y-coordinates for the 3 gridpoints
+    x : float
+        X-coordinate for point to interpolate to
+    y : float
+        Y-coordinate for point to interpolate to
+
+    Returns
+    -------
+    wgts : array
+        The 3 weights corresponding to the 3 gridpoints
+
+    Notes
+    -----
+    See https://codeplea.com/triangular-interpolation
+    
+    It looks like there are many different ways of formulating barycentric interpolation. Given that
+    the WRF grid is rather well behaved, the admittedly simple approach here should be fine.
+
+    """
+
+    wgts = np.zeros(3)
+    wgts[0] = ((((gridy[1]-gridy[2]) * (x-gridx[2])) + ((gridx[2]-gridx[1]) * (y-gridy[2]))) /
+               (((gridy[1]-gridy[2]) * (gridx[0]-gridx[2])) + ((gridx[2]-gridx[1]) * (gridy[0]-gridy[2]))))
+    wgts[1] = ((((gridy[2]-gridy[0]) * (x-gridx[2])) + ((gridx[0]-gridx[2]) * (y-gridy[2]))) /
+               (((gridy[1]-gridy[2]) * (gridx[0]-gridx[2])) + ((gridx[2]-gridx[1]) * (gridy[0]-gridy[2]))))
+    wgts[2] = 1 - wgts[0] - wgts[1]
+
+    return wgts
+
+
+def interp_horiz(field, wgts, iind, jind, threeD=False):
+    """
+    Interpolate the given field in the horizontal
+
+    Inputs
+    ------
+    field : array 
+        2D field to interpolate
+    wgts : array
+        Interpolation weights
+    iind : array
+        Indices for the first dimension of field
+    jind : array
+        Indices for the second dimension of field
+    threeD : boolean, optional
+        Is this field actually 3D?
+
+    Returns
+    -------
+    val : float
+        Interpolated value
+
+    """
+
+    if threeD:
+        val = np.zeros(field.shape[0])
+        for w, i, j in zip(wgts, iind, jind):
+            val = val + w * field[:, i, j]
+    else:
+        val = 0.
+        for w, i, j in zip(wgts, iind, jind):
+            val = val + w * field[i, j]
+
+    return val
+
+
+#---------------------------------------------------------------------------------------------------
 # Create Synthetic Observations
 #---------------------------------------------------------------------------------------------------
 
@@ -212,8 +291,8 @@ for i in range(ntimes):
 
     # Add some DataFrame columns
     nrow = len(out_df)
-    extra_col_int = ['xi0', 'yi0', 'pi0']
-    extra_col_float = ['twgt', 'xwgt1', 'xwgt2', 'ywgt1', 'ywgt2', 'pwgt']
+    extra_col_int = ['xi0', 'xi1', 'xi2', 'yi0', 'yi1', 'yi2', 'pi0']
+    extra_col_float = ['twgt', 'wgt0', 'wgt1', 'wgt2', 'pwgt']
     for c in extra_col_int:
         out_df[c] = np.zeros(nrow, dtype=int)
     for c in extra_col_float:
@@ -256,57 +335,37 @@ for i in range(ntimes):
             time2 = dt.datetime.now()
             print('done determining twgt (%.6f s)' % (time2 - time1).total_seconds())
 
-        # Interpolate horizontally (code here is adapted from cou.wrf_coords)
+        # Interpolate horizontally
         lat = subset['YOB']
         lon = subset['XOB'] - 360.
-        close = np.unravel_index(tree.query([lon, lat])[1], wrf_lon.shape)
-        clat = wrf_lat[close[0], close[1]]
-        clon = wrf_lon[close[0], close[1]]
+        xi, yi = np.zeros(3), np.zeros(3)
+        clon, clat = np.zeros(3), np.zeros(3)
+        for k, dum in enumerate(tree.query([lon, lat], k=3)[1]):
+            yi[k], xi[k] = np.unravel_index(dum, wrf_lon.shape)
+            clon[k] = wrf_lon[yi[k], xi[k]]
+            clat[k] = wrf_lat[yi[k], xi[k]]
 
         # Check to make sure that we are not extrapolating by excluding (lat, lon) coordinates that
         # have an edge as their closest (lat, lon) coordinate in model space
-        if (close[0] == 0 or close[0] == (wrf_lat.shape[0] - 1) or
-            close[1] == 0 or close[1] == (wrf_lon.shape[1] - 1)):
+        if (yi[0] == 0 or yi[0] == (wrf_lat.shape[0] - 1) or
+            xi[1] == 0 or xi[1] == (wrf_lon.shape[1] - 1)):
             drop_idx.append(j)
             continue
 
-        # Determine pseudo-bilinear interpolation weights in horizontal
-        if lat < clat:
-            yi0 = close[0] - 1
-        else:
-            yi0 = close[0]
-        if lon < clon:
-            xi0 = close[1] -1
-        else:
-            xi0 = close[1]
-        ywgt1 = (wrf_lat[yi0+1, xi0] - lat) / (wrf_lat[yi0+1, xi0] - wrf_lat[yi0, xi0])
-        xwgt1 = (wrf_lon[yi0, xi0+1] - lon) / (wrf_lon[yi0, xi0+1] - wrf_lon[yi0, xi0])
-        ywgt2 = 1. - ywgt1
-        xwgt2 = 1. - xwgt1
+        # Determine interpolation weights in horizontal
+        wgts = bary_wgts(clon, clat, lon, lat)
 
         if debug > 1:
             time3 = dt.datetime.now()
-            print('done determining xi0, yi0 (%.6f s)' % (time3 - time2).total_seconds())
+            print('done determining xi, yi (%.6f s)' % (time3 - time2).total_seconds())
 
         # Determine surface height above sea level and surface pressure
         m = 'HGT_P0_L1_GLC0'
-        sfch = (twgt * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0] +
-                        xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0+1] +
-                        xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0] +
-                        xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0+1]) +
-                (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0] +
-                             xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0+1] +
-                             xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0] +
-                             xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0+1]))
+        sfch = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
         m = 'PRES_P0_L1_GLC0'
-        sfcp = (twgt * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0] +
-                        xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0+1] +
-                        xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0] +
-                        xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0+1]) +
-                (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0] +
-                             xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0+1] +
-                             xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0] +
-                             xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0+1])) * 1e-2
+        sfcp = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
 
         if debug > 1:
             time4 = dt.datetime.now()
@@ -341,14 +400,8 @@ for i in range(ntimes):
                 if not np.isnan(subset[o]):
                     if debug > 1:
                         time5 = dt.datetime.now()
-                    out_df.loc[j, o] = (twgt * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0] +
-                                                xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0+1] +
-                                                xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0] +
-                                                xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0+1]) +
-                                        (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0] +
-                                                     xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0+1] +
-                                                     xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0] +
-                                                     xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0+1]))
+                    out_df.loc[j, o] = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                                        (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
                     if debug > 1:
                         time6 = dt.datetime.now()
                         print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
@@ -368,14 +421,8 @@ for i in range(ntimes):
             if not np.isnan(subset['PWO']):
                 if debug > 1:
                     time5 = dt.datetime.now()
-                out_df.loc[j, 'PWO'] = (twgt * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0] +
-                                                xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr]][m][yi0, xi0+1] +
-                                                xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0] +
-                                                xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr]][m][yi0+1, xi0+1]) +
-                                        (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0] +
-                                                     xwgt2 * ywgt1 * wrf_data[wrf_hr[ihr+1]][m][yi0, xi0+1] +
-                                                     xwgt1 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0] +
-                                                     xwgt2 * ywgt2 * wrf_data[wrf_hr[ihr+1]][m][yi0+1, xi0+1]))
+                out_df.loc[j, 'PWO'] = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                                        (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
                 if debug > 1:
                     time6 = dt.datetime.now()
                     print('finished interp for PWO (%.6f s)' % (time6 - time5).total_seconds())
@@ -471,37 +518,29 @@ for i in range(ntimes):
                         time2 = dt.datetime.now()
                         print('done determining twgt (%.3f, %.6f s)' % (twgt, (time2 - time1).total_seconds()))
 
-                    # Interpolate horizontally (code here is adapted from cou.wrf_coords)
+                    # Interpolate horizontally
                     lat = out_df.loc[j, 'YOB']
                     lon = out_df.loc[j, 'XOB'] - 360.
-                    close = np.unravel_index(tree.query([lon, lat])[1], wrf_lon.shape)
-                    clat = wrf_lat[close[0], close[1]]
-                    clon = wrf_lon[close[0], close[1]]
+                    xi, yi = np.zeros(3), np.zeros(3)
+                    clon, clat = np.zeros(3), np.zeros(3)
+                    for k, dum in enumerate(tree.query([lon, lat], k=3)[1]):
+                        yi[k], xi[k] = np.unravel_index(dum, wrf_lon.shape)
+                        clon[k] = wrf_lon[yi[k], xi[k]]
+                        clat[k] = wrf_lat[yi[k], xi[k]]
 
                     # Check to make sure that we are not extrapolating by excluding (lat, lon) coordinates that
                     # have an edge as their closest (lat, lon) coordinate in model space
-                    if (close[0] == 0 or close[0] == (wrf_lat.shape[0] - 1) or
-                        close[1] == 0 or close[1] == (wrf_lon.shape[1] - 1)):
+                    if (yi[0] == 0 or yi[0] == (wrf_lat.shape[0] - 1) or
+                        xi[1] == 0 or xi[1] == (wrf_lon.shape[1] - 1)):
                         drop_idx.append(j)
                         continue
 
-                    # Determine pseudo-bilinear interpolation weights in horizontal
-                    if lat < clat:
-                        yi0 = int(close[0] - 1)
-                    else:
-                        yi0 = int(close[0])
-                    if lon < clon:
-                        xi0 = int(close[1] - 1)
-                    else:
-                        xi0 = int(close[1])
-                    ywgt1 = (wrf_lat[yi0+1, xi0] - lat) / (wrf_lat[yi0+1, xi0] - wrf_lat[yi0, xi0])
-                    xwgt1 = (wrf_lon[yi0, xi0+1] - lon) / (wrf_lon[yi0, xi0+1] - wrf_lon[yi0, xi0])
-                    ywgt2 = 1. - ywgt1
-                    xwgt2 = 1. - xwgt1
+                    # Determine interpolation weights in horizontal
+                    wgts = bary_wgts(clon, clat, lon, lat)
 
                     if debug > 1:
                         time3 = dt.datetime.now()
-                        print('done determining xi0, yi0 (%.6f s)' % (time3 - time2).total_seconds())
+                        print('done determining xi, yi (%.6f s)' % (time3 - time2).total_seconds())
 
                     # Determine surface height above sea level and surface pressure
                     m = 'HGT_P0_L1_GLC0'
@@ -511,23 +550,12 @@ for i in range(ntimes):
                     else:
                         hr1 = hr
                         hr2 = hr + wrf_step_dec
-                    sfch = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][yi0, xi0] +
-                                    xwgt2 * ywgt1 * wrf_data[hr1][m][yi0, xi0+1] +
-                                    xwgt1 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0] +
-                                    xwgt2 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0+1]) +
-                            (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[hr2][m][yi0, xi0] +
-                                         xwgt2 * ywgt1 * wrf_data[hr2][m][yi0, xi0+1] +
-                                         xwgt1 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0] +
-                                         xwgt2 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0+1]))
+                    m = 'HGT_P0_L1_GLC0'
+                    sfch = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                            (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
                     m = 'PRES_P0_L1_GLC0'
-                    sfcp = (twgt * (xwgt1 * ywgt1 * wrf_data[hr1][m][yi0, xi0] +
-                                    xwgt2 * ywgt1 * wrf_data[hr1][m][yi0, xi0+1] +
-                                    xwgt1 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0] +
-                                    xwgt2 * ywgt2 * wrf_data[hr1][m][yi0+1, xi0+1]) +
-                            (1.-twgt) * (xwgt1 * ywgt1 * wrf_data[hr2][m][yi0, xi0] +
-                                         xwgt2 * ywgt1 * wrf_data[hr2][m][yi0, xi0+1] +
-                                         xwgt1 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0] +
-                                         xwgt2 * ywgt2 * wrf_data[hr2][m][yi0+1, xi0+1]))
+                    sfcp = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                            (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
             
                     # Check whether ob from BUFR file lies underground
                     if (out_df.loc[j, 'ZOB'] < sfch) or (out_df.loc[j, 'POB'] > sfcp):
@@ -542,10 +570,7 @@ for i in range(ntimes):
                     # have height. The calculation below only gives use part of the p1d array. The 
                     # rest of this of this array will be determined when we loop over the other 3D
                     # pressure array
-                    p1d[:, j] = twgt * 1e-2 * (xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
-                                               xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
-                                               xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
-                                               xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1])
+                    p1d[:, j] = twgt * 1e-2 * interp_horiz(wrf3d, wgts, yi, xi, threeD=True)
  
                     if debug > 1:
                         time5 = dt.datetime.now()
@@ -580,12 +605,10 @@ for i in range(ntimes):
 
                     # save some stuff
                     out_df.loc[j, 'twgt']  = twgt 
-                    out_df.loc[j, 'xi0']   = xi0
-                    out_df.loc[j, 'yi0']   = yi0
-                    out_df.loc[j, 'xwgt1'] = xwgt1
-                    out_df.loc[j, 'xwgt2'] = xwgt2
-                    out_df.loc[j, 'ywgt1'] = ywgt1
-                    out_df.loc[j, 'ywgt2'] = ywgt2
+                    for n in range(3):
+                        out_df.loc[j, 'xi%d' % n] = xi[n]
+                        out_df.loc[j, 'yi%d' % n] = yi[n]
+                        out_df.loc[j, 'wgt%d' % n] = wgts[n]
 
                     if debug > 1:
                         print('total time for p1 = %.6f s' % (dt.datetime.now() - time1).total_seconds())
@@ -595,18 +618,13 @@ for i in range(ntimes):
 
                     # Extract indicies and weights saved from first POB
                     twgt =  out_df.loc[j, 'twgt'] 
-                    xi0 =   out_df.loc[j, 'xi0'] 
-                    yi0 =   out_df.loc[j, 'yi0'] 
-                    xwgt1 = out_df.loc[j, 'xwgt1'] 
-                    xwgt2 = out_df.loc[j, 'xwgt2'] 
-                    ywgt1 = out_df.loc[j, 'ywgt1'] 
-                    ywgt2 = out_df.loc[j, 'ywgt2'] 
+                    for n in range(3):
+                        xi[n] = out_df.loc[j, 'xi%d' % n] = xi[n]
+                        yi[n] = out_df.loc[j, 'yi%d' % n] = yi[n]
+                        wgts[n] = out_df.loc[j, 'wgt%d' % n] = wgts[n]
 
                     # Finish computing p1d
-                    p1d[:, j] = p1d[:, j] + ((1.-twgt)*1e-2*(xwgt1 * ywgt1 * wrf3d[:, yi0, xi0] +
-                                                             xwgt2 * ywgt1 * wrf3d[:, yi0, xi0+1] +
-                                                             xwgt1 * ywgt2 * wrf3d[:, yi0+1, xi0] +
-                                                             xwgt2 * ywgt2 * wrf3d[:, yi0+1, xi0+1]))
+                    p1d[:, j] = p1d[:, j] + (1.-twgt) * 1e-2 * interp_horiz(wrf3d, wgts, yi, xi, threeD=True)
 
                     # Check for extrapolation
                     if (p1d[0, j] > out_df.loc[j, 'POB']):
@@ -639,12 +657,10 @@ for i in range(ntimes):
                 else:
                     # Extract indicies and weights saved from POB
                     twgt =  out_df.loc[j, 'twgt'] 
-                    xi0 =   out_df.loc[j, 'xi0'] 
-                    yi0 =   out_df.loc[j, 'yi0'] 
-                    xwgt1 = out_df.loc[j, 'xwgt1'] 
-                    xwgt2 = out_df.loc[j, 'xwgt2'] 
-                    ywgt1 = out_df.loc[j, 'ywgt1'] 
-                    ywgt2 = out_df.loc[j, 'ywgt2'] 
+                    for n in range(3):
+                        xi[n] = out_df.loc[j, 'xi%d' % n] = xi[n]
+                        yi[n] = out_df.loc[j, 'yi%d' % n] = yi[n]
+                        wgts[n] = out_df.loc[j, 'wgt%d' % n] = wgts[n]
                     pi0 =   out_df.loc[j, 'pi0'] 
                     pwgt =  out_df.loc[j, 'pwgt'] 
 
@@ -652,14 +668,8 @@ for i in range(ntimes):
                     if not np.isnan(out_df.loc[j, o]):
                         if debug > 1:
                             time6 = dt.datetime.now()
-                        v1 = (xwgt1 * ywgt1 * wrf3d[pi0, yi0, xi0] +
-                              xwgt2 * ywgt1 * wrf3d[pi0, yi0, xi0+1] +
-                              xwgt1 * ywgt2 * wrf3d[pi0, yi0+1, xi0] +
-                              xwgt2 * ywgt2 * wrf3d[pi0, yi0+1, xi0+1])
-                        v2 = (xwgt1 * ywgt1 * wrf3d[pi0+1, yi0, xi0] +
-                              xwgt2 * ywgt1 * wrf3d[pi0+1, yi0, xi0+1] +
-                              xwgt1 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0] +
-                              xwgt2 * ywgt2 * wrf3d[pi0+1, yi0+1, xi0+1])
+                        v1 = interp_horiz(wrf3d[pi0, :, :], wgts, yi, xi)
+                        v2 = interp_horiz(wrf3d[pi0+1, :, :], wgts, yi, xi)
                         if np.isclose(out_df.loc[j, o], 0):
                             out_df.loc[j, o] = twgt * (v1**pwgt) * (v2**(1.-pwgt))
                         else:
