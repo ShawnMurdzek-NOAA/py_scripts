@@ -51,28 +51,30 @@ import bufr
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/mnt/lfs4'
+work = '/scratch1'
 
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
-#wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
+#wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
+wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
 #bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
-bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
+bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
 
 # Optional path to pickle containing KDTree for WRF (lat, lon) grid
 use_pkl = True
-path_pkl = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/wrf_latlon_kdtree.pkl'
+#path_pkl = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/wrf_latlon_kdtree.pkl'
+path_pkl = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/wrf_latlon_kdtree.pkl'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
-#ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
-ob_platforms = ['AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+#ob_platforms = ['AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
-#fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
+#fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
+fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
 
 # Start and end times for prepbufrs. Step is in min
 bufr_start = dt.datetime(2022, 4, 29, 12)
@@ -338,7 +340,7 @@ for i in range(ntimes):
         # Interpolate horizontally
         lat = subset['YOB']
         lon = subset['XOB'] - 360.
-        xi, yi = np.zeros(3), np.zeros(3)
+        xi, yi = np.zeros(3, dtype=int), np.zeros(3, dtype=int)
         clon, clat = np.zeros(3), np.zeros(3)
         for k, dum in enumerate(tree.query([lon, lat], k=3)[1]):
             yi[k], xi[k] = np.unravel_index(dum, wrf_lon.shape)
@@ -364,8 +366,14 @@ for i in range(ntimes):
         sfch = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
                 (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
         m = 'PRES_P0_L1_GLC0'
-        sfcp = (twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
-                (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
+        sfcp = 1e-2*(twgt * interp_horiz(wrf_data[wrf_hr[ihr]][m], wgts, yi, xi) +
+                     (1.-twgt) * interp_horiz(wrf_data[wrf_hr[ihr+1]][m], wgts, yi, xi))
+
+        print('sfch = %.6f' % sfch)
+        print('sfcp = %.6f' % sfcp)
+        print('wgts =', wgts)
+        for k in range(3):
+            print('(%.6f, %.6f)' % (wrf_lon[yi[k], xi[k]] + 360., wrf_lat[yi[k], xi[k]]))
 
         if debug > 1:
             time4 = dt.datetime.now()
@@ -378,8 +386,8 @@ for i in range(ntimes):
                 print('2D field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
                                                                       subset['subset'], 
                                                                       subset['TYP']))
-                print('twgt = %.3f, xi0 = %d, yi0 = %d' % (twgt, xi0, yi0))
-                print('DHR = %.3f, XOB = %.3f, YOB = %.3f' % (subset['DHR'], subset['XOB'], 
+                print('twgt = %.3f, xi0 = %d, yi0 = %d' % (twgt, xi[0], yi[0]))
+                print('DHR = %.3f, XOB = %.6f, YOB = %.6f' % (subset['DHR'], subset['XOB'], 
                                                               subset['YOB']))
 
             # Reset surface values to match NR and assign surface pressure values
@@ -521,7 +529,7 @@ for i in range(ntimes):
                     # Interpolate horizontally
                     lat = out_df.loc[j, 'YOB']
                     lon = out_df.loc[j, 'XOB'] - 360.
-                    xi, yi = np.zeros(3), np.zeros(3)
+                    xi, yi = np.zeros(3, dtype=int), np.zeros(3, dtype=int)
                     clon, clat = np.zeros(3), np.zeros(3)
                     for k, dum in enumerate(tree.query([lon, lat], k=3)[1]):
                         yi[k], xi[k] = np.unravel_index(dum, wrf_lon.shape)

@@ -4,3 +4,7 @@ slurm*.out
 
 # Ignore swp files
 *.swp
+
+# Ignore images files
+*.png
+*.pdf

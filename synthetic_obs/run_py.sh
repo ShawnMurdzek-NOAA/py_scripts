@@ -7,9 +7,9 @@
 
 date
 . ~/.bashrc
-adb_graphics
+pygraf
 
-python create_conv_obs_wgts_load.py
+python create_conv_obs_bary.py
 
 report-mem
 date

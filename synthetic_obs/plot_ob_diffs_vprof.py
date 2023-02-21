@@ -21,8 +21,10 @@ import numpy as np
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
+#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
+fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
 
 # Output file name
 save_fname = './ob_diffs_vprof.png'

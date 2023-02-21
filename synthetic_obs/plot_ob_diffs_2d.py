@@ -23,8 +23,10 @@ import cartopy.feature as cfeature
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
+#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
+fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
 
 # Output file name (include %s placeholder for variable)
 save_fname = './ob_diffs_%s.png'
@@ -33,7 +35,7 @@ save_fname = './ob_diffs_%s.png'
 subsets = ['SHPSFC', 'ADPSFC', 'MSONET']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'XOB', 'YOB']
 
 # Title
 title = 'synthetic obs $-$ real obs'
