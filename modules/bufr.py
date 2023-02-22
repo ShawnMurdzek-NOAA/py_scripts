@@ -49,7 +49,7 @@ class bufrCSV():
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
         # Load metadata from JSON file
-        self.meta = json.load(open('/scratch1/BMC/wrfruc/murdzek/src/py_scripts/modules/bufr_meta.json', 
+        self.meta = json.load(open('/mnt/lfs4/BMC/wrfruc/murdzek/py_scripts/modules/bufr_meta.json', 
                                    'r'))
 
     def sample(self, fname, n=2):
@@ -317,8 +317,13 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
             eind = np.where(np.logical_not(np.isnan(etable[t][err])))[0]
             
             # Determine indices in out_df for this ob type
-            oind = np.where((out_df['TYP'] == t) & (out_df['POB'] <= eprs[eind[0]]) & 
-                            (out_df['POB'] >= eprs[eind[-1]]))[0]
+            # All pressures are set to NaN for ob type 153, so don't use POB to determine oind for 
+            # those obs
+            if t == 153:
+                oind = np.where(out_df['TYP'] == t)[0]
+            else:
+                oind = np.where((out_df['TYP'] == t) & (out_df['POB'] <= eprs[eind[0]]) & 
+                                (out_df['POB'] >= eprs[eind[-1]]))[0]
 
             # Determine if errors vary with pressure. If so, create a function for interpolation
             # Then add observation errors
@@ -335,10 +340,14 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
     # Set relative humidities > 100% to 100%
     out_df.loc[out_df['RHOB'] > 10, 'RHOB'] = 10.
 
+    # Prevent negative values for certain obs
+    out_df.loc[out_df['RHOB'] < 0, 'RHOB'] = 0.
+    out_df.loc[out_df['PWO'] < 0, 'PWO'] = 0.
+
     # Compute specific humidity from relative humidity
     mix = 0.1 * out_df['RHOB'] * mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2)
     out_df['QOB'] = 1e6 * (mix / (1. + mix))
-    out_df.drop(label='RHOB', axis=1, inplace=True)    
+    out_df.drop(labels='RHOB', axis=1, inplace=True)    
     
     # Convert surface pressure back to Pa
     out_df['PRSS'] = out_df['PRSS'] * 1e-2

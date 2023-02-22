@@ -43,8 +43,8 @@ start = dt.datetime.now()
 print('start time = %s' % start.strftime('%H:%M:%S'))
 
 bufr_csv = bufr.bufrCSV(bufr_fname)
-#out_df = bufr.add_obs_err_uncorr(bufr_csv.df, errtable)
-out_df = pd.read_csv('out_bufr_errs.csv')
+out_df = bufr.add_obs_err_uncorr(bufr_csv.df, errtable)
+#out_df = pd.read_csv('out_bufr_errs.csv')
 
 end = dt.datetime.now()
 print('elapsed time = %s s' % (end - start).total_seconds()) 
