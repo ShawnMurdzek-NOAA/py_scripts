@@ -158,7 +158,7 @@ def ll_to_xy_lc(lat, lon, ref_lat=38.497246, ref_lon=-97.505974, truelat1=38.5, 
 #---------------------------------------------------------------------------------------------------
 # Plot Showing Differences Between WRF Gridpoint Locations and Calculated Gridpoint Locations
 #---------------------------------------------------------------------------------------------------
-'''
+
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
@@ -191,7 +191,7 @@ ax.coastlines('50m')
 
 plt.savefig('gridpoint_diff.png')
 plt.close()
-'''
+
 
 """
 End map_proj.py

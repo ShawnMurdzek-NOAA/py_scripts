@@ -18,6 +18,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
 import scipy.interpolate as si
+import collections.abc
 
 import meteo_util as mu
 
@@ -256,7 +257,97 @@ def read_ob_errors(fname):
     return errors
 
 
-def add_obs_err_uncorr(df, errtable, typ='all'):
+def create_uncorr_obs_err(err_num, stdev):
+    """
+    Create uncorrelated observation errors using a Gaussian distribution with a mean of 0
+
+    Parameters
+    ----------
+    err_num : integer
+        Number of errors to create
+    stdev : float or array
+        Observation error standard deviation (either a single value or array with size err_num)
+
+    Returns
+    -------
+    error : array
+        Uncorrelated random observation errors
+
+    """
+
+    if isinstance(stdev, (collections.abc.Sequence, np.ndarray)):
+        error = np.zeros(err_num)
+        for i, s in enumerate(stdev):
+            error[i] = np.random.normal(scale=s)
+    else:
+        error = np.random.normal(scale=stdev, size=err_num)
+
+    return error
+
+
+def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5):
+    """
+    Create correlated observation errors using an AR1 process
+
+    Parameters
+    ----------
+    ob_df : DataFrame
+        DataFrame containing decoded BUFR observations
+    stdev : float or array
+        Observation error standard deviation (either a single value or one per entry in ob_df)
+    auto_dim : string
+        Dimension along which to have autocorrelation. typically 'POB' or 'DHR'
+    auto_reg_parm : float
+        Autoregression parameter (see Notes)
+
+    Returns
+    -------
+    error : array
+        Autocorrelated random observation errors
+
+    Notes
+    -----
+    Errors are computed using the following equation: 
+    
+    error = N(0, stdev) + auto_reg_parm * error(n-1),
+
+    where N(0, stdev) is a random draw from a Gaussian distribution with mean 0 and a prescribed
+    standard deviation (stdev) and error(n-1) is the previous error value. 
+
+    """
+
+    error = np.zeros(len(ob_df))
+    ob_df.reset_index(inplace=True, drop=True)
+
+    # For POB, sort based on descending values
+    if auto_dim == 'POB':
+        ascending = False
+    else:
+        ascending = True
+
+    # Determine if the stdev is a scalar or a list/array
+    if isinstance(stdev, (collections.abc.Sequence, np.ndarray)):
+        is_stdev_array = True
+    else:
+        is_stdev_array = False
+
+    # Loop over each station ID, then over each sorted index
+    for sid in ob_df['SID'].unique():
+       single_station = ob_df.loc[ob_df['SID'] == sid].copy()
+       idx = single_station.sort_values(auto_dim, ascending=ascending).index
+       if is_stdev_array:
+           error[idx[0]] = np.random.normal(scale=stdev[idx[0]])
+           for j1, j2 in zip(idx[:-1], idx[1:]):
+               error[j2] = np.random.normal(scale=stdev[j2]) + (auto_reg_parm * error[j1])
+       else:
+           error[idx[0]] = np.random.normal(scale=stdev)
+           for j1, j2 in zip(idx[:-1], idx[1:]):
+               error[j2] = np.random.normal(scale=stdev) + (auto_reg_parm * error[j1])
+   
+    return error
+
+
+def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5):
     """
     Add random, uncorrelated Gaussian errors to observations based on error standard deviations in 
     errtable
@@ -267,17 +358,19 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
         Pandas DataFrame with the same format as a BUFR DataFrame
     errtable : string
         Name of errtable text file
-    typ: 'all' or list, optional
+    ob_typ: 'all' or list, optional
         List of observation types to apply errors to 
+    correlated : None, 'POB', or 'DHR'; optional
+        Option for correlating observation errors. Can be uncorrelated, correlated in the vertical,
+        or correlated in time
+    auto_reg_parm : float, optional
+        Autoregressive parameter for correlated errors. Correlated errors are computed by assuming
+        an AR1 process
 
     Returns
     -------
     out_df : pd.DataFrame
         DataFrame of observations with random errors added
-
-    Notes
-    -----
-    Observation errors are assumed to be uncorrelated in both space and time
 
     """
     
@@ -285,8 +378,8 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
     out_df = df.copy()
 
     # Determine list of all observation types
-    if typ == 'all':
-        typ = np.int32(out_df['TYP'].unique())
+    if ob_typ == 'all':
+        ob_typ = np.int32(out_df['TYP'].unique())
 
     # Read in error table file 
     etable = read_ob_errors(errtable)
@@ -301,7 +394,7 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
     out_df['PRSS'] = out_df['PRSS'] * 1e-2
 
     # Loop over each observation type
-    for t in typ:
+    for t in ob_typ:
         print()
         print('TYP = %d' % t)
         for ob, err in zip(['TOB', 'RHOB', 'UOB', 'VOB', 'PRSS', 'PWO'],
@@ -310,7 +403,7 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
             print(ob)
             # Check to see if errors are defined
             if np.all(np.isnan(etable[t][err].values)):
-                print('no errors for typ = %d, ob = %s' % (t, ob))
+                print('no errors for ob_typ = %d, ob = %s' % (t, ob))
                 continue
 
             # Determine indices where errors are not NaN
@@ -328,14 +421,19 @@ def add_obs_err_uncorr(df, errtable, typ='all'):
             # Determine if errors vary with pressure. If so, create a function for interpolation
             # Then add observation errors
             if len(np.unique(etable[t].loc[eind, err])) == 1:
-                error = etable[t].loc[eind[0], err]
-                out_df.loc[oind, ob] = (out_df.loc[oind, ob] +
-                                        np.random.normal(scale=error, size=len(oind)))
+                stdev = etable[t].loc[eind[0], err]
             else:
-                fct = si.interp1d(eprs[eind], etable[t].loc[eind, err])
-                for k in oind:
-                    error = fct(out_df.loc[k, 'POB'])
-                    out_df.loc[k, ob] = out_df.loc[k, ob] + np.random.normal(scale=error)
+                stdev_fct_p = si.interp1d(eprs[eind], etable[t].loc[eind, err])
+                stdev = stdev_fct_p(out_df.loc[oind, 'POB'])
+
+            # Compute errors
+            if correlated == None:
+                error = create_uncorr_obs_err(len(oind), stdev)
+            else:
+                error = create_corr_obs_err(out_df.loc[oind].copy(), stdev, correlated, 
+                                            auto_reg_parm=auto_reg_parm)
+
+            out_df.loc[oind, ob] = out_df.loc[oind, ob] + error
 
     # Set relative humidities > 100% to 100%
     out_df.loc[out_df['RHOB'] > 10, 'RHOB'] = 10.

@@ -31,6 +31,10 @@ errtable = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
 
 out_fname = './test.csv'
 
+# Observation types to use autocorrelated errors for
+autocor_POB_obs = [120, 220]
+autocor_DHR_obs = [130, 131, 133, 134, 135, 230, 231, 233, 234, 235]
+
 # Option to check obs errors by plotting differences between obs w/ and w/out errors
 plot_diff_hist = True
 
@@ -43,8 +47,20 @@ start = dt.datetime.now()
 print('start time = %s' % start.strftime('%H:%M:%S'))
 
 bufr_csv = bufr.bufrCSV(bufr_fname)
-out_df = bufr.add_obs_err_uncorr(bufr_csv.df, errtable)
-#out_df = pd.read_csv('out_bufr_errs.csv')
+
+remaining_obs = []
+for o in np.int32(bufr_csv.df['TYP'].unique()):
+    if (o not in autocor_POB_obs) and (o not in autocor_DHR_obs):
+        remaining_obs.append(o)
+
+out_df = bufr.add_obs_err(bufr_csv.df, errtable, ob_typ=autocor_POB_obs, correlated='POB', 
+                          auto_reg_parm=0.25)
+out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
+                          auto_reg_parm=0.25)
+out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs)
+
+out_df.to_csv(out_fname)
+#out_df = pd.read_csv(out_fname)
 
 end = dt.datetime.now()
 print('elapsed time = %s s' % (end - start).total_seconds()) 
