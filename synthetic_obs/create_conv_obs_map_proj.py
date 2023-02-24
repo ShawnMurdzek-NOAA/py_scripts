@@ -59,8 +59,8 @@ wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
 #wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
-bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
+bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
 

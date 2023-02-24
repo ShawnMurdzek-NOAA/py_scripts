@@ -29,7 +29,7 @@ import numpy as np
 # Functions
 #---------------------------------------------------------------------------------------------------
 
-def ll_to_xy_lc(lat, lon, ref_lat=38.497246, ref_lon=-97.505974, truelat1=38.5, truelat2=38.5, 
+def ll_to_xy_lc(lat, lon, ref_lat=38.5, ref_lon=-97.5, truelat1=38.5, truelat2=38.5, 
                 stand_lon=-97.5, dx=1., e_we=5400, e_sn=3180, knowni=2699, knownj=1589):
     """
     Convert (lat, lon) coordinates to (x, y) coordinates usig a Lambert Conformal map projection
@@ -109,14 +109,8 @@ def ll_to_xy_lc(lat, lon, ref_lat=38.497246, ref_lon=-97.505974, truelat1=38.5, 
 
     # Determine center gridpoint indices (from metgrid/src/process_domain_module.F)
     if np.isnan(knowni):
-        if e_we % 2 == 0:
-            knowni = 0.5 * (e_we + 1) - 1
-        else:
-            knowni = 0.5 * e_we - 1
-        if e_sn % 2 == 0:
-            knownj = 0.5 * (e_sn + 1) - 1
-        else:
-            knownj = 0.5 * e_sn - 1
+        knowni = 0.5 * e_we - 1
+        knownj = 0.5 * e_sn - 1
 
     # Compute cone factor (round to 7 decimal places to match WRF)
     if np.isclose(truelat1, truelat2):
@@ -158,40 +152,69 @@ def ll_to_xy_lc(lat, lon, ref_lat=38.497246, ref_lon=-97.505974, truelat1=38.5, 
 #---------------------------------------------------------------------------------------------------
 # Plot Showing Differences Between WRF Gridpoint Locations and Calculated Gridpoint Locations
 #---------------------------------------------------------------------------------------------------
-
+'''
 import xarray as xr
 import matplotlib.pyplot as plt
 import cartopy.crs as ccrs
 
-# Extract data
-fname = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/wrfnat_202204291200.grib2'
-ds = xr.open_dataset(fname, engine='pynio')
+fname = ['/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/wrfnat_202204291200.grib2',
+         '/mnt/lfs4/BMC/wrfruc/murdzek/wrf_grid.nc']
+engine = ['pynio', None]
+latname = ['gridlat_0', 'XLAT']
+lonname = ['gridlon_0', 'XLONG']
+grid_name = ['UPP', 'WRF']
 
-# Compute expected gridpoint locations
-lat = ds['gridlat_0'].values
-lon = ds['gridlon_0'].values
-shape = lat.shape
-xi, yi = ll_to_xy_lc(lat.ravel(), lon.ravel())
-xi2d = np.reshape(xi, shape)
-yi2d = np.reshape(yi, shape)
+# Open files
+ds = []
+for f, eng in zip(fname, engine):
+    if engine == None:
+        ds.append(xr.open_dataset(f))
+    else:
+        ds.append(xr.open_dataset(f, engine=eng))
 
 # Plot differences
-fig = plt.figure(figsize=(8, 6))
-ax = fig.add_subplot(1, 1, 1, projection=ccrs.PlateCarree())
+fig = plt.figure(figsize=(8, 10))
+plt.subplots_adjust(left=0.01, bottom=0.02, right=0.92, top=0.95)
+axes = []
+xi2d, yi2d = [], []
+for i, (d, latn, lonn, name) in enumerate(zip(ds, latname, lonname, grid_name)):  
+    ax = fig.add_subplot(3, 1, i+1, projection=ccrs.PlateCarree())
 
-xit, yit = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
-diff = np.sqrt((xi2d - xit)**2 + (yi2d - yit)**2)
+    print('Plotting for %s' % name)
 
-cax = ax.contourf(lon, lat, diff, np.linspace(0, np.amax(diff), 20), transform=ccrs.PlateCarree())
-cbar = plt.colorbar(cax, ax=ax, orientation='horizontal')
-cbar.set_label('diff (km)', size=14)
+    # Compute gridpoint locations offline
+    lat = np.squeeze(d[latn].values)
+    lon = np.squeeze(d[lonn].values)
+    shape = lat.shape
+    xi, yi = ll_to_xy_lc(lat.ravel(), lon.ravel())
+    xi2d.append(np.reshape(xi, shape))
+    yi2d.append(np.reshape(yi, shape))
 
-ax.set_title('MAE = %.4f km' % np.mean(diff), size=16)
+    # Compute "true" gridpoint locations
+    xit, yit = np.meshgrid(np.arange(shape[1]), np.arange(shape[0]))
+    diff = np.sqrt((xi2d[i] - xit)**2 + (yi2d[i] - yit)**2)
+
+    cax = ax.pcolormesh(lon, lat, diff, vmin=0, vmax=1.25, transform=ccrs.PlateCarree())
+
+    ax.set_title('%s $-$ Truth (MAE = %.4f km)' % (name, np.mean(diff)), size=20)
+    ax.coastlines('50m')
+    axes.append(ax)
+
+# Plot difference between the two grids
+print('Plotting difference between two grids')
+ax = fig.add_subplot(3, 1, 3, projection=ccrs.PlateCarree())
+diff = np.sqrt((xi2d[0] - xi2d[1])**2 + (yi2d[0] - yi2d[1])**2)
+cax = ax.pcolormesh(lon, lat, diff, vmin=0, vmax=1.25, transform=ccrs.PlateCarree())
+ax.set_title('%s $-$ %s (MAE = %.5f km)' % (grid_name[0], grid_name[1], np.mean(diff)), size=20)
 ax.coastlines('50m')
+axes.append(ax)
+
+cbar = plt.colorbar(cax, ax=axes, orientation='vertical', pad=0.02, aspect=30)
+cbar.set_label('Cartesian coordinate differences (km)', size=16)
 
 plt.savefig('gridpoint_diff.png')
 plt.close()
-
+'''
 
 """
 End map_proj.py
