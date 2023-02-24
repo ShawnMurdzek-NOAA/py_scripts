@@ -34,9 +34,18 @@ out_fname = './test.csv'
 # Observation types to use autocorrelated errors for
 autocor_POB_obs = [120, 220]
 autocor_DHR_obs = [130, 131, 133, 134, 135, 230, 231, 233, 234, 235]
+auto_reg_parm = 0.75
 
 # Option to check obs errors by plotting differences between obs w/ and w/out errors
-plot_diff_hist = True
+plot_diff_hist = False
+
+# Option to check autocorrelated obs errors by plotting timeseries or vertical profiles of errors
+# from a single station
+check_autocorr_err = True
+timeseries_ob_types = [133,           135,           233,           235]
+timeseries_stations = ['MFOGUURA', 'CNJCA110', 'MFOGUURA', 'CNJCA110']
+vprof_ob_types = [120,     120,     220,     220]
+vprof_stations = ['72520', '72476', '72520', '72476']
 
 
 #---------------------------------------------------------------------------------------------------
@@ -54,9 +63,9 @@ for o in np.int32(bufr_csv.df['TYP'].unique()):
         remaining_obs.append(o)
 
 out_df = bufr.add_obs_err(bufr_csv.df, errtable, ob_typ=autocor_POB_obs, correlated='POB', 
-                          auto_reg_parm=0.25)
+                          auto_reg_parm=auto_reg_parm, min_d=10.)
 out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
-                          auto_reg_parm=0.25)
+                          auto_reg_parm=auto_reg_parm)
 out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs)
 
 out_df.to_csv(out_fname)
@@ -192,6 +201,114 @@ if plot_diff_hist:
 
         plt.suptitle('Type = %d Difference Histograms' % t, size=16)
         plt.savefig('diff_hist_%d.png' % t)
+        plt.close()
+
+
+#---------------------------------------------------------------------------------------------------
+# Plot Timeseries and Vertical Profiles from a Single Station
+#---------------------------------------------------------------------------------------------------
+
+if check_autocorr_err:
+
+    # Compute RH
+    q = bufr_csv.df['QOB'] * 1e-6
+    mix = q  / (1. - q)
+    bufr_csv.df['RHOB'] = 100 * (mix / mu.equil_mix(bufr_csv.df['TOB'] + 273.15, 
+                                                    bufr_csv.df['POB'] * 1e2))
+
+    q = out_df['QOB'] * 1e-6
+    mix = q  / (1. - q)
+    out_df['RHOB'] = 100 * (mix / mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2))
+
+    # Add RH units to metadata
+    bufr_csv.meta['RHOB'] = {}
+    bufr_csv.meta['RHOB']['units'] = '%'
+
+    # Create plots for vertical profiles
+    for typ, sid in zip(vprof_ob_types, vprof_stations):
+        
+        if typ == 153:
+            obs = ['PWO']
+        elif typ < 200:
+            obs = ['TOB', 'RHOB']
+        else:
+            obs = ['UOB', 'VOB']
+
+        # Configure plot
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 8), sharey=True)
+        plt.subplots_adjust(left=0.08, bottom=0.08, right=0.98, top=0.92, hspace=0.35)
+
+        tind = np.where(np.logical_and(out_df['TYP'] == typ, out_df['SID'] == sid))[0]
+
+        for j, o in enumerate(obs):
+
+            # Compute difference before and after adding obs errors
+            diff = out_df.loc[tind, o].values - bufr_csv.df.loc[tind, o].values
+            prs = out_df.loc[tind, 'POB'].values
+            idiff = np.where(np.logical_not(np.isnan(diff)))[0]
+            if len(idiff) > 0:
+                diff = diff[idiff]
+                prs = prs[idiff]
+            else:
+                continue
+
+            # Plot differences
+            axes[j].plot(diff, prs, lw=2)
+            
+            axes[j].grid()
+            axes[j].axvline(0, c='k')
+            axes[j].set_ylim([1100, 0])
+            axes[j].set_xlabel('%s (%s)' % (o, bufr_csv.meta[o]['units']), size=12)
+            axes[j].set_title('autocorrelation = %.3f' % np.corrcoef(diff[:-1], diff[1:])[0, 1], size=14)
+
+        axes[0].set_ylabel('pressure (%s)' % bufr_csv.meta['POB']['units'], size=12)
+        plt.suptitle('Type = %d, SID = %s Differences' % (typ, sid), size=16)
+        plt.savefig('diff_autocorr_vprof_%d_%s.png' % (typ, sid))
+        plt.close()
+
+    # Create plots for timeseries
+    for typ, sid in zip(timeseries_ob_types, timeseries_stations):
+        
+        if typ == 153:
+            obs = ['PWO']
+        elif typ < 200:
+            obs = ['TOB', 'RHOB']
+        else:
+            obs = ['UOB', 'VOB']
+
+        # Configure plot
+        fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(10, 6), sharex=True)
+        plt.subplots_adjust(left=0.08, bottom=0.08, right=0.98, top=0.88)
+
+        tind = np.where(np.logical_and(out_df['TYP'] == typ, out_df['SID'] == sid))[0]
+
+        for j, o in enumerate(obs):
+
+            # Compute difference before and after adding obs errors
+            diff = out_df.loc[tind, o].values - bufr_csv.df.loc[tind, o].values
+            dhr = out_df.loc[tind, 'DHR'].values
+            idiff = np.where(np.logical_not(np.isnan(diff)))[0]
+            if len(idiff) > 0:
+                diff = diff[idiff]
+                dhr = dhr[idiff]
+            else:
+                continue
+
+            # Sort arrays by time (DHR)
+            sort_idx = np.argsort(dhr)
+            dhr = dhr[sort_idx]
+            diff = diff[sort_idx]
+
+            axes[j].plot(dhr, diff, lw=2)
+            
+            axes[j].grid()
+            axes[j].axvline(0, c='k')
+            axes[j].set_xlabel('time (hr)', size=12)
+            axes[j].set_ylabel('%s (%s)' % (o, bufr_csv.meta[o]['units']), size=12)
+            axes[j].set_title('autocorrelation = %.3f' % np.corrcoef(diff[:-1], diff[1:])[0, 1], size=14)
+
+        plt.suptitle('Type = %d, SID = %s Differences' % (typ, sid), size=16)
+        plt.savefig('diff_autocorr_time_%d_%s.png' % (typ, sid))
         plt.close()
 
 

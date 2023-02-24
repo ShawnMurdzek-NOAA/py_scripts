@@ -285,7 +285,7 @@ def create_uncorr_obs_err(err_num, stdev):
     return error
 
 
-def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5):
+def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667):
     """
     Create correlated observation errors using an AR1 process
 
@@ -297,8 +297,11 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5):
         Observation error standard deviation (either a single value or one per entry in ob_df)
     auto_dim : string
         Dimension along which to have autocorrelation. typically 'POB' or 'DHR'
-    auto_reg_parm : float
+    auto_reg_parm : float, optional
         Autoregression parameter (see Notes)
+    min_d : float, optional
+        Minimum distance allowed between successive points when computing the autocorrelation (see
+        Notes). This parameter is necessary b/c the ob spacing in 'POB' or 'DHR' is not constant.
 
     Returns
     -------
@@ -309,10 +312,14 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5):
     -----
     Errors are computed using the following equation: 
     
-    error = N(0, stdev) + auto_reg_parm * error(n-1),
+    error = N(0, stdev) + auto_reg_parm * error(n-1) / d,
 
     where N(0, stdev) is a random draw from a Gaussian distribution with mean 0 and a prescribed
-    standard deviation (stdev) and error(n-1) is the previous error value. 
+    standard deviation (stdev), error(n-1) is the previous error value, and d is a modified 
+    distance between the two obs. d is defined as follows:
+
+    d = 1                for distances <= min_d
+    d = distance / min_d for distances > min_d  
 
     """
 
@@ -335,19 +342,23 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5):
     for sid in ob_df['SID'].unique():
        single_station = ob_df.loc[ob_df['SID'] == sid].copy()
        idx = single_station.sort_values(auto_dim, ascending=ascending).index
+       dist = np.abs(single_station.loc[idx[1:], auto_dim].values - 
+                     single_station.loc[idx[:-1], auto_dim].values)
+       dist[dist <= min_d] = min_d
+       dist = dist / min_d
        if is_stdev_array:
            error[idx[0]] = np.random.normal(scale=stdev[idx[0]])
-           for j1, j2 in zip(idx[:-1], idx[1:]):
-               error[j2] = np.random.normal(scale=stdev[j2]) + (auto_reg_parm * error[j1])
+           for j1, j2, d in zip(idx[:-1], idx[1:], dist):
+               error[j2] = np.random.normal(scale=stdev[j2]) + (auto_reg_parm * error[j1] / d)
        else:
            error[idx[0]] = np.random.normal(scale=stdev)
-           for j1, j2 in zip(idx[:-1], idx[1:]):
-               error[j2] = np.random.normal(scale=stdev) + (auto_reg_parm * error[j1])
+           for j1, j2, d in zip(idx[:-1], idx[1:], dist):
+               error[j2] = np.random.normal(scale=stdev) + (auto_reg_parm * error[j1] / d)
    
     return error
 
 
-def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5):
+def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, min_d=0.01667):
     """
     Add random, uncorrelated Gaussian errors to observations based on error standard deviations in 
     errtable
@@ -366,6 +377,8 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5):
     auto_reg_parm : float, optional
         Autoregressive parameter for correlated errors. Correlated errors are computed by assuming
         an AR1 process
+    min_d : float, optional
+        Minimum allowed distance between successive obs
 
     Returns
     -------
@@ -431,7 +444,7 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5):
                 error = create_uncorr_obs_err(len(oind), stdev)
             else:
                 error = create_corr_obs_err(out_df.loc[oind].copy(), stdev, correlated, 
-                                            auto_reg_parm=auto_reg_parm)
+                                            auto_reg_parm=auto_reg_parm, min_d=min_d)
 
             out_df.loc[oind, ob] = out_df.loc[oind, ob] + error
 
