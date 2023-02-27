@@ -7,12 +7,18 @@ WPS/geogrid/src/module_map_utils.F
 
 Only the Lambert Conformal map projection (which is used for the HRRR) is currently supported.
 
-Even though this code is essentially copied from WPS, it still cannot perfectly reproduce the map 
-projection from WRF. For example, if a certain (lat, lon) coordinate is associated with a certain
-(i, j) index, plugging that (lat, lon) coordinate into ll_to_xy_lc does not yield the same (i, j)
-index. This is true even after switching to single precision from double precision (WRF uses single
-precision, I believe). The snippet of code after the ll_to_xy_lc function graphically shows the
-difference between the actual gridpoint indices from WRF and those computed using ll_to_xy_lc.
+Users may notice that (x, y) coordinates computed by the ll_to_xy_lc function below do not match
+the grid indices in the UPP output files. These differences can exceed 1 km in some regions. The 
+reason for this is NOT related to the Python code here. Instead, the problem is that the (lat, lon)
+coordinates in UPP are slightly different than those found in the wrfout files. When these 
+erroneous (lat, lon) coordinates are fed into ll_to_xy_lc, errors are introduced to the computed
+(x, y) coordinates. There is a code snippet at the bottom of this file that computes (x, y) 
+coordinates using the (lat, lon) coordinates from UPP and the (x, y) coordinates using the 
+(lat, lon) coordinates from the wrfout files, and then compares these (x, y) coordinates to the
+gridpoint indices, which is assumed to be the "truth". As shown in this code snippet, the (x, y)
+coordinates computed using the wrfout (lat, lon) coordinates agree very well with the truth (MAE
+of 0.0009 km), whereas the (x, y) coordinates computed using the UPP (lat, lon) coordinates do not
+agree very well (MAE of 0.6448 km).
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 February 2023
