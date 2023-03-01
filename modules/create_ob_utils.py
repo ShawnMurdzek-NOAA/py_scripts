@@ -17,114 +17,219 @@ import pandas as pd
 # Functions
 #---------------------------------------------------------------------------------------------------
 
-def wrf_coords(lat, lon, ds, ftype='UPP'):
+def determine_twgt(wrf_hr, dhr):
     """
-    Find the decimal (i.e., non-integer) x and y indices for a given (lat, lon) coordinate in WRF
- 
-    Parameters
-    ----------
-    lat, lon : float
-        Latitude and longitude coordinate (deg N and negative deg E)
-    ds : XArray.dataset
-        Dataset containing the WRF output data
-    ftype : string, optional
-        Type of input dataset ('WRF' or 'UPP')
+    Compute the weight and index needed for time interpolation using 1-D linear interpolation
+
+    Inputs
+    ------
+    wrf_hr : array
+        Decimal hours for each WRF UPP file
+    dhr : float
+        Decimal hour for the given observation
 
     Returns
     -------
-    xi, yi : float
-        Indices in the west-east and south-north directions for the input (lat, lon) coordinate
-        Indices are set to NaN if the (lat, lon) coordinate lies outside the model domain
-
-    Notes
-    -----
-    Timing tests indicate that one call to this function takes ~0.025 s.
+    ihr : integer
+        Index for wrf_hr associated with twgt 
+    twgt : float
+        Interpolation weight associated with ihr
 
     """
 
-    # Latitude and longitude fields
-    if ftype == 'WRF':
-        latname = 'XLAT'
-        lonname = 'XLONG'
-    elif ftype == 'UPP':
-        latname = 'gridlat_0'
-        lonname = 'gridlon_0'
+    ihr = np.where((wrf_hr - dhr) <= 0)[0][-1]
+    twgt = (wrf_hr[ihr+1] - dhr) / (wrf_hr[ihr+1] - wrf_hr[ihr])
 
-    # Find nearest neighbor in horizontal direction
-    close = np.unravel_index(np.argmin((ds[lonname] - lon)**2 + (ds[latname] - lat)**2), 
-                             ds[lonname].shape)
-    clat = ds[latname][close[0], close[1]].values
-    clon = ds[lonname][close[0], close[1]].values
+    return ihr, twgt
 
-    # Check to make sure that we are not extrapolating by excluding (lat, lon) coordinates that
-    # have an edge as their closest (lat, lon) coordinate in model space
-    if (close[0] == 0 or close[0] == (ds[latname].shape[0] - 1) or
-        close[1] == 0 or close[1] == (ds[lonname].shape[1] - 1)):
 
-        return np.nan, np.nan
+def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
+    """
+    Interpolate the given field in the horizontal
 
+    Inputs
+    ------
+    field : array 
+        2D field to interpolate
+    iwgt : float
+        Interpolation weight for i0
+    jwgt : float
+        Interpolation weight fro j0
+    i0 : integer
+        Lower-left index for the first dimension of field
+    j0 : integer
+        Lower-left index for the second dimension of field
+    threeD : boolean, optional
+        Is this field actually 3D?
+
+    Returns
+    -------
+    val : float
+        Interpolated value
+
+    """
+
+    iind = np.array([i0,        i0,            i0+1,          i0+1])
+    jind = np.array([j0,        j0+1,          j0,            j0+1])
+    wgts = np.array([iwgt*jwgt, iwgt*(1-jwgt), (1-iwgt)*jwgt, (1-iwgt)*(1-jwgt)])
+
+    if threeD:
+        val = np.zeros(field.shape[0])
+        for w, i, j in zip(wgts, iind, jind):
+            val = val + w * field[:, i, j]
     else:
+        val = 0.
+        for w, i, j in zip(wgts, iind, jind):
+            val = val + w * field[i, j]
 
-        # Perform pseudo-bilinear interpolation
-        if lat < clat:
-            yi = close[0] + (lat - clat) / (clat - ds[latname][close[0]-1, close[1]].values)
-        else:
-            yi = close[0] + (lat - clat) / (ds[latname][close[0]+1, close[1]].values - clat)
-        if lon < clon:
-            xi = close[1] + (lon - clon) / (clon - ds[lonname][close[0], close[1]-1].values)
-        else:
-            xi = close[1] + (lon - clon) / (ds[lonname][close[0], close[1]+1].values - clon)
-
-        return xi, yi
+    return val
 
 
-def read_ob_errors(fname):
+def _log_interp(val1, val2, wgt1):
+
+    return (val1**wgt1) * (val2**(1.-wgt1))
+
+
+def _interp_x_y_t(field1, field2, iwgt, jwgt, twgt, i0, j0, threeD=False):
     """
-    Parse out observation errors from an errtable file in GSI
+    Interpolate linearly in the horizontal and time dimensions
 
-    Parameters
-    ----------
-    fname : string
-        Name of errtable text file
+    Inputs
+    ------
+    field1 : array
+        2D field to interpolate with time weight = twgt
+    field2 : array
+        2D field to interpolate with time weight = 1 - twgt
+    iwgt, jwgt, twgt : float
+        Interpolation weights for the (i0, j0) gridpoint in field1
+    i0, j0 : integers
+        Lower-left index for field1 and field2
+    threeD : boolean, optional
+        Is this field actually 3D?
 
     Returns
     -------
-    errors: dictionary
-        A dictionary of pd.DataFrame objects containing the observation errors
-
-    Notes
-    -----
-    More information about the errtable format in GSI can be found here: 
-    https://dtcenter.ucar.edu/com-GSI/users/docs/users_guide/html_v3.7/gsi_ch4.html#conventional-observation-errors
+    val : float
+        Interpolated value
 
     """
 
-    # Extract contents of file
-    fptr = open(fname, 'r')
-    contents = fptr.readlines()
-    fptr.close()
+    val = (twgt * _bilinear_interp_horiz(field1, iwgt, jwgt, i0, j0, threeD=threeD) +
+           (1.-twgt) * _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD))
 
-    # Loop over each line
-    errors = {}
-    headers = ['prs', 'Terr', 'RHerr', 'UVerr', 'PSerr', 'PWerr']
-    for l in contents:
-        if l[5:21] == 'OBSERVATION TYPE':
-            key = int(l[1:4])
-            errors[key] = {}
-            for h in headers:
-                errors[key][h] = []
-        else:
-            vals = l.strip().split(' ')
-            for k, h in enumerate(headers):
-                errors[key][h].append(float(vals[k]))
+    return val
 
-    # Convert to DataFrame
-    for key in errors.keys():
-        errors[key] = pd.DataFrame(errors[key])
-        for h in headers[1:]:
-            errors[key][h].where(errors[key][h] < 5e8, inplace=True)
 
-    return errors
+def _interp_x_y_z(field, iwgt, jwgt, pwgt, i0, j0, pi0):
+    """
+    Interpolate linearly in the horizontal dimensions and logarithmically in pressure
+
+    Inputs
+    ------
+    field : array
+        3D field to interpolate
+    iwgt, jwgt, pwgt : float
+        Interpolation weights for the (pi0, i0, j0) gridpoint in field
+    i0, j0, pi0 : integers
+        Lower-left index for field
+
+    Returns
+    -------
+    val : float
+        Interpolated value
+
+    """
+
+    val = _log_interp(_bilinear_interp_horiz(field[pi0, :, :], iwgt, jwgt, i0, j0),
+                      _bilinear_interp_horiz(field[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
+
+    return val
+
+
+def interp_wrf_to_obs(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
+    """
+    Wrapper function for interpolation in x, y, and t
+
+    Inputs
+    ------
+    wrf_data : dictionary
+        Dictionary of Xarray datasets containing UPP output data
+    wrf_hr : list
+        List of valid times (in decimal hours) for wrf_data. These are the keys for wrf_data
+    var : string
+        Variable from the UPP dataset to interpolate
+    ob_subset : series
+        Pandas series containing a single observation
+    ihr : integer
+        Index for the UPP dataset immediately before the observation time
+    twgt : float
+        Interpolation weight associated with the ihr UPP dataset
+    threeD : boolean, optional
+        Is this UPP field 3D?
+
+    Returns
+    -------
+    val : float
+        UPP output linearly interpolated in x, y, and t to the observation location
+
+    """
+
+    val = _interp_x_y_t(wrf_data[wrf_hr[ihr]][var], wrf_data[wrf_hr[ihr+1]][var], twgt,
+                        ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['i0'], ob_subset['j0'],
+                        threeD=threeD)
+
+    return val
+
+
+def interp_wrf_3d(wrf3d, ob_subset):
+    """
+    Wrapper function for interpolation in x, y, and p
+
+    Inputs
+    ------
+    wrf3d : array
+        WRF 3D output array to interpolate
+    ob_subset : series
+        Pandas series containing a single observation
+
+    Returns
+    -------
+    val : float
+        UPP output linearly interpolated in x, y, and p to the observation location
+
+    """
+
+    val = _interp_x_y_z(wrf3d, ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['pwgt'],
+                        ob_subset['i0'], ob_subset['j0'], ob_subset['pi0'])
+
+    return val
+
+
+def interp_wrf_p1d(p1d, ob_subset):
+    """
+    Wrapper function for interpolation of pressure in one dimension
+
+    Inputs
+    ------
+    p1d : array
+        1D pressure array to interpolate
+    ob_subset : series
+        Pandas series containing a single observation
+
+    Returns
+    -------
+    val : float
+        UPP output logarithmically interpolated in p to the observation location
+    pwgt : float
+        Weight used to logarithmic interpolation
+
+    """
+
+    pi0 = ob_subset['pi0']
+    pwgt = (p1d[pi0+1] - ob_subset['POB']) / (p1d[pi0+1] - p1d[pi0])
+    val = _log_interp(p1d[pi0], p1d[pi0+1], pwgt)
+
+    return val, pwgt
 
 
 """

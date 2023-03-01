@@ -466,6 +466,65 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
     return out_df
 
 
+def match_bufr_prec(df, ndec={'ELV':0, 'POB':1, 'TOB':1, 'QOB':0, 'UOB':1, 'VOB':1, 'ZOB':0}):
+    """
+    Round observations so the precision matches what is typically found in a BUFR file
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+    ndec : dictionary
+        Number of decimal points to round each observation type
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with obs rounded to the appropriate decimal place
+
+    """
+
+    # Set winds to 0 if they fall below the measurement threshold
+    for ob in ['UOB', 'VOB']:
+        idx = np.where(np.logical_and(df[ob] < 0.1, df[ob] > -0.1))[0]
+        df.loc[idx, ob] = 0.
+
+    for ob in ndec.keys():
+        df.loc[ob] = np.around(df.loc[ob], decimals=ndec[ob])
+
+    return df
+
+
+def RH_check(df):
+    """
+    Reduce QOB values so that RH stays below 100%
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with obs rounded to the appropriate decimal place
+
+    """
+
+    # Convert specific humidities to relative humidities
+    q = out_df['QOB'] * 1e-6
+    mix = q  / (1. - q)
+    RH = (mix / mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2))  
+
+    RH[RH > 1] = 0
+    
+    # Convert back to specific humidity
+    mix = RH * mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2)
+    out_df['QOB'] = 1e6 * (mix / (1. + mix))
+
+    return df
+
+
 """
 End bufr.py
 """

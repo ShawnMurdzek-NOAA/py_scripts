@@ -62,11 +62,15 @@ for o in np.int32(bufr_csv.df['TYP'].unique()):
     if (o not in autocor_POB_obs) and (o not in autocor_DHR_obs):
         remaining_obs.append(o)
 
+# Add random errors
 out_df = bufr.add_obs_err(bufr_csv.df, errtable, ob_typ=autocor_POB_obs, correlated='POB', 
                           auto_reg_parm=auto_reg_parm, min_d=10.)
 out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
                           auto_reg_parm=auto_reg_parm)
 out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs)
+
+# Make precision match what is typically found in a prepBUFR file
+out_df = bufr.match_bufr_prec(out_df)
 
 out_df.to_csv(out_fname)
 #out_df = pd.read_csv(out_fname)
