@@ -55,7 +55,6 @@ error_fname = work + '/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
-ob_platforms = ['AIRCAR', 'AIRCFT', 'PROFLR', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'

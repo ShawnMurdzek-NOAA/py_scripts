@@ -23,8 +23,8 @@ import cartopy.feature as cfeature
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
+fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
 #fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
 #fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
 
@@ -65,6 +65,10 @@ borders = cfeature.NaturalEarthFeature(category='cultural',
 bufr_df1 = bufr.bufrCSV(fname1)
 bufr_df2 = bufr.bufrCSV(fname2)
 
+# Apply rounding so precision in simulated obs matches real obs
+bufr_df1.df = bufr.match_bufr_prec(bufr_df1.df)
+bufr_df2.df = bufr.match_bufr_prec(bufr_df2.df)
+
 # Only retain obs from desired subset
 boo = np.zeros(len(bufr_df1.df))
 for s in subsets:
@@ -92,12 +96,6 @@ for v in obs_vars:
         diff = (field1 - field2).values
         lat = bufr_df1.df['YOB'].values
         lon = bufr_df1.df['XOB'].values
-
-    # Determine precision of real obs
-    for s in subsets:
-        tmp = bufr_df2.df.loc[bufr_df2.df['subset'] == s][v].values
-        print(s)
-        print(np.amin(np.abs(tmp[np.abs(tmp) > 0])))
 
     # Plot actual values
     maxval = max(np.amax(field1), np.amax(field2))

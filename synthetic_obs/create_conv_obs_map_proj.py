@@ -52,7 +52,7 @@ import map_proj as mp
 work = '/mnt/lfs4'
 
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/'
+wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP/'
 #wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
@@ -65,7 +65,7 @@ bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring_v2/synthetic_obs/'
+fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
 #fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
 
 # Start and end times for prepbufrs. Step is in min
@@ -344,7 +344,6 @@ for i in range(ntimes):
 
     # Create array to save p1d arrays in
     p1d = np.zeros([100, len(out_df)])
-    z1d = np.zeros([100, len(out_df)])
 
     # We will extract 3D fields one at a time b/c these 3D arrays are massive (~6.5 GB each), so it 
     # is not feasible to load all of them at once. Ideally, only 1 should be loaded at any given
@@ -361,8 +360,6 @@ for i in range(ntimes):
     obs_name = ['POB', 'TOB', 'QOB', 'ZOB', 'UOB', 'VOB']
     wrf_name = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 
                 'HGT_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
-    obs_name = ['POB', 'ZOB']
-    wrf_name = ['PRES_P0_L105_GLC0', 'HGT_P0_L105_GLC0']
     for o, f in zip(obs_name, wrf_name):
 
         # Loop over each WRF time
@@ -521,17 +518,9 @@ for i in range(ntimes):
                         twgt =  out_df.loc[j, 'twgt'] 
                         if np.isclose(out_df.loc[j, o], 0):
                             out_df.loc[j, o] = twgt * cou.interp_wrf_3d(wrf3d, out_df.loc[j])
-                            z1d[:, j] = twgt * cou._bilinear_interp_horiz(wrf3d, out_df.loc[j, 'iwgt'], 
-                                                                      out_df.loc[j, 'jwgt'],
-                                                                      out_df.loc[j, 'i0'], out_df.loc[j, 'j0'],
-                                                                      threeD=True)
                         else:
                             out_df.loc[j, o] = ((1.-twgt) * cou.interp_wrf_3d(wrf3d, out_df.loc[j]) + 
                                                 out_df.loc[j, o])
-                            z1d[:, j] = z1d[:, j] + (1.-twgt) * cou._bilinear_interp_horiz(wrf3d, out_df.loc[j, 'iwgt'], 
-                                                                    out_df.loc[j, 'jwgt'],
-                                                                    out_df.loc[j, 'i0'], out_df.loc[j, 'j0'],
-                                                                    threeD=True)
                         if debug > 1:
                             time7 = dt.datetime.now()
                             print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))

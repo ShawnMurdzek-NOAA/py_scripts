@@ -490,7 +490,7 @@ def match_bufr_prec(df, ndec={'ELV':0, 'POB':1, 'TOB':1, 'QOB':0, 'UOB':1, 'VOB'
         df.loc[idx, ob] = 0.
 
     for ob in ndec.keys():
-        df.loc[ob] = np.around(df.loc[ob], decimals=ndec[ob])
+        df[ob] = np.around(df[ob], decimals=ndec[ob])
 
     return df
 
