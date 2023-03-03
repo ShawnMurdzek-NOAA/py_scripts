@@ -30,6 +30,22 @@ Date Created: 27 February 2023
 Environment: adb_graphics (Jet) or pygraf (Hera)
 """
 
+"""
+Development Notes:
+
+1. Current version takes ~1800 s (30 min) to extract all the fields for a single radiosonde ob. 
+    This is unacceptable b/c there are ~70 radiosonde sites in the US, which means it will take 
+    ~35 hrs just to extract all the data for the radiosondes. Based on the timing tests below, a
+    better option might be to extract the datapoints from the UPP output one-by-one.
+
+    a. Timing tests:
+        i. Extracting a single value from a UPP dataset that's not loaded takes ~0.00117 s (using
+            ds[i, j, k].values)
+        ii. Extracting a vertical slice (100 values) from a UPP dataset that's not loaded takes
+            ~27.7 s (using ds[:, j, k].values)
+        iii. Extracting a vertical slice (10 values) from a UPP dataset that's not loaded takes
+            ~2.96 s (using ds[k1:k2, j, k].values)
+"""
 
 #---------------------------------------------------------------------------------------------------
 # Import Modules
@@ -53,14 +69,14 @@ import map_proj as mp
 work = '/mnt/lfs4'
 
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP/'
 #wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
+bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
@@ -80,15 +96,14 @@ wrf_step = 15
 # https://www.weather.gov/media/upperair/Documents/Radiosonde%20Ascent%20Rates.pdf
 ascent_spd = 5.
 
-# Allow vertical velocity from nature run to influence radiosonde ascent rate?
-# Setting this to try might lead to some wonky results if the radiosonde enters a downdraft.
-w_impact = True
-
 # Size of subdomain to extract around sounding launch site (in gridpoints)
 subdomain_half_size = 400.
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
 debug = 2
+
+# Save full datafram for debugging?
+save_debug_df = True
 
 
 #---------------------------------------------------------------------------------------------------
@@ -98,11 +113,13 @@ debug = 2
 # Timing
 begin = dt.datetime.now()
 
+# Constants
+g = 9.81
+Rd = 287.04
+
 # List to save time spent on each BUFR entry
 if debug > 1:
-    entry_timesp1 = []
-    entry_timesp2 = []
-    entry_times3d = []
+    entry_times = []
 
 # Convert wrf_step to decimal hours for ease of use
 wrf_step_dec = wrf_step / 60.
@@ -118,11 +135,10 @@ for i in range(ntimes):
     bufr_csv = bufr.bufrCSV(bufr_fname)
 
     # Only keep platforms if we are creating synthetic obs for them
-    if debug > 0:
-        print('total # of BUFR entries = %d' % len(bufr_csv.df))
-        print('available BUFR obs =', obs)
     bufr_csv.df.drop(index=np.where(bufr_csv.df['subset'] != 'ADPUPA')[0], inplace=True)
     bufr_csv.df.reset_index(drop=True, inplace=True)
+    if debug > 0:
+        print('total # of BUFR entries = %d' % len(bufr_csv.df))
 
     # Remove obs outside of the range of wrfnat files
     hr_min = ((wrf_start - t).days * 24) + ((wrf_start - t).seconds / 3600.)
@@ -200,12 +216,12 @@ for i in range(ntimes):
 
     # Initialize variables for 3D obs as zeros
     for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
-        out_df.loc[v] = 0.
+        out_df[v] = 0.
 
     # Add some DataFrame columns
     nrow = len(out_df)
     extra_col_int = ['pi0']
-    extra_col_float = ['twgt', 'pwgt']
+    extra_col_float = ['twgt', 'pwgt', 'adpupa_x', 'adpupa_y', 'adpupa_t_s']
     for c in extra_col_int:
         out_df[c] = np.zeros(nrow, dtype=int)
     for c in extra_col_float:
@@ -228,7 +244,7 @@ for i in range(ntimes):
 
     for sid in all_sid: 
 
-        single_df = out_df['SID'].loc[out_df['SID'] == sid].copy()
+        single_df = out_df.loc[out_df['SID'] == sid].copy()
         single_df.sort_values('POB', ascending=False)
         adpupa_x, adpupa_y = mp.ll_to_xy_lc(single_df['YOB'].iloc[0], 
                                             single_df['XOB'].iloc[0] - 360.)
@@ -241,25 +257,32 @@ for i in range(ntimes):
         # Extract WRF grids around the radiosonde launch location
         if debug > 0:
             time_3d = dt.datetime.now()
-        istart = max(int(adpupa_y) - subdomain_half_size, 0)
-        iend = min(int(adpupa_y) + subdomain_half_size + 1, imax+2)
-        jstart = max(int(adpupa_x) - subdomain_half_size, 0)
-        jend = min(int(adpupa_x) + subdomain_half_size + 1, jmax+2)
+        istart = int(max(int(adpupa_y) - subdomain_half_size, 0))
+        iend = int(min(int(adpupa_y) + subdomain_half_size + 1, imax+2))
+        jstart = int(max(int(adpupa_x) - subdomain_half_size, 0))
+        jend = int(min(int(adpupa_x) + subdomain_half_size + 1, jmax+2))
         fields2D = ['PRES_P0_L1_GLC0', 'HGT_P0_L1_GLC0']
         fields3D = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0',
                     'HGT_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
         wrf_data = {}
         for hr in wrf_hr:
+            print('hr = %.2f' % hr)
             wrf_data[hr] = {}
             for f in fields2D:
+                print('extracting %s' % f)
                 wrf_data[hr][f] = wrf_ds[hr][f][istart:iend, jstart:jend].values
             for f in fields3D:
+                print('extracting %s' % f)
                 wrf_data[hr][f] = wrf_ds[hr][f][:, istart:iend, jstart:jend].values
         adpupa_x = adpupa_x - jstart
         adpupa_y = adpupa_y - istart
+        single_df['xlc'] = single_df['xlc'] - jstart
+        single_df['ylc'] = single_df['ylc'] - istart
+        single_df['i0'] = single_df['i0'] - istart
+        single_df['j0'] = single_df['j0'] - jstart
 
         if debug > 0:
-            print('time to extract %s = %.6f s' % (f, (dt.datetime.now() - time_3d).total_seconds()))
+            print('time to extract fields = %.6f s' % (dt.datetime.now() - time_3d).total_seconds())
             for l in os.popen('free -t -m -h').readlines():
                 print(l) 
             print()
@@ -284,11 +307,21 @@ for i in range(ntimes):
             print('done determining sfch and sfcp (%.6f s)' % (time_sfc - time_3d).total_seconds())
 
         # Now, we're ready to compute the radiosonde obs, starting from the lowest pressure level
-        for k in single_df.index:
+        sorted_idx = single_df.index
+        for n, k in enumerate(sorted_idx):
+
+            if debug > 1:
+                kloop_start = dt.datetime.now()
+
+            # Save radiosonde location
+            if save_debug_df:
+                out_df.loc[k, 'adpupa_x'] = adpupa_x
+                out_df.loc[k, 'adpupa_y'] = adpupa_y
+                out_df.loc[k, 'adpupa_t_s'] = adpupa_t_s
 
             # Determine weights for interpolation
-            out_df.loc[k, 'i0'] np.int32(np.floor(adpupa_y)) 
-            out_df.loc[k, 'j0'] np.int32(np.floor(adpupa_x))
+            out_df.loc[k, 'i0'] = np.int32(np.floor(adpupa_y)) 
+            out_df.loc[k, 'j0'] = np.int32(np.floor(adpupa_x))
             out_df.loc[k, 'iwgt'] = 1. - (adpupa_y - out_df.loc[k, 'i0']) 
             out_df.loc[k, 'jwgt'] = 1. - (adpupa_x - out_df.loc[k, 'j0']) 
             
@@ -322,7 +355,7 @@ for i in range(ntimes):
                 time_wgts = dt.datetime.now()
                 print('interpolated P = %.2f' % out_df.loc[k, 'POB'])
                 print('actual P = %.2f' % bufr_csv.df.loc[k, 'POB'])
-                print('time to determine interpolation wgts = %.6f s' % (time_wgts - time_sfc).total_seconds())
+                print('time to determine interpolation wgts = %.6f s' % (time_wgts - kloop_start).total_seconds())
 
             # Interpolate to observation location
             for ob, f in zip(['TOB', 'QOB', 'ZOB', 'UOB', 'VOB'], fields3d[1:]):
@@ -334,37 +367,50 @@ for i in range(ntimes):
                 print('finished interp for %s (%.6f s)' % (o, (time_interp - time_wgts).total_seconds()))
             
             # Update (x, y) coordinate for next observation
-            """
-            Start here next time!
-                1. Determine distance (in vertical) to next pressure level. If distance = 0, don't change anything
-                2. Determine time it will take to reach next pressure level using the radiosonde ascent rate
-                3. Use (u, v) winds at current level to advect radiosonde (can get a dx and dy doing this)
-                4. Update adpupa_x, adpupa_y, and adpupa_t_s accordingly
-            """
+            if k != sorted_idx[-1]:
+                delta_p = single_df['POB'].iloc[n+1] - out_df[k, 'POB']
+                if np.isclose(delta_p, 0):
+                    continue
+                omega = -1e-2 * g * ascent_spd * out_df.loc[k, 'POB'] / (Rd * out_df.loc[k, 'TOB'])
+                delta_t = delta_p / omega
+                adpupa_x = adpupa_x + (1e3 * out_df.loc[k, 'UOB'] * delta_t)
+                adpupa_y = adpupa_y + (1e3 * out_df.loc[k, 'VOB'] * delta_t)
+                adpupa_t_s = adpupa_t_s + delta_t
+     
+                # Switch to next radiosonde if balloon exits the subdomain
+                if ((adpupa_x < 0) or (adpupa_y < 0) or (adpupa_x > (2*subdomain_half_size)) or
+                    (adpupa_y > (2*subdomain_half_size))):
+                    drop_idx = drop_idx + list(sorted_idx[n+1:])
+                    break
+ 
+                # Update ihr if needed
+                if adpupa_t_s > wrf_t2_s:
+                    ihr = ihr + 1
+                    wrf_t1_s = wrf_sec[ihr] 
+                    wrf_t2_s = wrf_sec[ihr+1]
+ 
+            if debug > 1:
+                time_advect = dt.datetime.now()
+                entry_times.append(time_advect - kloop_start)
+                print('finished advecting radiosonde (%.6f s)' % (time_advect - time_interp).total_seconds())
 
-            # Update ihr if needed
-            if adpupa_t_s > wrf_t2_s:
-                ihr = ihr + 1
-                wrf_t1_s = wrf_sec[ihr] 
-                wrf_t2_s = wrf_sec[ihr+1] 
-
-    # Drop rows that we skipped as well as the extra columns we added
-    out_df.drop(labels=extra_col_int, axis=1, inplace=True)
-    out_df.drop(labels=extra_col_float, axis=1, inplace=True)
+    # Drop rows that we skipped
     out_df.drop(index=drop_idx, inplace=True)
     out_df.reset_index(drop=True, inplace=True)
     bufr_csv.df.drop(index=drop_idx, inplace=True)
     bufr_csv.df.reset_index(drop=True, inplace=True)
-
+    
     # Convert to proper units
     out_df['QOB'] = out_df['QOB'] * 1e6
     out_df['TOB'] = out_df['TOB'] - 273.15
-    out_df['PWO'] = (out_df['PWO'] / 997.) * 1000.
     out_df['ELV'] = np.int64(out_df['ELV'])
-    if interp_latlon:
-        idx = np.where((out_df['subset'] == 'ADPSFC') | (out_df['subset'] == 'SFCSHP') |
-                       (out_df['subset'] == 'MSONET'))[0] 
-        out_df.loc[idx, 'XOB'] = out_df.loc[idx, 'XOB'] + 360.
+
+    if save_debug_df:
+        bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.debug.adpupa.csv'))
+    
+    # Drop the extra columns we added
+    out_df.drop(labels=extra_col_int, axis=1, inplace=True)
+    out_df.drop(labels=extra_col_float, axis=1, inplace=True)
 
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
@@ -377,10 +423,8 @@ for i in range(ntimes):
 
 if debug > 1:
     print()
-    for a, s in zip([entry_times2d, entry_timesp1, entry_timesp2, entry_times3d],
-                    ['2D', 'P1', 'P2', '3D']):
-        if len(a) > 0:
-            print('avg time per %s entries = %.6f s' % (s, np.mean(np.array(a))))
+    if len(entry_times) > 0:
+        print('avg time per entry = %.6f s' % (s, np.mean(np.array(entry_times))))
 
 # Total timing
 print()
