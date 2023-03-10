@@ -2,7 +2,7 @@
 Extract Single Fields from UPP Output Files
 
 This simple script extracts a single 2D field from a bunch of UPP wrfnat files and saves them into
-a single, separate netcdf file for easy use.
+a single, separate netcdf file for easy use. UPP wrfnat files can be from the Nature Run or HRRR.
 
 Command line arguments:
     argv[1] = Date (YYYYMMDD)
@@ -18,26 +18,34 @@ Date Created: 7 March 2023
 import xarray as xr
 import datetime as dt
 import sys
+import os
 
 
 #---------------------------------------------------------------------------------------------------
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
-#date = sys.argv[1]
-date = '20220430'
+path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
+date = sys.argv[1]
+#date = '20220506'
 
-# Input wrfnat files
-template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
-upp_files =  [template % i for i in range(0, 1801, 600)]
+# Input UPP wrfnat files (file names MUST end in .grib2, or else Xarray will throw an error)
+#template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
+#upp_files = [template % i for i in range(0, 1801, 600)]
+
+t1 = dt.datetime.strptime(date, '%Y%m%d')
+t0 = t1 - dt.timedelta(days=1)
+upp_files =  ['%s/%s/%s23000001.grib2' % (path, t0.strftime('%Y%m%d'), t0.strftime('%y%j'))]
+template = '%s/%s/%s' % (path, date, t1.strftime('%y%j')) + '%02d000001.grib2'
+upp_files = upp_files + [template % i for i in range(5, 19, 6)]
 
 # Output netcdf file
 out_file = '%s/%s/cref_%s.nc' % (path, date, date)
 #out_file = '%s/%s/precip1hr_%s.nc' % (path, date, date)
 
 # Field to extract from each UPP file
-field = 'REFC_P0_L200_GLC0'
+#field = 'REFC_P0_L200_GLC0'  # Used in NR
+field = 'REFC_P0_L10_GLC0'   # Used in HRRR
 #field = 'APCP_P8_L1_GLC0_acc'
 
 

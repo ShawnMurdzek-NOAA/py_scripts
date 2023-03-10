@@ -373,6 +373,39 @@ class PlotOutput():
         self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
                                            self.metadata[ptype]['name'], 
                                            self.metadata[ptype]['units']), **label_kw)
+
+
+    def pcolormesh(self, var, ingest_kw={}, pcm_kw={}, cbar_kw={}, label_kw={}):
+        """
+        Plot data using pcolormesh
+
+        Parameters
+        ----------
+        var : string
+            Variable to plot
+        ingest_kw : dict, optional
+            Other keyword arguments passed to _ingest_data (key must be a string)
+        cntf_kw : dict, optional
+            Other keyword arguments passed to pcolormesh (key must be a string)
+        cbar_kw : dict, optional
+            Other keyword arguments passed to colorbar (key must be a string)
+        label_kw : dict, optional
+            Other keyword arguments passed to colorbar.set_label (key must be a string)
+
+        """
+
+        data, coords, ptype = self._ingest_data(var, ptype='pcolormesh0', **ingest_kw)
+
+        if not hasattr(self, 'ax'):
+            self._create_hcrsxn_ax(data)
+
+        self.cax = self.ax.pcolormesh(coords[1], coords[0], data, transform=self.proj, **pcm_kw)
+
+        self.cbar = plt.colorbar(self.cax, ax=self.ax, **cbar_kw)
+        self.cbar.set_label('%s%s (%s)' % (self.metadata[ptype]['interp'], 
+                                           self.metadata[ptype]['name'], 
+                                           self.metadata[ptype]['units']), **label_kw)
+    
     
 
     def plot_diff(self, var, ingest_kw={}, cntf_kw={}, cbar_kw={}, label_kw={}, auto=True):
@@ -674,7 +707,7 @@ class PlotOutput():
 
         s = '%s %s' % (txt, self.time)
         for k in self.metadata.keys():
-            if (k[:-1] != 'contourf') and (k[:-1] != 'cfad'):
+            if (k[:-1] != 'contourf') and (k[:-1] != 'cfad') and (k[:-1] != 'pcolormesh'):
                 s = s + '\n%s: %s%s (%s)' % (k, self.metadata[k]['interp'], 
                                              self.metadata[k]['name'], self.metadata[k]['units']) 
 

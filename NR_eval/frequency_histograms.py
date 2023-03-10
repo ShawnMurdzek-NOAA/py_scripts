@@ -25,26 +25,26 @@ import matplotlib.pyplot as plt
 eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
-NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
 
 # MRMS data file path
 MRMS_path = '/mnt/lfs4/BMC/wrfruc/murdzek/real_obs/mrms'
 
 # MRMS years to use
-MRMS_years = np.arange(2018, 2023)
+MRMS_years = np.arange(2015, 2023)
 
 # Times to evaluate (strings, HHMM)
 eval_times = ['0000', '0600', '1200', '1800']
 
 # Field to evaluate (options: 'cref', 'precip1hr')
-field = 'precip1hr'
+field = 'cref'
 
 # Domain (options: 'all', 'easternUS')
 # This option does not work yet!
 domain = 'all'
 
 # Output file
-out_file = './NR_precip1hr_eval_lower_prate.png'
+out_file = './HRRR_cref_eval.png'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -57,12 +57,14 @@ def precip_kgpm2_to_mm(x):
 
 # Define necessary variables for each input field
 if field == 'cref':
-    NR_var = 'REFC_P0_L200_GLC0'
+    #NR_var = 'REFC_P0_L200_GLC0'
+    NR_var = 'REFC_P0_L10_GLC0'
     NR_transform = None
     MRMS_var = ['MergedReflectivityQCComposite_P0_L102_GLL0']
     MRMS_fname = ['MRMS_MergedReflectivityQCComposite']
     MRMS_no_coverage = -999.
     bins = np.arange(5, 76, 5)
+    #bins = np.arange(30, 76, 5)
     xlabel = 'composite reflectivity (dBZ)'
     yscale = 'linear'
 elif field == 'precip1hr':
@@ -71,7 +73,8 @@ elif field == 'precip1hr':
     MRMS_var = ['VAR_209_6_37_P0_L102_GLL0', 'GaugeCorrQPE01H_P0_L102_GLL0']
     MRMS_fname = ['MRMS_MultiSensor_QPE_01H_Pass2', 'MRMS_GaugeCorr_QPE_01H']
     MRMS_no_coverage = -3.
-    bins = np.arange(0.5, 15, 0.5)
+    #bins = np.arange(0.5, 15, 0.5)
+    bins = np.arange(1, 150, 5)
     xlabel = '1-hr total precip (mm)'
     yscale = 'log'
 
@@ -173,7 +176,7 @@ for i in range(ncols):
 for i in range(nrows):
     axes[i, 0].set_ylabel('fraction of gridpoints in domain', size=12)
 
-plt.suptitle('NR Frequencies (bars) and MRMS Frequencies (lines)\n7-Day Composites', size=16)
+plt.suptitle('HRRR Frequencies (bars) and MRMS Frequencies (lines)\n7-Day Composites', size=16)
 plt.savefig(out_file)
 plt.close()
 
