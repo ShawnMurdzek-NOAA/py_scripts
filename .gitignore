@@ -8,3 +8,9 @@ slurm*.out
 # Ignore images files
 *.png
 *.pdf
+
+# Ignore core dumps
+core*
+
+# Ignore .npy files
+*.npy

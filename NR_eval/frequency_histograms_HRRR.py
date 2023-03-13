@@ -26,7 +26,7 @@ import sys
 eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
-NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
 
 # MRMS data file path
 MRMS_path = '/mnt/lfs4/BMC/wrfruc/murdzek/real_obs/mrms'
@@ -51,11 +51,11 @@ domain = sys.argv[2]
 
 # Optional: Link to MRMS and NR masks (these should be .npy objects). Set to None if not being used
 # Masks are created by the make_NR_MRMS_coverage_mask.py program
-NR_mask_file = './NR_mask.npy'
+NR_mask_file = './HRRR_mask.npy'
 MRMS_mask_file = './MRMS_mask.npy'
 
 # Model (options are 'NR' or 'HRRR')
-model = 'NR'
+model = 'HRRR'
 
 # Option to zoom into the smallest precip rates for precip1hr or the highest reflectivities for cref
 zoom = bool(sys.argv[3])
