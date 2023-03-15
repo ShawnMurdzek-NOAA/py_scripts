@@ -31,11 +31,11 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-#NR_file = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291300.grib2'
-NR_file = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data/20220429/2211917000001.grib2'
+NR_file = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291300.grib2'
+#NR_file = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data/20220429/2211917000001.grib2'
 MRMS_file = '/mnt/lfs4/BMC/wrfruc/murdzek/real_obs/mrms/2015/20150429-180012.MRMS_MergedReflectivityQCComposite_00.50_20150429-180012.grib2'
-#NR_mask_file = './NR_mask.npy'
-NR_mask_file = './HRRR_mask.npy'
+NR_mask_file = './NR_mask.npy'
+#NR_mask_file = './HRRR_mask.npy'
 MRMS_mask_file = './MRMS_mask.npy'
 
 MRMS_no_coverage = -999.

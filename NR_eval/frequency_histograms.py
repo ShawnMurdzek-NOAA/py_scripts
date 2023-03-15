@@ -22,11 +22,18 @@ import sys
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
+# Model (options are 'NR' or 'HRRR')
+#model = 'NR'
+model = sys.argv[1]
+
 # Dates to use
 eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
-NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+if model == 'NR':
+    NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+elif model == 'HRRR'
+    NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
 
 # MRMS data file path
 MRMS_path = '/mnt/lfs4/BMC/wrfruc/murdzek/real_obs/mrms'
@@ -43,26 +50,26 @@ eval_times = ['0000', '0600', '1200', '1800']
 
 # Field to evaluate (options: 'cref', 'precip1hr')
 #field = 'cref'
-field = sys.argv[1]
+field = sys.argv[2]
 
 # Domain (options: 'all', 'easternUS')
 #domain = 'all'
-domain = sys.argv[2]
+domain = sys.argv[3]
 
 # Optional: Link to MRMS and NR masks (these should be .npy objects). Set to None if not being used
 # Masks are created by the make_NR_MRMS_coverage_mask.py program
-NR_mask_file = './NR_mask.npy'
+if model == 'NR':
+    NR_mask_file = './NR_mask.npy'
+elif model == 'HRRR':
+    NR_mask_file = './HRRR_mask.npy'
 MRMS_mask_file = './MRMS_mask.npy'
 
-# Model (options are 'NR' or 'HRRR')
-model = 'NR'
-
 # Option to zoom into the smallest precip rates for precip1hr or the highest reflectivities for cref
-zoom = bool(sys.argv[3])
+zoom = bool(int(sys.argv[4]))
 
 # Output file
 #out_file = './NR_cref_eval_all.png'
-out_file = sys.argv[4]
+out_file = sys.argv[5]
 
 
 #---------------------------------------------------------------------------------------------------
@@ -212,7 +219,7 @@ for y in MRMS_years:
             MRMS_counts[y][o][t] = np.histogram(MRMS_mask * ds[MRMS_var[n]].values, bins=bins)[0]
             hhmm = t.strftime('%H%M')
             MRMS_total_counts[y][o][hhmm] = MRMS_total_counts[y][o][hhmm] + MRMS_counts[y][o][t]
-            MRMS_total_pts[y][o][hhmm] = MRMS_total_pts[y][o][hhmm] + np.sum(np.logical_and(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
+            MRMS_total_pts[y][o][hhmm] = MRMS_total_pts[y][o][hhmm] + np.sum(np.logical_or(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
    
 # Plot results
 nrows = int(np.floor(np.sqrt(len(eval_times))))
