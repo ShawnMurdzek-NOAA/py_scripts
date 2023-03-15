@@ -32,7 +32,7 @@ eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 # NR data file path and subdirectories to use
 if model == 'NR':
     NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
-elif model == 'HRRR'
+elif model == 'HRRR':
     NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
 
 # MRMS data file path
