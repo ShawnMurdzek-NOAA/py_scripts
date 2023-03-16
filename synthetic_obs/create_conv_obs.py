@@ -274,8 +274,8 @@ for i in range(ntimes):
             print('done determining twgt (%.6f s)' % (time2 - time1).total_seconds())
 
         # Determine surface height above sea level and surface pressure
-        sfch = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', subset, ihr, twgt)
-        sfcp = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', subset, ihr, twgt) * 1e-2
+        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', subset, ihr, twgt)
+        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', subset, ihr, twgt) * 1e-2
 
         if debug > 1:
             time4 = dt.datetime.now()
@@ -312,7 +312,7 @@ for i in range(ntimes):
                 if not np.isnan(subset[o]):
                     if debug > 1:
                         time5 = dt.datetime.now()
-                    out_df.loc[j, o] = cou.interp_wrf_to_obs(wrf_data, wrf_hr, m, subset, ihr, twgt)
+                    out_df.loc[j, o] = cou.interp_x_y_t(wrf_data, wrf_hr, m, subset, ihr, twgt)
                     if debug > 1:
                         time6 = dt.datetime.now()
                         print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
@@ -331,7 +331,7 @@ for i in range(ntimes):
             if not np.isnan(subset['PWO']):
                 if debug > 1:
                     time5 = dt.datetime.now()
-                out_df.loc[j, 'PWO'] = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'PWAT_P0_L200_GLC0', 
+                out_df.loc[j, 'PWO'] = cou.interp_x_y_t(wrf_data, wrf_hr, 'PWAT_P0_L200_GLC0', 
                                                              subset, ihr, twgt)
                 if debug > 1:
                     time6 = dt.datetime.now()
@@ -435,10 +435,10 @@ for i in range(ntimes):
                     else:
                         hr1 = hr
                         hr2 = hr + wrf_step_dec
-                    sfch = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
-                                                 ihr, twgt)
-                    sfcp = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], 
-                                                 ihr, twgt) * 1e-2
+                    sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
+                                            ihr, twgt)
+                    sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], 
+                                            ihr, twgt) * 1e-2
             
                     # Check whether ob from BUFR file lies underground
                     if (out_df.loc[j, 'ZOB'] < sfch) or (out_df.loc[j, 'POB'] > sfcp):
@@ -529,9 +529,9 @@ for i in range(ntimes):
                             time6 = dt.datetime.now()
                         twgt =  out_df.loc[j, 'twgt'] 
                         if np.isclose(out_df.loc[j, o], 0):
-                            out_df.loc[j, o] = twgt * cou.interp_wrf_3d(wrf3d, out_df.loc[j])
+                            out_df.loc[j, o] = twgt * cou.interp_x_y_z(wrf3d, out_df.loc[j])
                         else:
-                            out_df.loc[j, o] = ((1.-twgt) * cou.interp_wrf_3d(wrf3d, out_df.loc[j]) + 
+                            out_df.loc[j, o] = ((1.-twgt) * cou.interp_x_y_z(wrf3d, out_df.loc[j]) + 
                                                 out_df.loc[j, o])
                         if debug > 1:
                             time7 = dt.datetime.now()

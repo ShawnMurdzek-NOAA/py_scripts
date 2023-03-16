@@ -19,45 +19,11 @@ Debugging Notes:
 1. In IPython, the command `%whos` can be used to view all variables in the namespace, which can be
     used to determine which variables are sucking down a lot of RAM.
 
-Resources:
-
-Hera - An interactive session on a regular node is sufficient
-Jet - 4 GB of memory on tjet is sufficient if only interpolating 2D fields
-    - 25 GB of memory on sjet is sufficient if interpolating 3D fields
+Resources: Most of the tests I have done with this program use 25-30 GB of RAM
 
 shawn.s.murdzek@noaa.gov
 Date Created: 27 February 2023
 Environment: adb_graphics (Jet) or pygraf (Hera)
-"""
-
-"""
-Development Notes:
-
-1. Current version takes ~1800 s (30 min) to extract all the fields for a single radiosonde ob when 
-    subdomain_half_size = 400. This is unacceptable b/c there are ~70 radiosonde sites in the US, 
-    which means it will take ~35 hrs just to extract all the data for the radiosondes. Based on the 
-    timing tests below, a better option might be to (1) only extract the p, u, and v arrays so that
-    the radiosonde locations can be determined, then interpolate to these locations in create_conv_obs.py
-    and (2) extract the entire p, u, and v arrays for the two times straddling the radiosonde obs, 
-    then compute the radiosonde locations for all sites at once before moving to the next time window.
-    Note: To make (2) tractable, the p, u, and v arrays will need to be thinned in the horizontal 
-    (grabbing every 3rd value should be sufficient). Make this thinning value an input parameter so 
-    it can be easily changed in the future if desired.
-
-    a. Timing tests:
-        i. Extracting a single value from a UPP dataset that's not loaded takes ~0.00117 s (using
-            ds[i, j, k].values)
-        ii. Extracting a vertical slice (100 values) from a UPP dataset that's not loaded takes
-            ~27.7 s (using ds[:, j, k].values)
-        iii. Extracting a vertical slice (10 values) from a UPP dataset that's not loaded takes
-            ~2.96 s (using ds[k1:k2, j, k].values)
-        iv. Extracting all fields for a single radiosonde ob when subdomain_half_size = 200 takes
-            ~1700 s (so essentially the same as when the subdomain_half_size = 400). This agrees 
-            with other tests which suggest that extracting a domain that's larger in the x and y 
-            directions does not increase the time it takes to extract the data from the DataSet.
-
-    b. Memory considerations:
-        i. A 3D array takes up ~6.8 GB in memory 
 """
 
 #---------------------------------------------------------------------------------------------------
@@ -113,6 +79,9 @@ ascent_spd = 5.
 # gridpoint, where n = thin. Smaller values consume more memory.
 thin = 3
 
+# Spacing between gridpoints after thinning (for the 1-km NR, wrf_dx = thin)
+wrf_dx = thin
+
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
 debug = 2
 
@@ -162,21 +131,21 @@ for i in range(ntimes):
     bufr_csv.df.reset_index(drop=True, inplace=True)
 
     # Open first wrfnat files
-    wrf_hr1 = math.floor(bufr_csv.df['DHR'].min()*4) / 4
+    wrf_hr = [math.floor(bufr_csv.df['DHR'].min()*4) / 4, 0]
     print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
     print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
-    wrf_t1 = t + dt.timedelta(hours=wrf_hr1)
-    print(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'))
-    wrf_ds1 = xr.open_dataset(wrf_dir + wrf_t1.strftime('wrfnat_%Y%m%d%H%M.grib2'), 
-                              engine='pynio')
+    wrf_t = [t + dt.timedelta(hours=wrf_hr[0]), 0]
+    print(wrf_dir + wrf_t[0].strftime('wrfnat_%Y%m%d%H%M.grib2'))
+    wrf_ds = [xr.open_dataset(wrf_dir + wrf_t[0].strftime('wrfnat_%Y%m%d%H%M.grib2'), 
+                              engine='pynio'), 0]
 
-    print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
+    print('time to open first GRIB file = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
     # Remove obs outside of the spatial domain of the wrfnat files (first, inprecise pass)
-    latmin = wrf_ds1['gridlat_0'].min().values
-    latmax = wrf_ds1['gridlat_0'].max().values
-    lonmin = wrf_ds1['gridlon_0'].min().values + 360.
-    lonmax = wrf_ds1['gridlon_0'].max().values + 360.
+    latmin = wrf_ds[0]['gridlat_0'].min().values
+    latmax = wrf_ds[0]['gridlat_0'].max().values
+    lonmin = wrf_ds[0]['gridlon_0'].min().values + 360.
+    lonmax = wrf_ds[0]['gridlon_0'].max().values + 360.
     bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['XOB'] < lonmin, 
                                                   bufr_csv.df['XOB'] > lonmax))[0], inplace=True)
     bufr_csv.df.reset_index(drop=True, inplace=True)
@@ -185,7 +154,7 @@ for i in range(ntimes):
     bufr_csv.df.reset_index(drop=True, inplace=True)
 
     # Extract size of latitude and longitude grids
-    shape = wrf_ds1['gridlat_0'].shape
+    shape = wrf_ds[0]['gridlat_0'].shape
     imax = shape[0] - 2
     jmax = shape[1] - 2
     
@@ -196,6 +165,8 @@ for i in range(ntimes):
         print('Performing map projection with obs...')
 
     bufr_csv.df['xlc'], bufr_csv.df['ylc'] = mp.ll_to_xy_lc(bufr_csv.df['YOB'], bufr_csv.df['XOB'] - 360.)
+    bufr_csv.df['xlc'] = bufr_csv.df['xlc'] / wrf_dx
+    bufr_csv.df['ylc'] = bufr_csv.df['ylc'] / wrf_dx
     bufr_csv.df['i0'] = np.int32(np.floor(bufr_csv.df['ylc']))
     bufr_csv.df['j0'] = np.int32(np.floor(bufr_csv.df['xlc']))
 
@@ -213,6 +184,11 @@ for i in range(ntimes):
         print('Finished performing map projection and computing horiz interp weights (time = %.3f s)' % 
               (dt.datetime.now() - start_map_proj).total_seconds())
         print('# BUFR entries remaining = %d' % len(bufr_csv.df))
+
+    # Sort DataFrame by descending pressure. Don't drop the original indices, b/c we'll sort the
+    # DataFrame based on these indices later
+    bufr_csv.df.sort_values(['SID', 'POB'], ascending=False, inplace=True)
+    bufr_csv.df.reset_index(inplace=True)
 
     # Create output DataFrame
     out_df = bufr_csv.df.copy()
@@ -248,115 +224,124 @@ for i in range(ntimes):
     nsonde = len(all_sid)
     print('number of radiosondes = %d' % nsonde)
 
-    # Create arrays of radiosonde locations and times. These will be used in the while loop below
+    # Create arrays of radiosonde locations, times, indices, and surface values. These will be used 
+    # in the while loop below. Note that the units for the (x, y) coordinates are in gridpoints, NOT
+    # km. To get the coordinates in km, multiply by wrf_dx.
     adpupa_x = np.zeros(len(all_sid))
     adpupa_y = np.zeros(len(all_sid))
     adpupa_t_s = np.zeros(len(all_sid))
+    adpupa_idx = np.zeros(len(all_sid), dtype=int)
+    adpupa_last_idx = np.zeros(len(all_sid), dtype=int)
+    adpupa_sfch = np.zeros(len(all_sid))
+    adpupa_sfcp = np.zeros(len(all_sid))
     for j, sid in enumerate(all_sid):
-        idx_sid = (out_df['SID'] == sid).index[0]
-        adpupa_x[j], adpupa_y[j] = mp.ll_to_xy_lc(out_df['YOB'].iloc[idx_sid], 
-                                                  out_df['XOB'].iloc[idx_sid] - 360.)
+        idx_sid = out_df.loc[out_df['SID'] == sid].index[0]
+        adpupa_x[j] = out_df['xlc'].iloc[idx_sid]
+        adpupa_y[j] = out_df['ylc'].iloc[idx_sid]
         adpupa_t_s[j] = out_df['DHR'].iloc[idx_sid] * 3600.
+        adpupa_idx[j] = idx_sid
+        adpupa_last_idx[j] = out_df.loc[out_df['SID'] == sid].index[-1]
 
     # Start loop over each time window between wrfnat times
     fields2D = ['PRES_P0_L1_GLC0', 'HGT_P0_L1_GLC0']
-    fields3D = ['PRES_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
-    j = 0
+    fields3D = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
+    ob_fields = ['POB', 'TOB', 'UOB', 'VOB']
+    itime = 0
+    wrf_data = {}
     while len(done_sid) < nsonde:
-        time_start_jiter = dt.datetime.now()
+        time_start_itime = dt.datetime.now()
+        print()
 
         # Update the first wrfnat file to be the second wrfnat file from the previous iteration
-        if j > 0:
-            wrf_hr1 = wrf_hr2
-            wrf_t1 = wrf_t2
-            wrf_ds1 = wrf_ds2
-            wrf_data1 = wrf_data2
+        if itime > 0:
+            del wrf_data[wrf_hr[0]]
+            wrf_hr[0] = wrf_hr[1]
+            wrf_t[0] = wrf_t[1]
+            wrf_ds[0] = wrf_ds[1]
+            print('top of itime loop (itime = %d, wrf_hr[0] = %.2f)' % (itime, wrf_hr[0]))
         else:
-            wrf_data1 = {}
-            for f in field2D:
+            print('top of itime loop (itime = %d, wrf_hr[0] = %.2f)' % (itime, wrf_hr[0]))
+            wrf_data[wrf_hr[0]] = {}
+            for f in fields2D:
                 print('extracting %s' % f)
-                wrf_data1[f] = wrf_ds1[f][::thin, ::thin].values
-            for f in field3D:
+                wrf_data[wrf_hr[0]][f] = wrf_ds[0][f][::thin, ::thin].values
+            for f in fields3D:
                 print('extracting %s' % f)
-                wrf_data1[f] = wrf_ds1[f][:, ::thin, ::thin].values
+                wrf_data[wrf_hr[0]][f] = wrf_ds[0][f][:, ::thin, ::thin].values
+            xmax = wrf_data[wrf_hr[0]][fields2D[0]].shape[1]
+            ymax = wrf_data[wrf_hr[0]][fields2D[0]].shape[0]
 
-        # Extract datafor the next wrfnat file
-        wrf_hr2 = wrf_hr1 + (wrf_step / 60.)
-        wrf_t2 = t + dt.timedelta(hours=wrf_hr2)
-        wrf_ds2 = xr.open_dataset(wrf_dir + wrf_t2.strftime('wrfnat_%Y%m%d%H%M.grib2'), 
-                                  engine='pynio')
-        wrf_data2 = {}
-        for f in field2D:
+        # Extract data for the next wrfnat file
+        wrf_hr[1] = wrf_hr[0] + (wrf_step / 60.)
+        wrf_t[1] = t + dt.timedelta(hours=wrf_hr[1])
+        wrf_ds[1] = xr.open_dataset(wrf_dir + wrf_t[1].strftime('wrfnat_%Y%m%d%H%M.grib2'), 
+                                    engine='pynio')
+        wrf_data[wrf_hr[1]] = {}
+        for f in fields2D:
             print('extracting %s' % f)
-            wrf_data2[f] = wrf_ds2[f][::thin, ::thin].values
-        for f in field3D: 
+            wrf_data[wrf_hr[1]][f] = wrf_ds[1][f][::thin, ::thin].values
+        for f in fields3D: 
             print('extracting %s' % f)
-            wrf_data2[f] = wrf_ds2[f][:, ::thin, ::thin].values
+            wrf_data[wrf_hr[1]][f] = wrf_ds[1][f][:, ::thin, ::thin].values
         
-         if debug > 0:
+        if debug > 0:
             time_extract = dt.datetime.now()
-            print('time to extract fields = %.6f s' % (time_extract - time_start_jiter).total_seconds())
+            print('time to extract fields = %.6f s' % (time_extract - time_start_itime).total_seconds())
             for l in os.popen('free -t -m -h').readlines():
                 print(l) 
-            print()
 
         # Loop over each sounding station, skipping those that are done
         for idx_sid, sid in enumerate(all_sid): 
             if sid in done_sid:
                 continue
+            if adpupa_t_s[idx_sid] > (wrf_hr[1] * 3600.):
+                continue
+            print()
+            print('SID = %s' % sid)
 
-            """
-            End here on 3/15/2023! Last thing I did was turn adpupa_x, adpupa_y, and adpupa_t_s
-            into arrays
-            """
+            # Find first pressure level that lies above the surface if not done so already
+            ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
+            if np.isclose(adpupa_sfch[idx_sid], 0):
+                adpupa_sfch[idx_sid] = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', 
+                                                        out_df.iloc[adpupa_idx[idx_sid]], ihr, 
+                                                        twgt)
+                adpupa_sfcp[idx_sid] = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', 
+                                                        out_df.iloc[adpupa_idx[idx_sid]], ihr, 
+                                                        twgt) * 1e-2
+            
+                indices = out_df.loc[out_df['SID'] == sid].index.values
+                for k in indices:
+                    if ((out_df.loc[k, 'ZOB'] < adpupa_sfch[idx_sid]) or 
+                        (out_df.loc[k, 'POB'] > adpupa_sfcp[idx_sid])):
+                        drop_idx.append(k)
+                        continue
+                    else:
+                        adpupa_idx[idx_sid] = k
+                        break
 
-            single_df = out_df.loc[out_df['SID'] == sid].copy()
-            single_df.sort_values('POB', ascending=False)
-            adpupa_x, adpupa_y = mp.ll_to_xy_lc(single_df['YOB'].iloc[0], 
-                                                single_df['XOB'].iloc[0] - 360.)
-            adpupa_t_s = single_df['DHR'].iloc[0] * 3600.
-
-            ihr = np.where(wrf_sec <= adpupa_t_s)[0][-1]
-            wrf_t1_s = wrf_sec[ihr]
-            wrf_t2_s = wrf_sec[ihr+1]
-
-            # Find first pressure level that lies above the surface
-            ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s / 3600.)
-            sfch = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', single_df.iloc[0], ihr, 
-                                         twgt)
-            sfcp = cou.interp_wrf_to_obs(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', single_df.iloc[0], ihr, 
-                                         twgt) * 1e-2
-            indices = single_df.index.copy()
-            for k in indices:
-                if (out_df.loc[k, 'ZOB'] < sfch) or (out_df.loc[k, 'POB'] > sfcp):
-                    drop_idx.append(k)
-                    single_df.drop(k)
-                    continue
-                else:
-                    break
-
-            if debug > 1:
-                time_sfc = dt.datetime.now()
-                print('done determining sfch and sfcp (%.6f s)' % (time_sfc - time_extract).total_seconds())
+                if debug > 1:
+                    time_sfc = dt.datetime.now()
+                    print('done determining sfch and sfcp (%.6f s)' % (time_sfc - time_extract).total_seconds())
     
             # Now, we're ready to compute the radiosonde obs, starting from the lowest pressure level
-            sorted_idx = single_df.index
-            for n, k in enumerate(sorted_idx):
+            k = adpupa_idx[idx_sid]
+            while (k <= adpupa_last_idx[idx_sid] and adpupa_t_s[idx_sid] <= (wrf_hr[1] * 3600.)):
 
                 if debug > 1:
                     kloop_start = dt.datetime.now()
+                    print('k = %d' % k)
 
                 # Save radiosonde location
                 if save_debug_df:
-                    out_df.loc[k, 'adpupa_x'] = adpupa_x
-                    out_df.loc[k, 'adpupa_y'] = adpupa_y
-                    out_df.loc[k, 'adpupa_t_s'] = adpupa_t_s
+                    out_df.loc[k, 'adpupa_x'] = adpupa_x[idx_sid]
+                    out_df.loc[k, 'adpupa_y'] = adpupa_y[idx_sid]
+                    out_df.loc[k, 'adpupa_t_s'] = adpupa_t_s[idx_sid]
 
                 # Determine weights for interpolation
-                out_df.loc[k, 'i0'] = np.int32(np.floor(adpupa_y)) 
-                out_df.loc[k, 'j0'] = np.int32(np.floor(adpupa_x))
-                out_df.loc[k, 'iwgt'] = 1. - (adpupa_y - out_df.loc[k, 'i0']) 
-                out_df.loc[k, 'jwgt'] = 1. - (adpupa_x - out_df.loc[k, 'j0']) 
+                out_df.loc[k, 'i0'] = np.int32(np.floor(adpupa_y[idx_sid])) 
+                out_df.loc[k, 'j0'] = np.int32(np.floor(adpupa_x[idx_sid]))
+                out_df.loc[k, 'iwgt'] = 1. - (adpupa_y[idx_sid] - out_df.loc[k, 'i0']) 
+                out_df.loc[k, 'jwgt'] = 1. - (adpupa_x[idx_sid] - out_df.loc[k, 'j0']) 
             
                 prs_f = 'PRES_P0_L105_GLC0'
                 p1d = 1e-2 * (twgt * cou._bilinear_interp_horiz(wrf_data[wrf_hr[ihr]][prs_f], 
@@ -369,19 +354,22 @@ for i in range(ntimes):
                                                                      out_df.loc[k, 'jwgt'],
                                                                      out_df.loc[k, 'i0'], 
                                                                      out_df.loc[k, 'j0'], threeD=True))
-            
+
                 # Check for extrapolation
                 if (p1d[0] > out_df.loc[k, 'POB']):
                     out_df.loc[k, 'pi0'] = np.where(p1d > out_df.loc[k, 'POB'])[0][-1]
                     if debug > 1:
                         print('pi0 = %d' % out_df.loc[k, 'pi0'])
                     if out_df.loc[k, 'pi0'] >= (p1d.size - 1):
-                        # Prevent extrapolation in vertical
-                        drop_idx.append(k)
-                        continue
+                        # Balloon has exited the top of the domain
+                        drop_idx = drop_idx + list(range(k, adpupa_last_idx[idx_sid]+1))
+                        done_sid.append(sid)
+                        print('RAOB %s exited top of domain' % sid)
+                        break
                     out_df.loc[k, 'POB'], out_df.loc[k, 'pwgt'] = cou.interp_wrf_p1d(p1d, out_df.loc[k])
                 else:
                     drop_idx.append(k)
+                    k = k + 1
                     continue
 
                 if debug > 1:
@@ -391,44 +379,52 @@ for i in range(ntimes):
                     print('time to determine interpolation wgts = %.6f s' % (time_wgts - kloop_start).total_seconds())
 
                 # Interpolate to observation location
-                for ob, f in zip(['UOB', 'VOB'], fields3D[1:]):
+                tmp_sonde_vals = {}
+                for ob, f in zip(ob_fields[1:], fields3D[1:]):
+                    tmp_sonde_vals[ob] = (twgt * cou.interp_x_y_z(wrf_data[wrf_hr[ihr]][f], out_df.loc[k]) +
+                                          (1.-twgt) * cou.interp_x_y_z(wrf_data[wrf_hr[ihr+1]][f], out_df.loc[k]))
                     if not np.isnan(out_df.loc[k, ob]):
-                        out_df.loc[k, ob] = (twgt * cou.interp_wrf_3d(wrf_data[wrf_hr[ihr]][f], out_df.loc[k]) +
-                                             (1.-twgt) * cou.interp_wrf_3d(wrf_data[wrf_hr[ihr+1]][f], out_df.loc[k]))
+                        out_df.loc[k, ob] = tmp_sonde_vals[ob]
+
                 if debug > 1:
                     time_interp = dt.datetime.now()
-                    print('finished interp for U and V (%.6f s)' % (time_interp - time_wgts).total_seconds())
+                    print('finished interp for T, U, and V (%.6f s)' % (time_interp - time_wgts).total_seconds())
             
                 # Update (x, y) coordinate for next observation
-                if k != sorted_idx[-1]:
-                    delta_p = single_df['POB'].iloc[n+1] - out_df[k, 'POB']
+                if k == adpupa_last_idx[idx_sid]:
+                    done_sid.append(idx_sid)
+                    break
+                else:
+                    delta_p = out_df.loc[k+1, 'POB'] - out_df.loc[k, 'POB']
                     if np.isclose(delta_p, 0):
+                        k = k + 1
                         continue
-                    omega = -1e-2 * g * ascent_spd * out_df.loc[k, 'POB'] / (Rd * out_df.loc[k, 'TOB'])
+                    omega = -g * ascent_spd * out_df.loc[k, 'POB'] / (Rd * tmp_sonde_vals['TOB'])
                     delta_t = delta_p / omega
-                    adpupa_x = adpupa_x + (1e3 * out_df.loc[k, 'UOB'] * delta_t)
-                    adpupa_y = adpupa_y + (1e3 * out_df.loc[k, 'VOB'] * delta_t)
-                    adpupa_t_s = adpupa_t_s + delta_t
-     
-                    # Switch to next radiosonde if balloon exits the subdomain
-                    if ((adpupa_x < 0) or (adpupa_y < 0) or (adpupa_x > (2*subdomain_half_size)) or
-                        (adpupa_y > (2*subdomain_half_size))):
-                        drop_idx = drop_idx + list(sorted_idx[n+1:])
+                    adpupa_x[idx_sid] = adpupa_x[idx_sid] + (1e-3 * tmp_sonde_vals['UOB'] * delta_t / wrf_dx)
+                    adpupa_y[idx_sid] = adpupa_y[idx_sid] + (1e-3 * tmp_sonde_vals['VOB'] * delta_t / wrf_dx)
+                    adpupa_t_s[idx_sid] = adpupa_t_s[idx_sid] + delta_t    
+ 
+                    # Switch to next radiosonde if balloon exits the domain
+                    if ((adpupa_x[idx_sid] < 0) or (adpupa_x[idx_sid] > xmax) or 
+                        (adpupa_x[idx_sid] < 0) or (adpupa_y[idx_sid] > ymax)):
+                        drop_idx = drop_idx + list(range(k+1, adpupa_last_idx[idx_sid]+1))
+                        done_sid.append(idx_sid)
+                        print('RAOB %s exited lateral boundaries of domain' % sid)
                         break
  
-                    # Update ihr if needed
-                    if adpupa_t_s > wrf_t2_s:
-                        ihr = ihr + 1
-                        wrf_t1_s = wrf_sec[ihr] 
-                        wrf_t2_s = wrf_sec[ihr+1]
+                    # If final time within this window, save final index for next time window 
+                    k = k + 1
+                    if (adpupa_t_s[idx_sid] > (wrf_hr[1] * 3600.)):
+                        adpupa_idx[idx_sid] = k
  
                 if debug > 1:
                     time_advect = dt.datetime.now()
-                    entry_times.append(time_advect - kloop_start)
+                    entry_times.append((time_advect - kloop_start).total_seconds())
                     print('finished advecting radiosonde (%.6f s)' % (time_advect - time_interp).total_seconds())
 
-        j = j + 1
-
+        itime = itime + 1
+    '''
     # Drop rows that we skipped
     out_df.drop(index=drop_idx, inplace=True)
     out_df.reset_index(drop=True, inplace=True)
@@ -447,11 +443,17 @@ for i in range(ntimes):
     out_df.drop(labels=extra_col_int, axis=1, inplace=True)
     out_df.drop(labels=extra_col_float, axis=1, inplace=True)
 
+    # Use original indices to sort DataFrames
+    out_df.sort_values('index', inplace=True)
+    out_df.drop(labels=['index'], axis=1, inplace=True)
+    bufr_csv.df.sort_values('index', inplace=True)
+    bufr_csv.df.drop(labels=['index'], axis=1, inplace=True)
+
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
     bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.adpupa.csv'))
     bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.adpupa.csv'))
-
+    '''
     # Timing
     print()
     print('time for this BUFR file = %.6f s' % (dt.datetime.now() - start_loop).total_seconds())
@@ -459,7 +461,7 @@ for i in range(ntimes):
 if debug > 1:
     print()
     if len(entry_times) > 0:
-        print('avg time per entry = %.6f s' % (s, np.mean(np.array(entry_times))))
+        print('avg time per entry = %.6f s' % np.mean(np.array(entry_times)))
 
 # Total timing
 print()

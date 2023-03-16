@@ -43,6 +43,29 @@ def determine_twgt(wrf_hr, dhr):
     return ihr, twgt
 
 
+def _linear_interp(val1, val2, wgt):
+    """
+    Interpolate linearly between two values given a specific weight
+
+    Inputs
+    ------
+    val1 : float or array
+        Value(s) with weight 'wgt'
+    val2 : float or array
+        Value(s) with weight '1-wgt'
+    wgt : float
+        Interpolation weight
+
+    Returns
+    -------
+    val : float
+        Interpolated value
+
+    """
+
+    return (val1 * wgt) + (val2 * (1. - wgt))
+
+
 def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
     """
     Interpolate the given field in the horizontal
@@ -84,12 +107,7 @@ def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
 
     return val
 
-
-def _log_interp(val1, val2, wgt1):
-
-    return (val1**wgt1) * (val2**(1.-wgt1))
-
-
+'''
 def _interp_x_y_t(field1, field2, iwgt, jwgt, twgt, i0, j0, threeD=False):
     """
     Interpolate linearly in the horizontal and time dimensions
@@ -118,8 +136,8 @@ def _interp_x_y_t(field1, field2, iwgt, jwgt, twgt, i0, j0, threeD=False):
            (1.-twgt) * _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD))
 
     return val
-
-
+'''
+'''
 def _interp_x_y_z(field, iwgt, jwgt, pwgt, i0, j0, pi0):
     """
     Interpolate linearly in the horizontal dimensions and logarithmically in pressure
@@ -140,13 +158,14 @@ def _interp_x_y_z(field, iwgt, jwgt, pwgt, i0, j0, pi0):
 
     """
 
-    val = _log_interp(_bilinear_interp_horiz(field[pi0, :, :], iwgt, jwgt, i0, j0),
-                      _bilinear_interp_horiz(field[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
+    val = _linear_interp(_bilinear_interp_horiz(field[pi0, :, :], iwgt, jwgt, i0, j0),
+                         _bilinear_interp_horiz(field[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
 
     return val
+'''
 
-
-def interp_wrf_to_obs(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
+#def interp_wrf_to_obs(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
+def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
     """
     Wrapper function for interpolation in x, y, and t
 
@@ -174,14 +193,21 @@ def interp_wrf_to_obs(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False)
 
     """
 
-    val = _interp_x_y_t(wrf_data[wrf_hr[ihr]][var], wrf_data[wrf_hr[ihr+1]][var], twgt,
-                        ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['i0'], ob_subset['j0'],
-                        threeD=threeD)
+    field1 = wrf_data[wrf_hr[ihr]][var]
+    field2 = wrf_data[wrf_hr[ihr+1]][var]
+    iwgt = ob_subset['iwgt']
+    jwgt = ob_subset['jwgt']
+    i0 = ob_subset['i0']
+    j0 = ob_subset['j0']
+
+    val = _linear_interp(_bilinear_interp_horiz(field1, iwgt, jwgt, i0, j0, threeD=threeD),
+                         _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD), twgt)
 
     return val
 
 
-def interp_wrf_3d(wrf3d, ob_subset):
+#def interp_wrf_3d(wrf3d, ob_subset):
+def interp_x_y_z(wrf3d, ob_subset):
     """
     Wrapper function for interpolation in x, y, and p
 
@@ -198,9 +224,18 @@ def interp_wrf_3d(wrf3d, ob_subset):
         UPP output linearly interpolated in x, y, and p to the observation location
 
     """
+    
+    iwgt = ob_subset['iwgt']
+    jwgt = ob_subset['jwgt']
+    pwgt = ob_subset['pwgt']
+    i0 = ob_subset['i0']
+    j0 = ob_subset['j0']
+    pi0 = ob_subset['pi0']
 
-    val = _interp_x_y_z(wrf3d, ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['pwgt'],
-                        ob_subset['i0'], ob_subset['j0'], ob_subset['pi0'])
+    val = _linear_interp(_bilinear_interp_horiz(wrf3d[pi0, :, :], iwgt, jwgt, i0, j0),
+                         _bilinear_interp_horiz(wrf3d[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
+    #val = _interp_x_y_z(wrf3d, ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['pwgt'],
+    #                    ob_subset['i0'], ob_subset['j0'], ob_subset['pi0'])
 
     return val
 
@@ -221,13 +256,13 @@ def interp_wrf_p1d(p1d, ob_subset):
     val : float
         UPP output logarithmically interpolated in p to the observation location
     pwgt : float
-        Weight used to logarithmic interpolation
+        Weight used for interpolation
 
     """
 
     pi0 = ob_subset['pi0']
-    pwgt = (p1d[pi0+1] - ob_subset['POB']) / (p1d[pi0+1] - p1d[pi0])
-    val = _log_interp(p1d[pi0], p1d[pi0+1], pwgt)
+    pwgt = np.log10(p1d[pi0+1] / ob_subset['POB']) / np.log10(p1d[pi0+1] / p1d[pi0])
+    val = _linear_interp(p1d[pi0], p1d[pi0+1], pwgt)
 
     return val, pwgt
 
