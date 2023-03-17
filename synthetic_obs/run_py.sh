@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #SBATCH -A wrfruc
-#SBATCH -t 02:00:00
+#SBATCH -t 03:00:00
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --mem=25GB
 
@@ -10,7 +10,7 @@ date
 #pygraf
 adb_graphics
 
-python create_conv_obs_map_proj.py
+python create_adpupa_obs.py
 
 report-mem
 date

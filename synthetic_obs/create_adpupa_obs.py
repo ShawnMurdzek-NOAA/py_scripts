@@ -52,10 +52,10 @@ wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/'
 #wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
 
 # Directory containing real prepbufr CSV output
-#bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/obs_rap/'
+bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/obs_rap/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
 #bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
-bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/test/'
+#bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/test/'
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
@@ -155,8 +155,8 @@ for i in range(ntimes):
 
     # Extract size of latitude and longitude grids
     shape = wrf_ds[0]['gridlat_0'].shape
-    imax = shape[0] - 2
-    jmax = shape[1] - 2
+    imax = (shape[0] - 2) / wrf_dx
+    jmax = (shape[1] - 2) / wrf_dx
     
     # Compute (x, y) coordinates of obs using a Lambert Conformal projection
     # Remove obs outside of the wrfnat domain (second, precise pass)
@@ -244,8 +244,9 @@ for i in range(ntimes):
 
     # Start loop over each time window between wrfnat times
     fields2D = ['PRES_P0_L1_GLC0', 'HGT_P0_L1_GLC0']
-    fields3D = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
-    ob_fields = ['POB', 'TOB', 'UOB', 'VOB']
+    fields3D = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0',
+                'SPFH_P0_L105_GLC0', 'HGT_P0_L105_GLC0']
+    ob_fields = ['POB', 'TOB', 'UOB', 'VOB', 'QOB', 'ZOB']
     itime = 0
     wrf_data = {}
     while len(done_sid) < nsonde:
@@ -310,18 +311,19 @@ for i in range(ntimes):
                                                         twgt) * 1e-2
             
                 indices = out_df.loc[out_df['SID'] == sid].index.values
+                out_df.loc[indices, 'ELV'] = adpupa_sfch[idx_sid]
                 for k in indices:
-                    if ((out_df.loc[k, 'ZOB'] < adpupa_sfch[idx_sid]) or 
-                        (out_df.loc[k, 'POB'] > adpupa_sfcp[idx_sid])):
+                    if (out_df.loc[k, 'POB'] > adpupa_sfcp[idx_sid]):
                         drop_idx.append(k)
-                        continue
                     else:
                         adpupa_idx[idx_sid] = k
                         break
 
                 if debug > 1:
                     time_sfc = dt.datetime.now()
-                    print('done determining sfch and sfcp (%.6f s)' % (time_sfc - time_extract).total_seconds())
+                    print('done determining sfch and sfcp (%.2f, %.2f, %.6f s)' % 
+                          (adpupa_sfch[idx_sid], adpupa_sfcp[idx_sid], 
+                           (time_sfc - time_extract).total_seconds()))
     
             # Now, we're ready to compute the radiosonde obs, starting from the lowest pressure level
             k = adpupa_idx[idx_sid]
@@ -329,7 +331,6 @@ for i in range(ntimes):
 
                 if debug > 1:
                     kloop_start = dt.datetime.now()
-                    print('k = %d' % k)
 
                 # Save radiosonde location
                 if save_debug_df:
@@ -392,7 +393,7 @@ for i in range(ntimes):
             
                 # Update (x, y) coordinate for next observation
                 if k == adpupa_last_idx[idx_sid]:
-                    done_sid.append(idx_sid)
+                    done_sid.append(sid)
                     break
                 else:
                     delta_p = out_df.loc[k+1, 'POB'] - out_df.loc[k, 'POB']
@@ -409,7 +410,7 @@ for i in range(ntimes):
                     if ((adpupa_x[idx_sid] < 0) or (adpupa_x[idx_sid] > xmax) or 
                         (adpupa_x[idx_sid] < 0) or (adpupa_y[idx_sid] > ymax)):
                         drop_idx = drop_idx + list(range(k+1, adpupa_last_idx[idx_sid]+1))
-                        done_sid.append(idx_sid)
+                        done_sid.append(sid)
                         print('RAOB %s exited lateral boundaries of domain' % sid)
                         break
  
@@ -424,7 +425,7 @@ for i in range(ntimes):
                     print('finished advecting radiosonde (%.6f s)' % (time_advect - time_interp).total_seconds())
 
         itime = itime + 1
-    '''
+    
     # Drop rows that we skipped
     out_df.drop(index=drop_idx, inplace=True)
     out_df.reset_index(drop=True, inplace=True)
@@ -437,6 +438,9 @@ for i in range(ntimes):
     out_df['ELV'] = np.int64(out_df['ELV'])
 
     if save_debug_df:
+        # Convert (x, y) coords back to km
+        out_df['adpupa_x'] = out_df['adpupa_x'] * wrf_dx
+        out_df['adpupa_y'] = out_df['adpupa_y'] * wrf_dx
         bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.debug.adpupa.csv'))
     
     # Drop the extra columns we added
@@ -453,7 +457,7 @@ for i in range(ntimes):
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
     bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.adpupa.csv'))
     bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.adpupa.csv'))
-    '''
+    
     # Timing
     print()
     print('time for this BUFR file = %.6f s' % (dt.datetime.now() - start_loop).total_seconds())

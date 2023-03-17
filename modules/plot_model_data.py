@@ -316,7 +316,7 @@ class PlotOutput():
         self.ax = self.fig.add_subplot(self.nrows, self.ncols, self.n, projection=self.proj) 
 
 
-    def config_ax(self, coastlines=True, states=True, grid=True):
+    def config_ax(self, coastlines=True, states=True, grid=True, scale='50m', line_kw={}):
         """
         Add cartopy features to plotting axes. Axes must be defined first.
 
@@ -326,18 +326,27 @@ class PlotOutput():
             Option to add coastlines
         states : boolean, optional
             Option to add state borders
+        grid : boolean, optional
+            Option to add map grid
+        scale : boolean, optional
+            Scale of CartoPy features. Typical options are '10m', '50m', and '110m'
+        line_kw : dictionary, optional
+            Additional keyword arguments to pass to coastlines() and add_feature()
 
         """
-         
+        
+        if len(line_kw) == 0:
+            line_kw = {'linewidth':0.5, 'edgecolor':'k'}
+
         if coastlines:
-            self.ax.coastlines('50m')
+            self.ax.coastlines(scale, **line_kw)
 
         if states:
             borders = cfeature.NaturalEarthFeature(category='cultural',
-                                                   scale='50m',
+                                                   scale=scale,
                                                    facecolor='none',
                                                    name='admin_1_states_provinces')
-            self.ax.add_feature(borders, linewidth=0.5, edgecolor='k')
+            self.ax.add_feature(borders, **line_kw)
 
         if grid:
             self.ax.gridlines()
