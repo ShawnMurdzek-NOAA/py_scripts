@@ -25,8 +25,10 @@ import plot_model_data as pmd
 #---------------------------------------------------------------------------------------------------
 
 # UPP output files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291200.grib2'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data/20220429/2211911000001.grib2'
+#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291200.grib2'
+#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data/20220429/2211911000001.grib2'
+fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_spring/wrfnat_202205041900.grib2'
+fname2 = '/scratch1/BMC/wrfruc/murdzek/HRRR_data/2211911000001.grib2'
 
 # Field and level to plot (set level to np.nan for a 2D field)
 field = 'HGT_P0_L1_GLC0'
@@ -34,8 +36,8 @@ zind = np.nan
 
 # Colorbar and contour levels
 cmap = 'plasma'
-vmin = 0
-vmax = 600
+vmin = 1300
+vmax = 3000
 extend = 'max'
 
 # Titles
@@ -43,11 +45,15 @@ name1 = '1-km WRF'
 name2 = '3-km HRRR'
 
 # Domain limits
-lon = [-75.3, -73]
-lat = [39.7, 41.8]
+lon = [-105.5, -105]
+lat = [39.75, 40.2]
 
-# Output file name (must be a PDF)
-save_fname = './terrain_1km_3km.png'
+# Single points to plot
+lon_pts = [-105.2705, -105.1686]
+lat_pts = [40.0150, 39.9528]
+
+# Output file name
+save_fname = './terrain_1km_3km_CO.png'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -62,6 +68,8 @@ for j, (f, n) in enumerate(zip([fname1, fname2], [name1, name2])):
     out = pmd.PlotOutput([ds[-1]], 'upp', fig, 1, 2, j+1)
     out.pcolormesh(field, pcm_kw={'cmap':cmap, 'vmin':vmin, 'vmax':vmax}, 
                    ingest_kw={'zind':zind}, cbar_kw={'orientation':'horizontal', 'aspect':20})
+    for x, y in zip(lon_pts, lat_pts):
+        out.plot(x, y, plt_kw={'markersize':12, 'marker':'*', 'color':'w'})
     out.ax.coastlines('10m', edgecolor='w', linewidth=0.75)
     borders = cfeature.NaturalEarthFeature(category='cultural',
                                            scale='10m',
