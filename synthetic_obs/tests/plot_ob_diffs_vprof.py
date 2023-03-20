@@ -21,19 +21,25 @@ import numpy as np
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
+#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
+#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
 #fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
 #fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.adpupa.csv'
+fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.adpupa.csv'
 
 # Output file name
 save_fname = './ob_diffs_vprof.png'
 
 # Observation subsets
-subsets = ['ADPUPA', 'AIRCAR', 'AIRCFT']
+subsets = ['ADPUPA']
 
 # Variables to plot
 obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+
+# Bins for binning each variable in the vertical. First entry is left-most edge whereas all 
+# subsequent entries are the right edge of the bin. Must be in descending order.
+pbins = np.arange(1050, 95, -10)
 
 # Title
 title = 'synthetic obs $-$ real obs'
@@ -83,11 +89,27 @@ for i, v in enumerate(obs_vars):
         diff = bufr_df1.df[v] - bufr_df2.df[v]
         pres = bufr_df1.df['POB'].values
     
-    ax.plot(diff, np.log10(pres), 'b.')
+    # Compute various percentiles for each bin along the pressure coordinate
+    var_percentiles = {}
+    pcts = [0, 10, 25, 50, 75, 90, 100]
+    for p in pcts:
+        var_percentiles[p] = np.ones(len(pbins)-1) * np.nan
+    for j, (prs1, prs2) in enumerate(zip(pbins[:-1], pbins[1:])):
+        subset = diff[np.logical_and(pres <= prs1, pres > prs2)]
+        if len(subset) > 0:
+            for p in pcts:
+                var_percentiles[p][j] = np.percentile(subset, p)
+
+    bin_ctr = np.log10(pbins[:-1] + (0.5 * (pbins[1:] - pbins[:-1])))
+    ax.plot(var_percentiles[50], bin_ctr, 'b-', lw=2)
+    ax.fill_betweenx(bin_ctr, var_percentiles[25], var_percentiles[75], color='b', alpha=0.4)
+    ax.fill_betweenx(bin_ctr, var_percentiles[10], var_percentiles[90], color='b', alpha=0.2)
+    ax.plot(var_percentiles[0], bin_ctr, 'b-', lw=0.75)
+    ax.plot(var_percentiles[100], bin_ctr, 'b-', lw=0.75)
     ax.axvline(0, c='k', lw='1')
     ax.grid()
 
-    ax.set_ylim([np.log10(1050), np.log10(100)])
+    ax.set_ylim([np.log10(pbins.max()), np.log10(pbins.min())])
     ticks = np.array([1000, 850, 700, 500, 400, 300, 200, 100])
     ax.set_yticks(np.log10(ticks))
     ax.set_yticklabels(ticks)

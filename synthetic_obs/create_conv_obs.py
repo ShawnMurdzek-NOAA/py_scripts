@@ -28,7 +28,7 @@ Passed Arguments:
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
-Environment: adb_graphics (Jet) or pygraf (Hera)
+Environment: adb_graphics (Jet) or pygraf (Hera, Orion, Hercules)
 RAM Required: 25 GB
 """
 
@@ -52,27 +52,25 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/mnt/lfs4'
+work = '/work2/noaa'
 
 # Directory containing wrfnat output from UPP
 #wrf_dir = sys.argv[1]
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP/'
-#wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
+wrf_dir = work + '/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
 #bufr_df = sys.argv[2]
-bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/sample_real_obs/test/'
+bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap/'
+#bufr_dir = work + '/wrfruc/murdzek/py_scripts/synthetic_obs/'
+#bufr_dir = work + '/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
+#bufr_dir = work + '/wrfruc/murdzek/sample_real_obs/test/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
 #fake_bufr_dir = sys.argv[3]
-fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
-#fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
+fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
 
 # Start and end times for prepbufrs. Step is in min
 #bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d')

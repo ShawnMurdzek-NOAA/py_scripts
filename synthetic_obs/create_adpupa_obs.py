@@ -389,7 +389,7 @@ for i in range(ntimes):
 
                 if debug > 1:
                     time_interp = dt.datetime.now()
-                    print('finished interp for T, U, and V (%.6f s)' % (time_interp - time_wgts).total_seconds())
+                    print('finished interp for T, Q, U, V, and Z (%.6f s)' % (time_interp - time_wgts).total_seconds())
             
                 # Update (x, y) coordinate for next observation
                 if k == adpupa_last_idx[idx_sid]:

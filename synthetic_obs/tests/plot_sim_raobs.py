@@ -22,10 +22,11 @@ from metpy.units import units
 #---------------------------------------------------------------------------------------------------
 
 # BUFR CSV file with simulated radiosonde data (this should be the "full" DataFrame for debugging)
-raob_bufr = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.debug.adpupa.csv'
+#raob_bufr = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.debug.adpupa.csv'
+raob_bufr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.debug.adpupa.csv'
 
 # Station IDs to plot
-sid = [72476, 72520]
+sid = [72476, 72520, 72694, 72649, 72202, 72456, 74389]
 
 # Thinning wind barbs
 thin = 4
@@ -42,6 +43,7 @@ raob_df = pd.read_csv(raob_bufr)
 
 # Plot data from each radiosonde
 for s in sid:
+    print('plotting RAOB for %d' % s)
     subset = raob_df.loc[raob_df['SID'] == s]
     fig = plt.figure(figsize=(12, 8))
 
