@@ -11,19 +11,18 @@ To use this utility, do the following:
 2. Run ./prepbufr_decode_csv.x
 3. Move resulting CSV file to wherever you choose
 
-This code uses UPP output on WRF native levels (wrfnat). This is likely more efficient than using 
-the wrfred files, which can take some time (and a lot of memory) to create.
-
-Debugging Notes:
-
-1. In IPython, the command `%whos` can be used to view all variables in the namespace, which can be
-    used to determine which variables are sucking down a lot of RAM.
-
-Resources: Most of the tests I have done with this program use 25-30 GB of RAM
+Passed Arguments:
+    argv[1] = Time for first prepbufr file (YYYYMMDD)
+    argv[2] = Time for last prepbufr file (YYYYMMDD)
+    argv[3] = Time between prepbufr files (s)
+    argv[4] = Time for first UPP file (YYYYMMDD)
+    argv[5] = Time for last UPP file (YYYYMMDD)
+    argv[6] = Time between UPP files (s)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 27 February 2023
-Environment: adb_graphics (Jet) or pygraf (Hera)
+Environment: adb_graphics (Jet) or pygraf (Hera, Orion, Hercules)
+RAM: 25 GB
 """
 
 #---------------------------------------------------------------------------------------------------
@@ -35,6 +34,7 @@ import numpy as np
 import datetime as dt
 import math
 import os
+import sys
 
 import create_ob_utils as cou 
 import bufr
@@ -45,31 +45,35 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/mnt/lfs4'
+work = '/work2/noaa'
 
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/UPP/20220429/'
-#wrf_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/output/202204291200/UPP/'
+wrf_dir = work + '/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/obs_rap/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/BMC/wrfruc/murdzek/real_obs/test/'
+bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
-#fake_bufr_dir = work + '/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/'
+fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime(2022, 4, 29, 12)
-bufr_end = dt.datetime(2022, 4, 29, 13)
+#bufr_start = dt.datetime.strptime(sys.argv[1], '%Y%m%d')
+#bufr_end = dt.datetime.strptime(sys.argv[2], '%Y%m%d')
+#bufr_step = float(sys.argv[3])
+bufr_start = dt.datetime(2022, 4, 30, 0)
+bufr_end = dt.datetime(2022, 4, 30, 1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-wrf_end = dt.datetime(2022, 4, 29, 15, 0)
+#wrf_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d')
+#wrf_end = dt.datetime.strptime(sys.argv[5], '%Y%m%d')
+#wrf_step = float(sys.argv[6])
+wrf_start = dt.datetime(2022, 4, 29, 22, 0)
+wrf_end = dt.datetime(2022, 4, 30, 2, 0)
 wrf_step = 15
+
+# Interpolation time range (min relative to DHR). Terminate radiosonde when it exits this range
+interp_range = [-30, 25]
 
 # Ascent rate for radiosonde. 5 m/s value comes from this NWS report: 
 # https://www.weather.gov/media/upperair/Documents/Radiosonde%20Ascent%20Rates.pdf
@@ -131,35 +135,22 @@ for i in range(ntimes):
     bufr_csv.df.reset_index(drop=True, inplace=True)
 
     # Open first wrfnat files
-    wrf_hr = [math.floor(bufr_csv.df['DHR'].min()*4) / 4, 0]
+    wrf_hr = [math.floor((bufr_csv.df['DHR'].min() + (interp_range[0] / 60))*4) / 4, 0]
+    wrf_t = [t + dt.timedelta(hours=wrf_hr[0]), 0]
+    wrf_ds = [xr.open_dataset(wrf_dir + wrf_t[0].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
+                              engine='pynio'), 0]
     print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
     print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
-    wrf_t = [t + dt.timedelta(hours=wrf_hr[0]), 0]
-    print(wrf_dir + wrf_t[0].strftime('wrfnat_%Y%m%d%H%M.grib2'))
-    wrf_ds = [xr.open_dataset(wrf_dir + wrf_t[0].strftime('wrfnat_%Y%m%d%H%M.grib2'), 
-                              engine='pynio'), 0]
-
+    print(wrf_dir + wrf_t[0].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'))
     print('time to open first GRIB file = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
-    # Remove obs outside of the spatial domain of the wrfnat files (first, inprecise pass)
-    latmin = wrf_ds[0]['gridlat_0'].min().values
-    latmax = wrf_ds[0]['gridlat_0'].max().values
-    lonmin = wrf_ds[0]['gridlon_0'].min().values + 360.
-    lonmax = wrf_ds[0]['gridlon_0'].max().values + 360.
-    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['XOB'] < lonmin, 
-                                                  bufr_csv.df['XOB'] > lonmax))[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
-    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['YOB'] < latmin, 
-                                                  bufr_csv.df['YOB'] > latmax))[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
-
     # Extract size of latitude and longitude grids
     shape = wrf_ds[0]['gridlat_0'].shape
     imax = (shape[0] - 2) / wrf_dx
     jmax = (shape[1] - 2) / wrf_dx
     
     # Compute (x, y) coordinates of obs using a Lambert Conformal projection
-    # Remove obs outside of the wrfnat domain (second, precise pass)
+    # Remove obs outside of the wrfnat domain
     if debug > 0:
         start_map_proj = dt.datetime.now()
         print('Performing map projection with obs...')
@@ -211,7 +202,7 @@ for i in range(ntimes):
 
 
     #-----------------------------------------------------------------------------------------------
-    # Create Obs Based on 3-D Fields
+    # Create Obs
     #-----------------------------------------------------------------------------------------------
 
     print()
@@ -238,7 +229,7 @@ for i in range(ntimes):
         idx_sid = out_df.loc[out_df['SID'] == sid].index[0]
         adpupa_x[j] = out_df['xlc'].iloc[idx_sid]
         adpupa_y[j] = out_df['ylc'].iloc[idx_sid]
-        adpupa_t_s[j] = out_df['DHR'].iloc[idx_sid] * 3600.
+        adpupa_t_s[j] = out_df['DHR'].iloc[idx_sid] * 3600. + (interp_range[0] * 60)
         adpupa_idx[j] = idx_sid
         adpupa_last_idx[j] = out_df.loc[out_df['SID'] == sid].index[-1]
 
@@ -275,7 +266,7 @@ for i in range(ntimes):
         # Extract data for the next wrfnat file
         wrf_hr[1] = wrf_hr[0] + (wrf_step / 60.)
         wrf_t[1] = t + dt.timedelta(hours=wrf_hr[1])
-        wrf_ds[1] = xr.open_dataset(wrf_dir + wrf_t[1].strftime('wrfnat_%Y%m%d%H%M.grib2'), 
+        wrf_ds[1] = xr.open_dataset(wrf_dir + wrf_t[1].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                                     engine='pynio')
         wrf_data[wrf_hr[1]] = {}
         for f in fields2D:
@@ -413,7 +404,17 @@ for i in range(ntimes):
                         done_sid.append(sid)
                         print('RAOB %s exited lateral boundaries of domain' % sid)
                         break
+
+                    # Switch to next radiosonde if time limit is reached
+                    if (adpupa_t_s[idx_sid] >= (interp_range[1] * 60)):
+                        drop_idx = drop_idx + list(range(k+1, adpupa_last_idx[idx_sid]+1))
+                        done_sid.append(sid)
+                        print('Time limit reached for %s' % sid)
+                        break
  
+                    # Update twgt
+                    ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
+
                     # If final time within this window, save final index for next time window 
                     k = k + 1
                     if (adpupa_t_s[idx_sid] > (wrf_hr[1] * 3600.)):

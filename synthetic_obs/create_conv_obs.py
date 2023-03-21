@@ -1,9 +1,11 @@
 """
 Create Perfect Simulated Conventional Observations from WRF Nature Run Output
 
-Conventional obs are written into a new CSV file. UAS obs can then be added later. Conventional
-observations include the following: ADPSFC, SFCSHP, MSONET, GPSIPW, ADPUPA, AIRCAR, AIRCFT. Obs
-errors are not included (i.e., the simulated obs are "perfect")
+Conventional obs are written into a new CSV file. Instrument errors and other obs (e.g.,  UAS) can 
+then be added later. Conventional observations include the following: ADPSFC, SFCSHP, MSONET, 
+GPSIPW, ADPUPA, AIRCAR, AIRCFT. Radiosonde drift is NOT accounted for in this program. Use
+create_adpupa_obs.py to create realistic radiosonde obs with drift included. Obs in this script
+are created used pure interpolation (linear in x, y, and t and logaritmic in p).
 
 Prepbufr CSV files for real observations can be created using GSI-utils/bin/prepbufr_decode_csv.x.
 To use this utility, do the following:
@@ -12,19 +14,10 @@ To use this utility, do the following:
 2. Run ./prepbufr_decode_csv.x
 3. Move resulting CSV file to wherever you choose
 
-This code uses UPP output on WRF native levels (wrfnat). This is likely more efficient than using 
-the wrfred files, which can take some time (and a lot of memory) to create.
-
 Passed Arguments:
-    argv[1] = Directory containing WRF output from UPP
-    argv[2] = Directory containing prepbufr output
-    argv[3] = Output directory for prepbufr simulated output
-    argv[4] = Time for first prepbufr file (YYYYMMDD)
-    argv[5] = Time for last prepbufr file (YYYYMMDD)
-    argv[6] = Time between prepbufr files (s)
-    argv[7] = Time for first UPP file (YYYYMMDD)
-    argv[8] = Time for last UPP file (YYYYMMDD)
-    argv[9] = Time between UPP files (s)
+    argv[1] = Time for first prepbufr file (YYYYMMDDHH)
+    argv[2] = Time for first UPP file (YYYYMMDDHH)
+    argv[3] = Time for last UPP file (YYYYMMDDHH)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -55,37 +48,29 @@ import map_proj as mp
 work = '/work2/noaa'
 
 # Directory containing wrfnat output from UPP
-#wrf_dir = sys.argv[1]
 wrf_dir = work + '/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
-#bufr_df = sys.argv[2]
-bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap/'
-#bufr_dir = work + '/wrfruc/murdzek/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/wrfruc/murdzek/src/py_scripts/synthetic_obs/'
-#bufr_dir = work + '/wrfruc/murdzek/sample_real_obs/test/'
+bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-#fake_bufr_dir = sys.argv[3]
-fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs/'
+fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
 
 # Start and end times for prepbufrs. Step is in min
-#bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d')
-#bufr_end = dt.datetime.strptime(sys.argv[5], '%Y%m%d')
-#bufr_step = float(sys.argv[6])
-bufr_start = dt.datetime(2022, 4, 29, 12)
-bufr_end = dt.datetime(2022, 4, 29, 13)
+bufr_start = dt.datetime.strptime(sys.argv[1], '%Y%m%d%H')
+bufr_end = bufr_start + dt.datetime.timedelta(hours=1)
+#bufr_start = dt.datetime(2022, 4, 29, 12)
+#bufr_end = dt.datetime(2022, 4, 29, 13)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-#wrf_start = dt.datetime.strptime(sys.argv[7], '%Y%m%d')
-#wrf_end = dt.datetime.strptime(sys.argv[8], '%Y%m%d')
-#wrf_step = float(sys.argv[9])
-wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-wrf_end = dt.datetime(2022, 4, 29, 15, 0)
+wrf_start = dt.datetime.strptime(sys.argv[2], '%Y%m%d%H')
+wrf_end = dt.datetime.strptime(sys.argv[3], '%Y%m%d%H')
+#wrf_start = dt.datetime(2022, 4, 29, 12, 0)
+#wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
@@ -155,31 +140,19 @@ for i in range(ntimes):
     wrf_hr = np.arange(hr_start, hr_end, wrf_step_dec)
     for hr in wrf_hr:
         wrf_t = t + dt.timedelta(hours=hr)
-        print(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'))
-        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('wrfnat_%Y%m%d%H%M.grib2'), 
+        print(wrf_dir + wrf_t.strftime('%Y%m%d%/wrfnat_%Y%m%d%H%M.grib2'))
+        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                                      engine='pynio')
 
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
-    # Remove obs outside of the spatial domain of the wrfnat files (first, inprecise pass)
-    latmin = wrf_ds[0]['gridlat_0'].min().values
-    latmax = wrf_ds[0]['gridlat_0'].max().values
-    lonmin = wrf_ds[0]['gridlon_0'].min().values + 360.
-    lonmax = wrf_ds[0]['gridlon_0'].max().values + 360.
-    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['XOB'] < lonmin, 
-                                                  bufr_csv.df['XOB'] > lonmax))[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
-    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['YOB'] < latmin, 
-                                                  bufr_csv.df['YOB'] > latmax))[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
-
     # Extract size of latitude and longitude grids
     shape = wrf_ds[0]['gridlat_0'].shape
     imax = shape[0] - 2
     jmax = shape[1] - 2
     
     # Compute (x, y) coordinates of obs using a Lambert Conformal projection
-    # Remove obs outside of the wrfnat domain (second, precise pass)
+    # Remove obs outside of the wrfnat domain
     if debug > 0:
         start_map_proj = dt.datetime.now()
         print('Performing map projection with obs...')
@@ -195,11 +168,12 @@ for i in range(ntimes):
                                                   bufr_csv.df['j0'] > jmax))[0], inplace=True)
     bufr_csv.df.reset_index(drop=True, inplace=True)
 
+    # Compute interpolation weights
     bufr_csv.df['iwgt'] = 1. - (bufr_csv.df['ylc'] - bufr_csv.df['i0'])
     bufr_csv.df['jwgt'] = 1. - (bufr_csv.df['xlc'] - bufr_csv.df['j0'])
 
     if debug > 0:
-        print('Finished performing map projection and computing horiz interp weights (time = %.3f s)' % 
+        print('Finished with map projection and computing horiz interp weights (time = %.3f s)' % 
               (dt.datetime.now() - start_map_proj).total_seconds())
         print('# BUFR entries remaining = %d' % len(bufr_csv.df))
 
@@ -254,87 +228,56 @@ for i in range(ntimes):
             wrf_data[hr][f] = wrf_ds[hr][f][:, :].values
         for f in fields2D1:
             wrf_data[hr][f] = wrf_ds[hr][f][0, :, :].values
-    
+
     # Loop over each ADPSFC, SFCSHP, MSONET, and GPSIPW observation
     for j in (ob_idx['ADPSFC'] + ob_idx['SFCSHP'] + ob_idx['MSONET'] + ob_idx['GPSIPW']):
         
         if debug > 1:
-            time1 = dt.datetime.now()
+            time_jstart = dt.datetime.now()
             print()
 
-        subset = out_df.loc[j]
-     
         # Determine WRF hour right before observation and weight for temporal interpolation
-        ihr, twgt = cou.determine_twgt(wrf_hr, subset['DHR'])
-
-        if debug > 1:
-            time2 = dt.datetime.now()
-            print('done determining twgt (%.6f s)' % (time2 - time1).total_seconds())
+        ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
 
         # Determine surface height above sea level and surface pressure
-        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', subset, ihr, twgt)
-        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', subset, ihr, twgt) * 1e-2
+        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j], ihr, twgt)
+        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], ihr, twgt) * 1e-2
 
         if debug > 1:
-            time4 = dt.datetime.now()
-            print('sfch = %.6f' % sfch)
-            print('sfcp = %.6f' % sfcp)
-            print('done determining sfch and sfcp (%.6f s)' % (time4 - time2).total_seconds())
+            time_sfc = dt.datetime.now()
+            print('2D field: nmsg = %d, subset = %s, TYP = %d' % 
+                  (out_df.loc[j, 'nmsg'], out_df.loc[j, 'subset'], out_df.loc[j, 'TYP']))
+            print('done determining twgt, sfch, and sfcp (%.6f s)' % 
+                  (time_sfc - time_jstart).total_seconds())
+            print('twgt = %.3f, i0 = %d, j0 = %d' % 
+                  (twgt, out_df.loc[j, 'i0'], out_df.loc[j, 'j0']))
+            print('DHR = %.3f, XOB = %.6f, YOB = %.6f' % 
+                  (out_df.loc[j, 'DHR'], out_df.loc[j, 'XOB'], out_df.loc[j, 'YOB']))
+            print('sfch = %.6f, sfcp = %.6f' % (sfch, sfcp))
 
-        # Surface obs
-        if subset['subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
-
-            if debug > 1:
-                print('2D field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
-                                                                      subset['subset'], 
-                                                                      subset['TYP']))
-                print('twgt = %.3f, i0 = %d, j0 = %d' % (twgt, subset['i0'], subset['j0']))
-                print('DHR = %.3f, XOB = %.6f, YOB = %.6f' % (subset['DHR'], subset['XOB'], 
-                                                              subset['YOB']))
-
-            # Reset surface values to match NR and assign surface pressure values
+        # Surface obs only: Reset surface values to match NR and assign surface pressure values
+        if out_df.loc[j, 'subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
             for o, v in zip(['ZOB', 'ELV', 'POB', 'PRSS'], [sfch, sfch, sfcp, sfcp]):
-                if not np.isnan(subset[o]):
+                if not np.isnan(out_df.loc[j, o]):
                     out_df.loc[j, o] = v
 
-            # Interpolate temporally
-            obs_name = ['QOB', 'TOB', 'UOB', 'VOB']
-            wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
-                        'VGRD_P0_L103_GLC0']
-            if interp_latlon:
-                obs_name.append('XOB')
-                obs_name.append('YOB')
-                wrf_name.append('gridlon_0')
-                wrf_name.append('gridlat_0')
-            for o, m in zip(obs_name, wrf_name):
-                if not np.isnan(subset[o]):
-                    if debug > 1:
-                        time5 = dt.datetime.now()
-                    out_df.loc[j, o] = cou.interp_x_y_t(wrf_data, wrf_hr, m, subset, ihr, twgt)
-                    if debug > 1:
-                        time6 = dt.datetime.now()
-                        print('finished interp for %s (%.6f s)' % (o, (time6 - time5).total_seconds()))
-                        entry_times2d.append((dt.datetime.now() - time1).total_seconds())
-
-        # GPS-Derived precipitable water
-        elif subset['subset'] == 'GPSIPW':
-
-            if debug > 1:
-                print('PW field: nmsg = %d, subset = %s, TYP = %d' % (subset['nmsg'], 
-                                                                      subset['subset'], 
-                                                                      subset['TYP']))
-                print('twgt = %.3f, xi = %.3f, yi = %.3f' % (twgt, xi, yi))
-
-            # Interpolate temporally
-            if not np.isnan(subset['PWO']):
+        # Interpolate temporally
+        obs_name = ['QOB', 'TOB', 'UOB', 'VOB', 'PWO']
+        wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
+                    'VGRD_P0_L103_GLC0', 'PWAT_P0_L200_GLC0']
+        if interp_latlon:
+            obs_name = obs_name + ['XOB', 'YOB']
+            wrf_name = wrf_name + ['gridlon_0', 'gridlat_0']
+        for o, m in zip(obs_name, wrf_name):
+            if not np.isnan(out_df.loc[j, o]):
                 if debug > 1:
-                    time5 = dt.datetime.now()
-                out_df.loc[j, 'PWO'] = cou.interp_x_y_t(wrf_data, wrf_hr, 'PWAT_P0_L200_GLC0', 
-                                                             subset, ihr, twgt)
+                    time_before_interp = dt.datetime.now()
+                out_df.loc[j, o] = cou.interp_x_y_t(wrf_data, wrf_hr, m, out_df.loc[j], ihr, twgt)
                 if debug > 1:
-                    time6 = dt.datetime.now()
-                    print('finished interp for PWO (%.6f s)' % (time6 - time5).total_seconds())
-                    entry_times2d.append((dt.datetime.now() - time1).total_seconds())
+                    time_after_interp = dt.datetime.now()
+                    print('finished interp for %s (%.6f s)' % 
+                          (o, (time_after_interp - time_before_interp).total_seconds()))
+                    entry_times2d.append((dt.datetime.now() - time_jstart).total_seconds())
 
 
     #-----------------------------------------------------------------------------------------------
@@ -354,6 +297,7 @@ for i in range(ntimes):
 
     # Create array to save p1d arrays in
     p1d = np.zeros([100, len(out_df)])
+    pdone = np.zeros(len(out_df), dtype=int)
 
     # We will extract 3D fields one at a time b/c these 3D arrays are massive (~6.5 GB each), so it 
     # is not feasible to load all of them at once. Ideally, only 1 should be loaded at any given
@@ -414,55 +358,68 @@ for i in range(ntimes):
                     continue
 
                 if debug > 1:
-                    time1 = dt.datetime.now()
+                    time_jstart = dt.datetime.now()
                     print()
 
-                if (o == 'POB' and np.isclose(p1d[0, j], 0.)):         
+                if o == 'POB': 
+   
+                    # First half of pressure calculation (P1)
+                    if np.isclose(p1d[0, j], 0.):         
 
-                    # Determine weight for temporal interpolation
-                    ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
+                        # Determine weight for temporal interpolation
+                        ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
+                        out_df.loc[j, 'twgt']  = twgt 
 
-                    if debug > 1:
-                        time2 = dt.datetime.now()
-                        print('done determining twgt (%.3f, %.6f s)' % (twgt, (time2 - time1).total_seconds()))
-        
-                    # Determine surface height above sea level and surface pressure
-                    if hr > out_df.loc[j, 'DHR']:
-                        hr1 = hr - wrf_step_dec
-                        hr2 = hr
-                    else:
-                        hr1 = hr
-                        hr2 = hr + wrf_step_dec
-                    sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
-                                            ihr, twgt)
-                    sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], 
-                                            ihr, twgt) * 1e-2
+                        # Determine surface height above sea level and surface pressure
+                        if hr > out_df.loc[j, 'DHR']:
+                            hr1 = hr - wrf_step_dec
+                            hr2 = hr
+                        else:
+                            hr1 = hr
+                            hr2 = hr + wrf_step_dec
+                        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
+                                                ihr, twgt)
+                        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], 
+                                                ihr, twgt) * 1e-2
             
-                    # Check whether ob from BUFR file lies underground
-                    if (out_df.loc[j, 'ZOB'] < sfch) or (out_df.loc[j, 'POB'] > sfcp):
-                        drop_idx.append(j)
-                        continue
+                        # Check whether ob from BUFR file lies underground
+                        if (out_df.loc[j, 'ZOB'] < sfch) or (out_df.loc[j, 'POB'] > sfcp):
+                            drop_idx.append(j)
+                            continue
 
-                    if debug > 1:
-                        time4 = dt.datetime.now()
-                        print('done determining sfch and sfcp (%.6f s)' % (time4 - time2).total_seconds())
+                        if debug > 1:
+                            time_sfc = dt.datetime.now()
+                            print('done determining twgt, sfch, and sfcp (%.6f s)' % 
+                                  (time_sfc - time_jstart).total_seconds())
             
-                    # Perform vertical interpolation in pressure rather than height b/c some obs don't 
-                    # have height. The calculation below only gives use part of the p1d array. The 
-                    # rest of this of this array will be determined when we loop over the other 3D
-                    # pressure array
-                    p1d[:, j] = twgt * 1e-2 * cou._bilinear_interp_horiz(wrf3d, out_df.loc[j, 'iwgt'], 
-                                                                     out_df.loc[j, 'jwgt'],
-                                                                     out_df.loc[j, 'i0'], out_df.loc[j, 'j0'],
-                                                                     threeD=True)
+                        # Perform vertical interpolation in pressure rather than height b/c some obs don't 
+                        # have height. The calculation below only gives use part of the p1d array. The 
+                        # rest of this of this array will be determined when we loop over the other 3D
+                        # pressure array
+                        p1d[:, j] = twgt * 1e-2 * cou.interp_x_y(wrf3d, out_df.loc[j], threeD=True)
  
-                    if debug > 1:
-                        time5 = dt.datetime.now()
-                        print('done computing first part of p1d (%.6f s)' % (time5 - time4).total_seconds())
+                        if debug > 1:
+                            print('total time for p1 = %.6f s' % 
+                                  (dt.datetime.now() - time_jstart).total_seconds())
+                            entry_timesp1.append((dt.datetime.now() - time_jstart).total_seconds())
 
-                    # Special case: twgt = 1. In this case, we don't need to interpolate in time, so 
-                    # we can skip the P2 section of the conditional
-                    if np.isclose(twgt, 1):
+                        # Special case: twgt = 1. In this case, we don't need to interpolate in time, so 
+                        # we can skip the P2 section of the conditional
+                        if np.isclose(twgt, 1):
+                            pdone[j] = 1
+
+                    # Second half of pressure calculation (P2)
+                    else:
+                        p1d[:, j] = p1d[:, j] + ((1.-out_df.loc[j, 'twgt']) * 1e-2 * 
+                                                 cou.interp_x_y(wrf3d, out_df.loc[j], threeD=True))
+                        pdone[j] = 1
+                        
+                        if debug > 1:
+                            print('total time for p2 = %.6f s' % 
+                                  (dt.datetime.now() - time_jstart).total_seconds())
+                            entry_timesp2.append((dt.datetime.now() - time_jstart).total_seconds())
+
+                    if pdone[j]: 
                         # Check for extrapolation
                         if (p1d[0, j] > out_df.loc[j, 'POB']):
                             out_df.loc[j, 'pi0'] = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
@@ -477,54 +434,16 @@ for i in range(ntimes):
                             drop_idx.append(j)
                             continue
 
-                        if debug > 1: 
+                        if debug > 1:
                             print('interpolated P = %.2f' % out_df.loc[j, 'POB'])
                             print('actual P = %.2f' % bufr_csv.df.loc[j, 'POB'])
 
-                    # save some stuff
-                    out_df.loc[j, 'twgt']  = twgt 
-
-                    if debug > 1:
-                        print('total time for p1 = %.6f s' % (dt.datetime.now() - time1).total_seconds())
-                        entry_timesp1.append((dt.datetime.now() - time1).total_seconds())
-
-                elif o == 'POB':
-
-                    # Extract indicies and weights saved from first POB
-                    twgt =  out_df.loc[j, 'twgt'] 
-
-                    # Finish computing p1d
-                    p1d[:, j] = p1d[:, j] + (1.-twgt) * 1e-2 * cou._bilinear_interp_horiz(wrf3d, out_df.loc[j, 'iwgt'], 
-                                                                    out_df.loc[j, 'jwgt'],
-                                                                    out_df.loc[j, 'i0'], out_df.loc[j, 'j0'],
-                                                                    threeD=True)
-
-                    # Check for extrapolation
-                    if (p1d[0, j] > out_df.loc[j, 'POB']):
-                        out_df.loc[j, 'pi0'] = np.where(p1d[:, j] > out_df.loc[j, 'POB'])[0][-1]
-                        if debug > 1:
-                            print('pi0 = %d' % out_df.loc[j, 'pi0'])
-                        if out_df.loc[j, 'pi0'] >= (p1d.shape[0] - 1):
-                            # Prevent extrapolation in vertical
-                            drop_idx.append(j)
-                            continue
-                        out_df.loc[j, 'POB'], out_df.loc[j, 'pwgt'] = cou.interp_wrf_p1d(p1d[:, j], out_df.loc[j])
-                    else:
-                        drop_idx.append(j)
-                        continue
-
-                    if debug > 1:
-                        print('interpolated P = %.2f' % out_df.loc[j, 'POB'])
-                        print('actual P = %.2f' % bufr_csv.df.loc[j, 'POB'])
-                        print('total time for p2 = %.6f s' % (dt.datetime.now() - time1).total_seconds())
-                        entry_timesp2.append((dt.datetime.now() - time1).total_seconds())
-
+                # Perform interpolation for other variables (not pressure)
                 else:
 
-                    # Interpolate
                     if not np.isnan(out_df.loc[j, o]):
                         if debug > 1:
-                            time6 = dt.datetime.now()
+                            time_before_interp = dt.datetime.now()
                         twgt =  out_df.loc[j, 'twgt'] 
                         if np.isclose(out_df.loc[j, o], 0):
                             out_df.loc[j, o] = twgt * cou.interp_x_y_z(wrf3d, out_df.loc[j])
@@ -532,12 +451,13 @@ for i in range(ntimes):
                             out_df.loc[j, o] = ((1.-twgt) * cou.interp_x_y_z(wrf3d, out_df.loc[j]) + 
                                                 out_df.loc[j, o])
                         if debug > 1:
-                            time7 = dt.datetime.now()
-                            print('finished interp for %s (%.6f s)' % (o, (time7 - time6).total_seconds()))
+                            time_after_interp = dt.datetime.now()
+                            print('finished interp for %s (%.6f s)' % 
+                                  (o, (time_after_interp - time_before_interp).total_seconds()))
 
                     if debug > 1:
-                        print('total time = %.6f s' % (dt.datetime.now() - time1).total_seconds())
-                        entry_times3d.append((dt.datetime.now() - time1).total_seconds())
+                        print('total time = %.6f s' % (dt.datetime.now() - time_jstart).total_seconds())
+                        entry_times3d.append((dt.datetime.now() - time_jstart).total_seconds())
 
             # Free up memory (shouldn't have to call garbage collector after this)
             wrf3d = 0.

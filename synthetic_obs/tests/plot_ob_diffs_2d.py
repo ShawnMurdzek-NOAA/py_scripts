@@ -23,10 +23,12 @@ import cartopy.feature as cfeature
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV files
-fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
+#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
+#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
 #fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
 #fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
+fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
 
 # Dataset names
 name1 = 'Sim Obs'

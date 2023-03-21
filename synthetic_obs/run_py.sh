@@ -11,8 +11,8 @@ date
 pygraf
 #adb_graphics
 
-#python create_adpupa_obs.py
-python create_conv_obs.py
+python create_adpupa_obs.py
+#python create_conv_obs.py
 
 report-mem
 date

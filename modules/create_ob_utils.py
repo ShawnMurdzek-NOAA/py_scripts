@@ -107,64 +107,37 @@ def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
 
     return val
 
-'''
-def _interp_x_y_t(field1, field2, iwgt, jwgt, twgt, i0, j0, threeD=False):
+
+def interp_x_y(field, ob_subset, threeD=False):
     """
-    Interpolate linearly in the horizontal and time dimensions
-
-    Inputs
-    ------
-    field1 : array
-        2D field to interpolate with time weight = twgt
-    field2 : array
-        2D field to interpolate with time weight = 1 - twgt
-    iwgt, jwgt, twgt : float
-        Interpolation weights for the (i0, j0) gridpoint in field1
-    i0, j0 : integers
-        Lower-left index for field1 and field2
-    threeD : boolean, optional
-        Is this field actually 3D?
-
-    Returns
-    -------
-    val : float
-        Interpolated value
-
-    """
-
-    val = (twgt * _bilinear_interp_horiz(field1, iwgt, jwgt, i0, j0, threeD=threeD) +
-           (1.-twgt) * _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD))
-
-    return val
-'''
-'''
-def _interp_x_y_z(field, iwgt, jwgt, pwgt, i0, j0, pi0):
-    """
-    Interpolate linearly in the horizontal dimensions and logarithmically in pressure
+    Wrapper function for interpolation in x and y
 
     Inputs
     ------
     field : array
-        3D field to interpolate
-    iwgt, jwgt, pwgt : float
-        Interpolation weights for the (pi0, i0, j0) gridpoint in field
-    i0, j0, pi0 : integers
-        Lower-left index for field
+        Array containing WRF data to be interpolated
+    ob_subset : series
+        Pandas series containing a single observation
+    threeD : boolean, optional
+        Is this UPP field 3D?
 
     Returns
     -------
     val : float
-        Interpolated value
+        UPP output linearly interpolated in x and y to the observation location
 
     """
 
-    val = _linear_interp(_bilinear_interp_horiz(field[pi0, :, :], iwgt, jwgt, i0, j0),
-                         _bilinear_interp_horiz(field[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
+    iwgt = ob_subset['iwgt']
+    jwgt = ob_subset['jwgt']
+    i0 = ob_subset['i0']
+    j0 = ob_subset['j0']
+
+    val = _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=threeD)
 
     return val
-'''
 
-#def interp_wrf_to_obs(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
+
 def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
     """
     Wrapper function for interpolation in x, y, and t
@@ -206,7 +179,6 @@ def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
     return val
 
 
-#def interp_wrf_3d(wrf3d, ob_subset):
 def interp_x_y_z(wrf3d, ob_subset):
     """
     Wrapper function for interpolation in x, y, and p
@@ -234,8 +206,6 @@ def interp_x_y_z(wrf3d, ob_subset):
 
     val = _linear_interp(_bilinear_interp_horiz(wrf3d[pi0, :, :], iwgt, jwgt, i0, j0),
                          _bilinear_interp_horiz(wrf3d[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
-    #val = _interp_x_y_z(wrf3d, ob_subset['iwgt'], ob_subset['jwgt'], ob_subset['pwgt'],
-    #                    ob_subset['i0'], ob_subset['j0'], ob_subset['pi0'])
 
     return val
 
