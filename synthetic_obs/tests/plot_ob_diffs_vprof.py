@@ -25,8 +25,8 @@ import numpy as np
 #fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
 #fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
 #fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
-fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
+fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300000.fake.adpupa.csv'
+fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300000.real_red.adpupa.csv'
 
 # Output file name
 save_fname = './ob_diffs_vprof.png'

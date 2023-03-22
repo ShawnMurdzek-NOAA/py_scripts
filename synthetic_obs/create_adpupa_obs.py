@@ -286,13 +286,14 @@ for i in range(ntimes):
         for idx_sid, sid in enumerate(all_sid): 
             if sid in done_sid:
                 continue
-            if adpupa_t_s[idx_sid] > (wrf_hr[1] * 3600.):
+            if adpupa_t_s[idx_sid] >= (wrf_hr[1] * 3600.):
                 continue
             print()
             print('SID = %s' % sid)
+            
+            ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
 
             # Find first pressure level that lies above the surface if not done so already
-            ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
             if np.isclose(adpupa_sfch[idx_sid], 0):
                 adpupa_sfch[idx_sid] = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', 
                                                         out_df.iloc[adpupa_idx[idx_sid]], ihr, 
@@ -412,13 +413,13 @@ for i in range(ntimes):
                         print('Time limit reached for %s' % sid)
                         break
  
-                    # Update twgt
-                    ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
-
                     # If final time within this window, save final index for next time window 
+                    # Otherwise, update twgt
                     k = k + 1
                     if (adpupa_t_s[idx_sid] > (wrf_hr[1] * 3600.)):
                         adpupa_idx[idx_sid] = k
+                    else:
+                        ihr, twgt = cou.determine_twgt(wrf_hr, adpupa_t_s[idx_sid] / 3600.)
  
                 if debug > 1:
                     time_advect = dt.datetime.now()
