@@ -27,9 +27,10 @@ fi
 
 echo "${cycle}, ${first_UPP}, ${last_UPP}" 
 
-python create_conv_obs.py ${cycle} ${first_UPP} ${last_UPP}
-python create_adpupa_obs.py ${cycle} ${first_UPP} ${last_UPP}
-python merge_conv_adpupa.py ${cycle}00
+cd ${CODE_DIR}
+python create_conv_obs.py ${WRF_DIR} ${BUFR_DIR} ${OUT_DIR}/conv/ ${cycle} ${first_UPP} ${last_UPP}
+python create_adpupa_obs.py ${WRF_DIR} ${BUFR_DIR} ${OUT_DIR}/adpupa/ ${cycle} ${first_UPP} ${last_UPP}
+python merge_conv_adpupa.py ${OUT_DIR} ${cycle}00
 
 report-mem
 date

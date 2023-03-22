@@ -15,9 +15,12 @@ To use this utility, do the following:
 3. Move resulting CSV file to wherever you choose
 
 Passed Arguments:
-    argv[1] = Time for first prepbufr file (YYYYMMDDHH)
-    argv[2] = Time for first UPP file (YYYYMMDDHH)
-    argv[3] = Time for last UPP file (YYYYMMDDHH)
+    argv[1] = Directory containing WRF UPP output
+    argv[2] = Directory containing real prepBUFR CSV files
+    argv[3] = Output directory for simulated prepBUFR CSV files
+    argv[4] = Time for first prepbufr file (YYYYMMDDHH)
+    argv[5] = Time for first UPP file (YYYYMMDDHH)
+    argv[6] = Time for last UPP file (YYYYMMDDHH)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -45,30 +48,31 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/work2/noaa'
-
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/wrfruc/murdzek/nature_run_spring/UPP/'
+#wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
+wrf_dir = sys.argv[1]
 
 # Directory containing real prepbufr CSV output
-bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap_csv/'
+#bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
+bufr_dir = sys.argv[2]
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
+#fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
+fake_bufr_dir = sys.argv[3]
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime.strptime(sys.argv[1], '%Y%m%d%H')
-bufr_end = bufr_start + dt.datetime.timedelta(hours=1)
+bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
+bufr_end = bufr_start + dt.timedelta(hours=1)
 #bufr_start = dt.datetime(2022, 4, 29, 12)
 #bufr_end = dt.datetime(2022, 4, 29, 13)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime.strptime(sys.argv[2], '%Y%m%d%H')
-wrf_end = dt.datetime.strptime(sys.argv[3], '%Y%m%d%H')
+wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
+wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
 #wrf_start = dt.datetime(2022, 4, 29, 12, 0)
 #wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
@@ -140,8 +144,8 @@ for i in range(ntimes):
     wrf_hr = np.arange(hr_start, hr_end, wrf_step_dec)
     for hr in wrf_hr:
         wrf_t = t + dt.timedelta(hours=hr)
-        print(wrf_dir + wrf_t.strftime('%Y%m%d%/wrfnat_%Y%m%d%H%M.grib2'))
-        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
+        print(wrf_dir + wrf_t.strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'))
+        wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                                      engine='pynio')
 
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())

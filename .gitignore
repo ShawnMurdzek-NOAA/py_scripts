@@ -14,3 +14,6 @@ core*
 
 # Ignore .npy files
 *.npy
+
+# Ignore log files
+*.log

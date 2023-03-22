@@ -2,7 +2,8 @@
 Combine Conventional Obs with ADPUPA Obs That Account for Radiosonde Drift
 
 Passed Arguments:
-    sys[1] = Timestamp on prpebufr CSV (YYYYMMDDHHMM)
+    sys[1] = Output simulated observation directory
+    sys[2] = Timestamp on prpebufr CSV (YYYYMMDDHHMM)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 21 March 2023
@@ -21,16 +22,17 @@ import sys
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/work2/noaa/'
+out_dir = sys.argv[1]
+time = sys.argv[2]
 
 # Conventional ob prepbufr
-conv_fname = work + 'wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/%s.fake.prepbufr.csv' % sys.argv[1]
+conv_fname = '%s/conv/%s.fake.prepbufr.csv' % (out_dir, time)
 
 # ADPUPA ob prepbufr
-adpupa_fname = work + 'wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/%s.fake.adpupa.csv' % sys.argv[1]
+adpupa_fname = '%s/adpupa/%s.fake.adpupa.csv' % (out_dir, time)
 
 # Output prepbufr
-out_fname = work + 'wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect/%s.fake.prepbufr.csv' % sys.argv[1]
+out_fname = '%s/perfect/%s.fake.prepbufr.csv' % (out_dir, time)
 
 
 #---------------------------------------------------------------------------------------------------

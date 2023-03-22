@@ -1,0 +1,21 @@
+Rocoto Workflow to Create Simulated Obs
+
+----------------------------------------------------------------------------------------------------
+Using Cron
+
+It's easiest to run this workflow using cron so that rocotorun is executed every _X_ minutes. To
+edit your crontab, use the following command in your home direcory:
+
+`crontab -e`
+
+The following two lines should be at the beginning of your crontab to insure than code runs properly 
+and that you are emailed with error messages:
+
+```
+#!/bin/sh --login
+MAILTO=email@noaa.gov
+```
+
+Add the following line to run the workflow every 15 minutes:
+
+`*/15 * * * * /path/to/workflow/run_rocoto.sh`

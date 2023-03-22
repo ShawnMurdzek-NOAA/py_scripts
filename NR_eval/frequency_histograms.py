@@ -31,12 +31,12 @@ eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':
-    NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/UPP'
+    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
 elif model == 'HRRR':
-    NR_path = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_data'
+    NR_path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
 
 # MRMS data file path
-MRMS_path = '/mnt/lfs4/BMC/wrfruc/murdzek/real_obs/mrms'
+MRMS_path = '/work2/noaa/wrfruc/murdzek/real_obs/mrms'
 
 # MRMS years to use
 MRMS_years = np.arange(2015, 2023)
@@ -65,6 +65,7 @@ elif model == 'HRRR':
 MRMS_mask_file = './MRMS_mask.npy'
 
 # Option to zoom into the smallest precip rates for precip1hr or the highest reflectivities for cref
+#zoom = 0
 zoom = bool(int(sys.argv[4]))
 
 # Output file
@@ -139,20 +140,17 @@ for t in eval_times:
     NR_total_counts[t] = np.zeros(bins.size-1)
     NR_total_pts[t] = 0
 
-MRMS_counts = {}
 MRMS_total_counts = {}
 MRMS_total_pts = {}
-for y in MRMS_years:
-    MRMS_counts[y] = {}
-    MRMS_total_counts[y] = {}
-    MRMS_total_pts[y] = {}
-    for o in MRMS_offset:
-        MRMS_counts[y][o] = {}
-        MRMS_total_counts[y][o] = {}
-        MRMS_total_pts[y][o] = {}
-        for t in eval_times:
-            MRMS_total_counts[y][o][t] = np.zeros(bins.size-1)
-            MRMS_total_pts[y][o][t] = 0
+MRMS_freq = {}
+n_MRMS = len(MRMS_years) * len(MRMS_offset)
+MRMS_years_all, MRMS_offset_all = np.meshgrid(MRMS_years, MRMS_offset)
+MRMS_years_all = MRMS_years_all.ravel()
+MRMS_offset_all = MRMS_offset_all.ravel()
+for t in eval_times:
+    MRMS_total_counts[t] = np.zeros([bins.size-1, n_MRMS])
+    MRMS_freq[t] = np.zeros([bins.size-1, n_MRMS])
+    MRMS_total_pts[t] = np.zeros(n_MRMS)
 
 # Extract NR data
 NR_mask = np.array([[np.nan]])
@@ -193,33 +191,34 @@ for d in eval_dates:
 
 # Extract MRMS data
 MRMS_mask = np.array([[np.nan]])
-for y in MRMS_years:
+for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
     print()
-    print('extracting MRMS data for %d' % y)
-    for o in MRMS_offset:
-        print('offset = %d days' % o)
-        for t in NR_counts.keys():
-            MRMS_time = t + dt.timedelta(days=o)
-            print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
-            for n, f in enumerate(MRMS_fname):
-                fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), f))
-                if len(fname_list) > 0:
-                    break
-            if len(fname_list) == 0:
-                print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
-                continue
-            ds = xr.open_dataset(fname_list[0], engine='pynio')
+    print('extracting MRMS data for year = %d, offset = %d' % (y, o))
+    for t in NR_counts.keys():
+        MRMS_time = t + dt.timedelta(days=float(o))
+        print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
+        for n, f in enumerate(MRMS_fname):
+            fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), f))
+            if len(fname_list) > 0:
+                break
+        if len(fname_list) == 0:
+            print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
+            continue
+        ds = xr.open_dataset(fname_list[0], engine='pynio')
 
-            # Create mask for MRMS data
-            if np.isnan(MRMS_mask[0, 0]):
-                MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
-                MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) * 
-                                                  (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
+        # Create mask for MRMS data
+        if np.isnan(MRMS_mask[0, 0]):
+            MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
+            MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) * 
+                                              (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
 
-            MRMS_counts[y][o][t] = np.histogram(MRMS_mask * ds[MRMS_var[n]].values, bins=bins)[0]
-            hhmm = t.strftime('%H%M')
-            MRMS_total_counts[y][o][hhmm] = MRMS_total_counts[y][o][hhmm] + MRMS_counts[y][o][t]
-            MRMS_total_pts[y][o][hhmm] = MRMS_total_pts[y][o][hhmm] + np.sum(np.logical_or(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
+        hhmm = t.strftime('%H%M')
+        MRMS_total_counts[hhmm][:, i] = (np.histogram(MRMS_mask * ds[MRMS_var[n]].values, bins=bins)[0] + 
+                                         MRMS_total_counts[hhmm][:, i])
+        MRMS_total_pts[hhmm][i] = MRMS_total_pts[hhmm][i] + np.sum(np.logical_or(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
+
+    for hhmm in eval_times:
+        MRMS_freq[hhmm][:, i] = MRMS_total_counts[hhmm][:, i] / MRMS_total_pts[hhmm][i]
    
 # Plot results
 nrows = int(np.floor(np.sqrt(len(eval_times))))
@@ -230,12 +229,18 @@ bin_ctrs = bins[:-1] + 0.5 * (bins[1] - bins[0])
 for i, t in enumerate(eval_times):
     ax = axes[int(i / ncols), i % ncols]
 
-    ax.bar(bin_ctrs, NR_total_counts[t] / NR_total_pts[t], width=(bins[1] - bins[0]), color='b',
-           edgecolor='k', linewidth=0.25)    
-    for y in MRMS_years:
-        for o in MRMS_offset:
-            ax.plot(bin_ctrs, MRMS_total_counts[y][o][t] / MRMS_total_pts[y][o][t], 'r-', lw=0.75)
+    ax.plot(bin_ctrs, NR_total_counts[t] / NR_total_pts[t], 'k-', linewidth=2.5) 
+
+    MRMS_freq_pct = {}
+    for pct in [0, 10, 25, 50, 75, 90, 100]:
+        MRMS_freq_pct[pct] = np.percentile(MRMS_freq[t], pct, axis=1)
     
+    ax.plot(bin_ctrs, MRMS_freq_pct[50], 'r-', linewidth=2.5)
+    ax.fill_between(bin_ctrs, MRMS_freq_pct[25], MRMS_freq_pct[75], color='r', alpha=0.35)
+    ax.fill_between(bin_ctrs, MRMS_freq_pct[10], MRMS_freq_pct[90], color='r', alpha=0.15)
+    ax.plot(bin_ctrs, MRMS_freq_pct[0], 'r-', linewidth=0.75)
+    ax.plot(bin_ctrs, MRMS_freq_pct[100], 'r-', linewidth=0.75)
+ 
     ax.set_title('%s UTC' % t, size=14)
     ax.set_yscale(yscale)
     ax.grid() 
@@ -245,7 +250,7 @@ for i in range(ncols):
 for i in range(nrows):
     axes[i, 0].set_ylabel('fraction of gridpoints in domain', size=12)
 
-plt.suptitle('%s Frequencies (bars) and MRMS Frequencies (lines)\n7-Day Composites' % model, size=16)
+plt.suptitle('%s Frequencies (black) and MRMS Frequencies (red)\n7-Day Composites' % model, size=16)
 plt.savefig(out_file)
 plt.close()
 

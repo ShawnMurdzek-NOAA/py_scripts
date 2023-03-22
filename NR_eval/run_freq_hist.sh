@@ -4,10 +4,11 @@
 #SBATCH -t 04:00:00
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --mem=4GB
+#SBATCH --partition=orion
 
 date
 . ~/.bashrc
-adb_graphics
+my_py
 
 model=( 'NR' 'HRRR' )
 field=( 'cref' 'precip1hr' )

@@ -12,12 +12,12 @@ To use this utility, do the following:
 3. Move resulting CSV file to wherever you choose
 
 Passed Arguments:
-    argv[1] = Time for first prepbufr file (YYYYMMDD)
-    argv[2] = Time for last prepbufr file (YYYYMMDD)
-    argv[3] = Time between prepbufr files (s)
-    argv[4] = Time for first UPP file (YYYYMMDD)
-    argv[5] = Time for last UPP file (YYYYMMDD)
-    argv[6] = Time between UPP files (s)
+    argv[1] = Directory containing WRF UPP output
+    argv[2] = Directory containing real prepBUFR CSV files
+    argv[3] = Output directory for simulated prepBUFR CSV files
+    argv[4] = Time for first prepbufr file (YYYYMMDDHH)
+    argv[5] = Time for first UPP file (YYYYMMDDHH)
+    argv[6] = Time for last UPP file (YYYYMMDDHH)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 27 February 2023
@@ -45,31 +45,29 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-work = '/work2/noaa'
-
 # Directory containing wrfnat output from UPP
-wrf_dir = work + '/wrfruc/murdzek/nature_run_spring/UPP/'
+#wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
+wrf_dir = sys.argv[1]
 
 # Directory containing real prepbufr CSV output
-bufr_dir = work + '/wrfruc/murdzek/real_obs/obs_rap_csv/'
+#bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
+bufr_dir = sys.argv[2]
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = work + '/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
+#fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
+fake_bufr_dir = sys.argv[3]
 
 # Start and end times for prepbufrs. Step is in min
-#bufr_start = dt.datetime.strptime(sys.argv[1], '%Y%m%d')
-#bufr_end = dt.datetime.strptime(sys.argv[2], '%Y%m%d')
-#bufr_step = float(sys.argv[3])
-bufr_start = dt.datetime(2022, 4, 30, 0)
-bufr_end = dt.datetime(2022, 4, 30, 1)
+bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
+#bufr_start = dt.datetime(2022, 4, 30, 0)
+bufr_end = bufr_start + dt.timedelta(hours=1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-#wrf_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d')
-#wrf_end = dt.datetime.strptime(sys.argv[5], '%Y%m%d')
-#wrf_step = float(sys.argv[6])
-wrf_start = dt.datetime(2022, 4, 29, 22, 0)
-wrf_end = dt.datetime(2022, 4, 30, 2, 0)
+wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
+wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
+#wrf_start = dt.datetime(2022, 4, 29, 12, 0)
+#wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
 
 # Interpolation time range (min relative to DHR). Terminate radiosonde when it exits this range
