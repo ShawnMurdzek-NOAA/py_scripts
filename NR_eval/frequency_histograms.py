@@ -49,7 +49,7 @@ MRMS_offset = [-7, 0, 7]
 eval_times = ['0000', '0600', '1200', '1800']
 
 # Field to evaluate (options: 'cref', 'precip1hr')
-#field = 'cref'
+#field = 'precip1hr'
 field = sys.argv[2]
 
 # Domain (options: 'all', 'easternUS')
@@ -69,7 +69,7 @@ MRMS_mask_file = './MRMS_mask.npy'
 zoom = bool(int(sys.argv[4]))
 
 # Output file
-#out_file = './NR_cref_eval_all.png'
+#out_file = './NR_precip1hr_eval_all.png'
 out_file = sys.argv[5]
 
 
@@ -233,7 +233,7 @@ for i, t in enumerate(eval_times):
 
     MRMS_freq_pct = {}
     for pct in [0, 10, 25, 50, 75, 90, 100]:
-        MRMS_freq_pct[pct] = np.percentile(MRMS_freq[t], pct, axis=1)
+        MRMS_freq_pct[pct] = np.nanpercentile(MRMS_freq[t], pct, axis=1)
     
     ax.plot(bin_ctrs, MRMS_freq_pct[50], 'r-', linewidth=2.5)
     ax.fill_between(bin_ctrs, MRMS_freq_pct[25], MRMS_freq_pct[75], color='r', alpha=0.35)

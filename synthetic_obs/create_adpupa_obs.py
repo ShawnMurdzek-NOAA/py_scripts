@@ -46,31 +46,32 @@ import map_proj as mp
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-#wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
-wrf_dir = sys.argv[1]
+wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
+#wrf_dir = sys.argv[1]
 
 # Directory containing real prepbufr CSV output
-#bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
-bufr_dir = sys.argv[2]
+bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
+#bufr_dir = sys.argv[2]
 
 # Output directory for synthetic prepbufr CSV output
-#fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
-fake_bufr_dir = sys.argv[3]
+fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
+#fake_bufr_dir = sys.argv[3]
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
-#bufr_start = dt.datetime(2022, 4, 30, 0)
+#bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
+bufr_start = dt.datetime(2022, 4, 30, 1)
 bufr_end = bufr_start + dt.timedelta(hours=1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
-wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
-#wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-#wrf_end = dt.datetime(2022, 4, 29, 15, 0)
+#wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
+#wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
+wrf_start = dt.datetime(2022, 4, 29, 21, 0)
+wrf_end = dt.datetime(2022, 4, 30, 2, 0)
 wrf_step = 15
 
-# Interpolation time range (min relative to DHR). Terminate radiosonde when it exits this range
+# Interpolation time range (min relative to DHR for first number and min relative to prepbufr 
+# timestamp for second number). Terminate radiosonde when it exits this range
 interp_range = [-30, 25]
 
 # Ascent rate for radiosonde. 5 m/s value comes from this NWS report: 
@@ -135,11 +136,11 @@ for i in range(ntimes):
     # Open first wrfnat files
     wrf_hr = [math.floor((bufr_csv.df['DHR'].min() + (interp_range[0] / 60))*4) / 4, 0]
     wrf_t = [t + dt.timedelta(hours=wrf_hr[0]), 0]
-    wrf_ds = [xr.open_dataset(wrf_dir + wrf_t[0].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
+    wrf_ds = [xr.open_dataset(wrf_dir + wrf_t[0].strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                               engine='pynio'), 0]
     print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
     print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
-    print(wrf_dir + wrf_t[0].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'))
+    print(wrf_dir + wrf_t[0].strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'))
     print('time to open first GRIB file = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
     # Extract size of latitude and longitude grids
@@ -264,7 +265,7 @@ for i in range(ntimes):
         # Extract data for the next wrfnat file
         wrf_hr[1] = wrf_hr[0] + (wrf_step / 60.)
         wrf_t[1] = t + dt.timedelta(hours=wrf_hr[1])
-        wrf_ds[1] = xr.open_dataset(wrf_dir + wrf_t[1].strftime('%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
+        wrf_ds[1] = xr.open_dataset(wrf_dir + wrf_t[1].strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                                     engine='pynio')
         wrf_data[wrf_hr[1]] = {}
         for f in fields2D:

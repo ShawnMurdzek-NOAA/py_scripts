@@ -12,6 +12,7 @@ Date Created: 17 March 2023
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import metpy
 from metpy.plots import SkewT, Hodograph
 import metpy.calc as mc
 from metpy.units import units
@@ -23,10 +24,11 @@ from metpy.units import units
 
 # BUFR CSV file with simulated radiosonde data (this should be the "full" DataFrame for debugging)
 #raob_bufr = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.debug.adpupa.csv'
-raob_bufr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300000.debug.adpupa.csv'
+raob_bufr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300100.debug.adpupa.csv'
 
 # Station IDs to plot
 sid = [72476, 72520, 72694, 72649, 72202, 72456, 74389]
+sid = [72520]
 
 # Thinning wind barbs
 thin = 4
@@ -60,9 +62,14 @@ for s in sid:
 
     Tidx = subset.index[np.logical_not(np.isnan(subset['TOB']))].values
     UVidx = subset.index[np.logical_not(np.isnan(subset['UOB']))].values
-    Td = mc.dewpoint_from_specific_humidity(subset.loc[Tidx, 'QOB'].values * units.mg / units.kg,
-                                            subset.loc[Tidx, 'TOB'].values * units.degC,
-                                            subset.loc[Tidx, 'POB'].values * units.hPa)
+    if int(metpy.__version__.split('.')[0]) > 0:
+        Td = mc.dewpoint_from_specific_humidity(subset.loc[Tidx, 'POB'].values * units.hPa,
+                                                subset.loc[Tidx, 'TOB'].values * units.degC,
+                                                subset.loc[Tidx, 'QOB'].values * units.mg / units.kg)
+    else:
+        Td = mc.dewpoint_from_specific_humidity(subset.loc[Tidx, 'QOB'].values * units.mg / units.kg,
+                                                subset.loc[Tidx, 'TOB'].values * units.degC,
+                                                subset.loc[Tidx, 'POB'].values * units.hPa)
     ax2 = SkewT(fig, subplot=(1, 2, 2), rotation=45)
     ax2.plot(subset.loc[Tidx, 'POB'].values, subset.loc[Tidx, 'TOB'].values, 'r-')
     ax2.plot(subset.loc[Tidx, 'POB'].values, Td.to('degC').magnitude, 'b-')
