@@ -18,6 +18,7 @@ Passed Arguments:
     argv[4] = Time for first prepbufr file (YYYYMMDDHH)
     argv[5] = Time for first UPP file (YYYYMMDDHH)
     argv[6] = Time for last UPP file (YYYYMMDDHH)
+    argv[7] = Prepbufr file tag
 
 shawn.s.murdzek@noaa.gov
 Date Created: 27 February 2023
@@ -70,6 +71,10 @@ wrf_start = dt.datetime(2022, 4, 29, 21, 0)
 wrf_end = dt.datetime(2022, 4, 30, 2, 0)
 wrf_step = 15
 
+# Prepbufr tag ('rap', 'rap_e', 'rap_p')
+bufr_tag = 'rap'
+#bufr_tag = sys.argv[7]
+
 # Interpolation time range (min relative to DHR for first number and min relative to prepbufr 
 # timestamp for second number). Terminate radiosonde when it exits this range
 interp_range = [-30, 25]
@@ -117,12 +122,16 @@ for i in range(ntimes):
     print()
     print('t = %s' % t.strftime('%Y-%m-%d %H:%M:%S'))
     print('start time = %s' % start_loop.strftime('%Y%m%d %H:%M:%S'))
-    bufr_fname = bufr_dir + t.strftime('/%Y%m%d%H%M.rap.prepbufr.csv')
+    bufr_fname = '%s/%s.%s.prepbufr.csv' % (bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag)
     bufr_csv = bufr.bufrCSV(bufr_fname)
 
-    # Only keep platforms if we are creating synthetic obs for them
-    bufr_csv.df.drop(index=np.where(bufr_csv.df['subset'] != 'ADPUPA')[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
+    # Only keep platforms if we are creating synthetic obs for them (don't include type 132/232
+    # b/c it looks like drift is already accounted for in the prepbufr file)
+    all_types = bufr_csv.df['TYP'].unique()
+    for typ in all_types:
+        if typ not in [120, 220, 221, 122, 222]:
+            bufr_csv.df.drop(index=np.where(bufr_csv.df['TYP'] == typ)[0], inplace=True)
+            bufr_csv.df.reset_index(drop=True, inplace=True)
     if debug > 0:
         print('total # of BUFR entries = %d' % len(bufr_csv.df))
 
@@ -442,7 +451,7 @@ for i in range(ntimes):
         # Convert (x, y) coords back to km
         out_df['adpupa_x'] = out_df['adpupa_x'] * wrf_dx
         out_df['adpupa_y'] = out_df['adpupa_y'] * wrf_dx
-        bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.debug.adpupa.csv'))
+        bufr.df_to_csv(out_df, '%s/%s.%s.debug_adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
     
     # Drop the extra columns we added
     out_df.drop(labels=extra_col_int, axis=1, inplace=True)
@@ -456,8 +465,8 @@ for i in range(ntimes):
 
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
-    bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.adpupa.csv'))
-    bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.adpupa.csv'))
+    bufr.df_to_csv(out_df, '%s/%s.%s.fake.adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
+    bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red_adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
     
     # Timing
     print()

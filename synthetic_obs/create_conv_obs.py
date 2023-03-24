@@ -21,6 +21,7 @@ Passed Arguments:
     argv[4] = Time for first prepbufr file (YYYYMMDDHH)
     argv[5] = Time for first UPP file (YYYYMMDDHH)
     argv[6] = Time for last UPP file (YYYYMMDDHH)
+    argv[7] = Prepbufr file tag
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -77,6 +78,10 @@ wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
 #wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
 
+# Prepbufr tag ('rap', 'rap_e', or 'rap_p')
+bufr_tag = 'rap'
+bufr_tag = sys.argv[7]
+
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
 # the US Standard Atmosphere. Therefore, the heights for the simulated obs should be the same as the
@@ -115,7 +120,7 @@ for i in range(ntimes):
     print()
     print('t = %s' % t.strftime('%Y-%m-%d %H:%M:%S'))
     print('start time = %s' % start_loop.strftime('%Y%m%d %H:%M:%S'))
-    bufr_fname = bufr_dir + t.strftime('/%Y%m%d%H%M.rap.prepbufr.csv')
+    bufr_fname = '%s/%s.%s.prepbufr.csv' % (bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag)
     bufr_csv = bufr.bufrCSV(bufr_fname)
 
     # Only keep platforms if we are creating synthetic obs for them
@@ -494,8 +499,8 @@ for i in range(ntimes):
 
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
-    bufr.df_to_csv(out_df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.fake.prepbufr.csv'))
-    bufr.df_to_csv(bufr_csv.df, fake_bufr_dir + t.strftime('/%Y%m%d%H%M.real_red.prepbufr.csv'))
+    bufr.df_to_csv(out_df, '%s/%s.%s.fake.prepbufr.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'),  bufr_tag))
+    bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red.prepbufr.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
 
     # Timing
     print()

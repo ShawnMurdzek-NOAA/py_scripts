@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #SBATCH -A wrfruc
-#SBATCH -t 04:00:00
+#SBATCH -t 06:00:00
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --mem=4GB
 #SBATCH --partition=orion
@@ -10,9 +10,12 @@ date
 . ~/.bashrc
 my_py
 
-model=( 'NR' 'HRRR' )
-field=( 'cref' 'precip1hr' )
-domain=( 'all' 'easternUS' )
+#model=( 'NR' 'HRRR' )
+#field=( 'cref' 'precip1hr' )
+#domain=( 'all' 'easternUS' )
+model=( 'HRRR' )
+field=( 'precip1hr' )
+domain=( 'easternUS' )
 zoom=( 'regular' 'zoomed' )
 for m in ${model[@]}; do
   for f in ${field[@]}; do
