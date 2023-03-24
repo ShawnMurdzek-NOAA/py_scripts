@@ -19,6 +19,7 @@ Passed Arguments:
     argv[5] = Time for first UPP file (YYYYMMDDHH)
     argv[6] = Time for last UPP file (YYYYMMDDHH)
     argv[7] = Prepbufr file tag
+    argv[8] = Time after DHR = 0 to terminate radiosonde drift calculations (min)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 27 February 2023
@@ -77,7 +78,7 @@ bufr_tag = 'rap'
 
 # Interpolation time range (min relative to DHR for first number and min relative to prepbufr 
 # timestamp for second number). Terminate radiosonde when it exits this range
-interp_range = [-30, 25]
+interp_range = [-30, float(sys.argv[8])]
 
 # Ascent rate for radiosonde. 5 m/s value comes from this NWS report: 
 # https://www.weather.gov/media/upperair/Documents/Radiosonde%20Ascent%20Rates.pdf

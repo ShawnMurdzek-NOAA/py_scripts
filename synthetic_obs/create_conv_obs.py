@@ -49,6 +49,8 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
+print(sys.argv)
+
 # Directory containing wrfnat output from UPP
 #wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 wrf_dir = sys.argv[1]

@@ -13,6 +13,11 @@ case $MACHINE in
   source ${PY_ENV}/py_orion.env;;
 esac
 
+# Different rap prepbufr tags and the time (in min from DHR=0) to terminate radiosonde drift
+# calculations
+tags=( 'rap' 'rap_e' 'rap_p' )
+end_interp=( 50 25 70 )
+
 # Determine range of wrfnat files
 first_UPP=`date '+%Y%m%d%H' --date="${cycle::8} ${cycle:8:2}00 -4 hours"`
 last_UPP=`date '+%Y%m%d%H' --date="${cycle::8} ${cycle:8:2}00 +1 hours"`
@@ -28,22 +33,42 @@ fi
 echo "${cycle}, ${first_UPP}, ${last_UPP}" 
 
 cd ${CODE_DIR}
-for tag in 'rap rap_e rap_p'; do
-  if [ -e ${BUFR_DIR}/${cycle}00.${tag}.prepbufr.csv ]; then
+for i in ${!tags[@]}; do
+  if [ -e ${BUFR_DIR}/${cycle}00.${tags[i]}.prepbufr.csv ]; then
 
     # Determine if there are any ADPUPA observations
-    nADPUPA=`grep -o ${BUFR_DIR}/${cycle}00.rap.prepbufr.csv | wc -l`
-    echo "${tag}, nADPUPA = ${nADPUPA}"
+    nADPUPA=`grep -o 'ADPUPA' ${BUFR_DIR}/${cycle}00.${tags[i]}.prepbufr.csv | wc -l`
+    echo "${BUFR_DIR}/${cycle}00.${tags[i]}.prepbufr.csv"
+    echo "nADPUPA = ${nADPUPA}"
     echo
 
     # Run simulated observation creation code
     cd ${CODE_DIR}
-    python create_conv_obs.py ${WRF_DIR} ${BUFR_DIR} ${OUT_DIR}/conv/ ${cycle} ${first_UPP} ${last_UPP} ${tag}
+
+    python create_conv_obs.py ${WRF_DIR} \
+                              ${BUFR_DIR} \
+                              ${OUT_DIR}/conv/ \
+                              ${cycle} \
+                              ${first_UPP} \
+                              ${last_UPP} \
+                              ${tags[i]}
+
     if [ ${nADPUPA} -gt 0 ]; then
-      python create_adpupa_obs.py ${WRF_DIR} ${BUFR_DIR} ${OUT_DIR}/adpupa/ ${cycle} ${first_UPP} ${last_UPP} ${tag}
-      python merge_conv_adpupa.py ${OUT_DIR}/conv/${cycle}00.${tag}.fake.prepbufr.csv ${OUT_DIR}/adpupa/${cycle}00.${tag}.fake.adpupa.csv ${OUT_DIR}/perfect/${cycle}00.${tag}.fake.prepbufr.csv
+      python create_adpupa_obs.py ${WRF_DIR} \
+                                  ${BUFR_DIR} \
+                                  ${OUT_DIR}/adpupa/ \
+                                  ${cycle} \
+                                  ${first_UPP} \
+                                  ${last_UPP} \
+                                  ${tags[i]} \
+                                  ${end_interp[i]}
+
+      python merge_conv_adpupa.py ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv \
+                                  ${OUT_DIR}/adpupa/${cycle}00.${tags[i]}.fake.adpupa.csv \
+                                  ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
+
     else
-      cp ${OUT_DIR}/conv/${cycle}00.${tag}.fake.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tag}.fake.prepbufr.csv
+      cp ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
     fi
 
   fi
