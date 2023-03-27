@@ -519,6 +519,8 @@ if debug > 1:
 # Total timing
 print()
 print('time for entire program = %.6f s' % (dt.datetime.now() - begin).total_seconds())
+print('create_conv_obs.py finished successfully!!')
+print()
 
 
 """

@@ -27,7 +27,7 @@ bufr_dr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfec
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(12)]
 
 # Output file name
-save_fname = './ob_diffs__aircraft_vprof.png'
+save_fname = './ob_diffs_aircraft_vprof.png'
 
 # Observation subsets
 subsets = ['ADPUPA', 'AIRCFT', 'AIRCAR']

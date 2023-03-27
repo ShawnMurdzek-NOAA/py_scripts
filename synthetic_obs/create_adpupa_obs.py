@@ -457,7 +457,7 @@ for i in range(ntimes):
         # Convert (x, y) coords back to km
         out_df['adpupa_x'] = out_df['adpupa_x'] * wrf_dx
         out_df['adpupa_y'] = out_df['adpupa_y'] * wrf_dx
-        bufr.df_to_csv(out_df, '%s/%s.%s.debug_adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
+        bufr.df_to_csv(out_df, '%s/%s.%s.debug.adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
     
     # Drop the extra columns we added
     out_df.drop(labels=extra_col_int, axis=1, inplace=True)
@@ -472,7 +472,7 @@ for i in range(ntimes):
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
     bufr.df_to_csv(out_df, '%s/%s.%s.fake.adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
-    bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red_adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
+    bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red.adpupa.csv' % (fake_bufr_dir, t.strftime('%Y%m%d%H%M'), bufr_tag))
     
     # Timing
     print()
@@ -486,6 +486,8 @@ if debug > 1:
 # Total timing
 print()
 print('time for entire program = %.6f s' % (dt.datetime.now() - begin).total_seconds())
+print('create_adpupa_obs.py finished successfully!!')
+print()
 
 
 """
