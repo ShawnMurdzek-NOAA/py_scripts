@@ -24,13 +24,19 @@ import sys
 #---------------------------------------------------------------------------------------------------
 
 # Conventional ob prepbufr
-conv_fname = sys.argv[1]
+conv_fname = ''
 
 # ADPUPA ob prepbufr
-adpupa_fname = sys.argv[2]
+adpupa_fname = ''
 
 # Output prepbufr
-out_fname = sys.argv[3]
+out_fname = ''
+
+# Used passed arguments, if they exist
+if len(sys.argv) > 1:
+    conv_fname = sys.argv[1]
+    adpupa_fname = sys.argv[2]
+    out_fname = sys.argv[3]
 
 
 #---------------------------------------------------------------------------------------------------

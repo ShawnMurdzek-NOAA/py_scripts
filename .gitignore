@@ -17,3 +17,6 @@ core*
 
 # Ignore log files
 *.log
+
+# Ignore database files from Rocoto
+*.db

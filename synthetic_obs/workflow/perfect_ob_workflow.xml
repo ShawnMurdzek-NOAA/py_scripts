@@ -78,7 +78,7 @@ to use for a given task.
     <command>&PERF_OB_SCRIPT;</command>
   
     <cores>&PERFECT_OB_CORES;</cores>
-    <walltime>04:00:00</walltime>
+    <walltime>08:00:00</walltime>
     <memory>25G</memory>
     <jobname>&TAG;_&PERFECT_OBS_TN;</jobname>
     <join><cyclestr>&OUT_DIR;/log/&PERFECT_OBS_TN;_@Y@m@d@H@M.log</cyclestr></join>

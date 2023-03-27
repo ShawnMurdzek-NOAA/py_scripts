@@ -49,40 +49,30 @@ import map_proj as mp
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-print(sys.argv)
-
 # Directory containing wrfnat output from UPP
-#wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
-wrf_dir = sys.argv[1]
+wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
-#bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
-bufr_dir = sys.argv[2]
+bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 
 # Output directory for synthetic prepbufr CSV output
-#fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
-fake_bufr_dir = sys.argv[3]
+fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
-bufr_end = bufr_start + dt.timedelta(hours=1)
-#bufr_start = dt.datetime(2022, 4, 29, 12)
-#bufr_end = dt.datetime(2022, 4, 29, 13)
+bufr_start = dt.datetime(2022, 4, 29, 12)
+bufr_end = dt.datetime(2022, 4, 29, 13)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
-wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
-#wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-#wrf_end = dt.datetime(2022, 4, 29, 15, 0)
+wrf_start = dt.datetime(2022, 4, 29, 12, 0)
+wrf_end = dt.datetime(2022, 4, 29, 15, 0)
 wrf_step = 15
 
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
 bufr_tag = 'rap'
-bufr_tag = sys.argv[7]
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
@@ -96,6 +86,17 @@ debug = 2
 # Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
 # Helpful for debugging, but should usually be set to False b/c it increases runtime
 interp_latlon = False
+
+# Use passed arguments, if they exist
+if len(sys.argv) > 1:
+    wrf_dir = sys.argv[1]
+    bufr_dir = sys.argv[2]
+    fake_bufr_dir = sys.argv[3]
+    bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
+    bufr_end = bufr_start + dt.timedelta(hours=1)
+    wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
+    wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
+    bufr_tag = sys.argv[7]
 
 
 #---------------------------------------------------------------------------------------------------

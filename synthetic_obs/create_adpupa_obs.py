@@ -49,36 +49,29 @@ import map_proj as mp
 
 # Directory containing wrfnat output from UPP
 wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
-#wrf_dir = sys.argv[1]
 
 # Directory containing real prepbufr CSV output
 bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
-#bufr_dir = sys.argv[2]
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
-#fake_bufr_dir = sys.argv[3]
 
 # Start and end times for prepbufrs. Step is in min
-#bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
 bufr_start = dt.datetime(2022, 4, 30, 1)
 bufr_end = bufr_start + dt.timedelta(hours=1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-#wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
-#wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
 wrf_start = dt.datetime(2022, 4, 29, 21, 0)
 wrf_end = dt.datetime(2022, 4, 30, 2, 0)
 wrf_step = 15
 
 # Prepbufr tag ('rap', 'rap_e', 'rap_p')
 bufr_tag = 'rap'
-#bufr_tag = sys.argv[7]
 
 # Interpolation time range (min relative to DHR for first number and min relative to prepbufr 
 # timestamp for second number). Terminate radiosonde when it exits this range
-interp_range = [-30, float(sys.argv[8])]
+interp_range = [-30, 25]
 
 # Ascent rate for radiosonde. 5 m/s value comes from this NWS report: 
 # https://www.weather.gov/media/upperair/Documents/Radiosonde%20Ascent%20Rates.pdf
@@ -97,6 +90,18 @@ debug = 2
 # Save full dataframe for debugging?
 save_debug_df = True
 
+# Use passed arguments, if they exist
+if len(sys.argv) > 1:
+    wrf_dir = sys.argv[1]
+    bufr_dir = sys.argv[2]
+    fake_bufr_dir = sys.argv[3]
+    bufr_start = dt.datetime.strptime(sys.argv[4], '%Y%m%d%H')
+    bufr_end = bufr_start + dt.timedelta(hours=1)
+    wrf_start = dt.datetime.strptime(sys.argv[5], '%Y%m%d%H')
+    wrf_end = dt.datetime.strptime(sys.argv[6], '%Y%m%d%H')
+    bufr_tag = sys.argv[7]
+    interp_range = [-30, float(sys.argv[8])]
+  
 
 #---------------------------------------------------------------------------------------------------
 # Create Simulated ADPUPA Observations
