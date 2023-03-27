@@ -85,7 +85,7 @@ thin = 3
 wrf_dx = thin
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
-debug = 2
+debug = 0
 
 # Save full dataframe for debugging?
 save_debug_df = True

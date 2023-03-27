@@ -81,7 +81,7 @@ bufr_tag = 'rap'
 interp_z_aircft = False
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
-debug = 2
+debug = 0
 
 # Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
 # Helpful for debugging, but should usually be set to False b/c it increases runtime

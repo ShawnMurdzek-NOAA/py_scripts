@@ -20,19 +20,18 @@ import numpy as np
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-# Input BUFR CSV files
-#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
-#fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
-#fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
-fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300000.fake.adpupa.csv'
-fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/202204300000.real_red.adpupa.csv'
+# Input BUFR CSV directory
+bufr_dr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+
+# Range of datetimes to use for the comparison
+date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(12)]
 
 # Output file name
-save_fname = './ob_diffs_vprof.png'
+save_fname = './ob_diffs__aircraft_vprof.png'
 
 # Observation subsets
 subsets = ['ADPUPA', 'AIRCFT', 'AIRCAR']
+#subsets = ['ADPUPA']
 
 # Variables to plot
 obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
@@ -59,20 +58,29 @@ qm = {'POB':'PQM',
       'PWQ':'PWO'}
 
 # Open files
-bufr_df1 = bufr.bufrCSV(fname1)
-bufr_df2 = bufr.bufrCSV(fname2)
+real_ob_dfs = []
+sim_ob_dfs = []
+for d in date_range:
+    date_str = d.strftime('%Y%m%d%H%M')
+    real_bufr_csv = bufr.bufrCSV('%s/%s.rap.real_red.prepbufr.csv' % (bufr_dir, date_str))
+    real_ob_dfs.append(real_bufr_df.df)
+    sim_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % (bufr_dir, date_str))
+    sim_ob_dfs.append(real_bufr_df.df)
+    meta = sim_bufr_csv.meta
+bufr_df_real = pd.concat(real_ob_dfs)
+bufr_df_sim = pd.concat(sim_ob_dfs)
 
-# Apply rounding so precision in simulated obs matches real obs
-#bufr_df1.df = bufr.match_bufr_prec(bufr_df1.df)
-#bufr_df2.df = bufr.match_bufr_prec(bufr_df2.df)
+# Only retain obs with DHR between 0 and -1 to prevent double-counting
+bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
+bufr_df_sim = bufr_df_sim.loc[np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0)]
 
 # Only retain obs from desired subset
-boo = np.zeros(len(bufr_df1.df))
+boo = np.zeros(len(bufr_df_sim))
 for s in subsets:
-    boo[bufr_df1.df['subset'] == s] = 1
+    boo[bufr_df_sim['subset'] == s] = 1
 ind = np.where(boo)
-bufr_df1.df = bufr_df1.df.loc[ind]
-bufr_df2.df = bufr_df2.df.loc[ind]
+bufr_df_sim = bufr_df_sim.loc[ind]
+bufr_df_real = bufr_df_real.loc[ind]
 
 fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(8, 6), sharey=True)
 plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9, hspace=0.3, wspace=0.3)
@@ -82,12 +90,12 @@ for i, v in enumerate(obs_vars):
 
     # Only plot if the quality marker is <= 2
     if v in qm.keys():
-        cond = np.logical_and(bufr_df1.df[qm[v]] <= 2, bufr_df2.df[qm[v]])
-        diff = bufr_df1.df.loc[cond, v] - bufr_df2.df.loc[cond, v]
-        pres = bufr_df1.df.loc[cond, 'POB'].values
+        cond = np.logical_and(bufr_df_sim[qm[v]] <= 2, bufr_df_real[qm[v]])
+        diff = bufr_df_sim.loc[cond, v] - bufr_df_real.loc[cond, v]
+        pres = bufr_df_sim.loc[cond, 'POB'].values
     else:
-        diff = bufr_df1.df[v] - bufr_df2.df[v]
-        pres = bufr_df1.df['POB'].values
+        diff = bufr_df_sim[v] - bufr_df_real[v]
+        pres = bufr_df_sim['POB'].values
     
     # Compute various percentiles for each bin along the pressure coordinate
     var_percentiles = {}
@@ -113,10 +121,10 @@ for i, v in enumerate(obs_vars):
     ticks = np.array([1000, 850, 700, 500, 400, 300, 200, 100])
     ax.set_yticks(np.log10(ticks))
     ax.set_yticklabels(ticks)
-    ax.set_xlabel('%s (%s)' % (v, bufr_df1.meta[v]['units']), size=12)
+    ax.set_xlabel('%s (%s)' % (v, meta[v]['units']), size=12)
 
 for i in range(2):
-    axes[i, 0].set_ylabel('pressure (%s)' % bufr_df1.meta['POB']['units'], size=12)
+    axes[i, 0].set_ylabel('pressure (%s)' % meta['POB']['units'], size=12)
 
 plt.suptitle(title, size=16)
 plt.savefig(save_fname)

@@ -18,6 +18,8 @@ esac
 tags=( 'rap' 'rap_e' 'rap_p' )
 end_interp=( 50 25 70 )
 
+# Compute 
+
 # Determine range of wrfnat files
 first_UPP=`date '+%Y%m%d%H' --date="${cycle::8} ${cycle:8:2}00 -4 hours"`
 last_UPP=`date '+%Y%m%d%H' --date="${cycle::8} ${cycle:8:2}00 +1 hours"`
@@ -62,17 +64,31 @@ for i in ${!tags[@]}; do
                                   ${last_UPP} \
                                   ${tags[i]} \
                                   ${end_interp[i]}
+      adpupa_error=$?
 
-      python merge_conv_adpupa.py ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv \
-                                  ${OUT_DIR}/adpupa/${cycle}00.${tags[i]}.fake.adpupa.csv \
-                                  ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
+      if [ ${adpupa_error} -eq 0 ]; then
+        python merge_conv_adpupa.py ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv \
+                                    ${OUT_DIR}/adpupa/${cycle}00.${tags[i]}.fake.adpupa.csv \
+                                    ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
+      
+        python merge_conv_adpupa.py ${OUT_DIR}/conv/${cycle}00.${tags[i]}.real_red.prepbufr.csv \
+                                    ${OUT_DIR}/adpupa/${cycle}00.${tags[i]}.real_red.adpupa.csv \
+                                    ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.real_red.prepbufr.csv
+
+      else
+        echo
+        echo "error (${adpupa_error}) in create_adpupa_obs.py, using ADPUPA obs from create_conv_obs.py instead"
+        echo
+        cp ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
+        cp ${OUT_DIR}/conv/${cycle}00.${tags[i]}.real_red.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.real_red.prepbufr.csv
+      fi
 
     else
       cp ${OUT_DIR}/conv/${cycle}00.${tags[i]}.fake.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.fake.prepbufr.csv
+      cp ${OUT_DIR}/conv/${cycle}00.${tags[i]}.real_red.prepbufr.csv ${OUT_DIR}/perfect/${cycle}00.${tags[i]}.real_red.prepbufr.csv
     fi
 
   fi
 done
 
-report-mem
 date

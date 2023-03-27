@@ -17,6 +17,7 @@ Date Created: 21 March 2023
 import pandas as pd
 import bufr
 import sys
+import numpy as np
 
 
 #---------------------------------------------------------------------------------------------------

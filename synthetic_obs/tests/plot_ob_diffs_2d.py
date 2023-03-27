@@ -16,25 +16,24 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+import datetime as dt
 
 
 #---------------------------------------------------------------------------------------------------
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-# Input BUFR CSV files
-#fname1 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-#fname2 = '/mnt/lfs4/BMC/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
-#fname1 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.fake.prepbufr.csv'
-#fname2 = '/scratch1/BMC/wrfruc/murdzek/nature_run_tests/nature_run_spring_v2/synthetic_obs/202204291200.real_red.prepbufr.csv'
-fname1 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.fake.prepbufr.csv'
-fname2 = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs/202204291200.real_red.prepbufr.csv'
+# Input BUFR CSV directory
+bufr_dr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+
+# Range of datetimes to use for the comparison
+date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(12)]
 
 # Dataset names
 name1 = 'Sim Obs'
 name2 = 'Real Obs'
 
-# Output file name (include %s placeholder for variable)
+# Output file name (include %s placeholder for variable name)
 save_fname = './ob_diffs_%s.png'
 
 # Observation subsets
@@ -64,20 +63,33 @@ borders = cfeature.NaturalEarthFeature(category='cultural',
                                        name='admin_1_states_provinces')
 
 # Open files
-bufr_df1 = bufr.bufrCSV(fname1)
-bufr_df2 = bufr.bufrCSV(fname2)
+real_ob_dfs = []
+sim_ob_dfs = []
+for d in date_range:
+    date_str = d.strftime('%Y%m%d%H%M')
+    real_bufr_csv = bufr.bufrCSV('%s/%s.rap.real_red.prepbufr.csv' % (bufr_dir, date_str))
+    real_ob_dfs.append(real_bufr_df.df)
+    sim_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % (bufr_dir, date_str))
+    sim_ob_dfs.append(real_bufr_df.df)
+    meta = sim_bufr_csv.meta
+bufr_df_real = pd.concat(real_ob_dfs)
+bufr_df_sim = pd.concat(sim_ob_dfs)
+
+# Only retain obs with DHR between 0 and -1 to prevent double-counting
+bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
+bufr_df_sim = bufr_df_sim.loc[np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0)]
 
 # Apply rounding so precision in simulated obs matches real obs
-bufr_df1.df = bufr.match_bufr_prec(bufr_df1.df)
-bufr_df2.df = bufr.match_bufr_prec(bufr_df2.df)
+bufr_df_sim = bufr.match_bufr_prec(bufr_df_sim)
+bufr_df_real = bufr.match_bufr_prec(bufr_df_real)
 
 # Only retain obs from desired subset
-boo = np.zeros(len(bufr_df1.df))
+boo = np.zeros(len(bufr_df_sim))
 for s in subsets:
-    boo[bufr_df1.df['subset'] == s] = 1
+    boo[bufr_df_sim['subset'] == s] = 1
 ind = np.where(boo)
-bufr_df1.df = bufr_df1.df.loc[ind]
-bufr_df2.df = bufr_df2.df.loc[ind]
+bufr_df_sim = bufr_df_sim.loc[ind]
+bufr_df_real = bufr_df_real.loc[ind]
 
 for v in obs_vars:
     print('Plotting %s' % v)
@@ -86,18 +98,18 @@ for v in obs_vars:
 
     # Only plot if the quality marker is <= 2
     if v in qm.keys():
-        cond = np.logical_and(bufr_df1.df[qm[v]] <= 2, bufr_df2.df[qm[v]] <= 2)
-        field1 = bufr_df1.df.loc[cond, v]
-        field2 = bufr_df2.df.loc[cond, v]
+        cond = np.logical_and(bufr_df_sim[qm[v]] <= 2, bufr_df_real[qm[v]] <= 2)
+        field1 = bufr_df_sim.loc[cond, v]
+        field2 = bufr_df_real.loc[cond, v]
         diff = (field1 - field2).values
-        lat = bufr_df1.df.loc[cond, 'YOB'].values
-        lon = bufr_df1.df.loc[cond, 'XOB'].values
+        lat = bufr_df_sim.loc[cond, 'YOB'].values
+        lon = bufr_df_sim.loc[cond, 'XOB'].values
     else:
-        field1 = bufr_df1.df[v]
-        field2 = bufr_df2.df[v]
+        field1 = bufr_df_sim[v]
+        field2 = bufr_df_real[v]
         diff = (field1 - field2).values
-        lat = bufr_df1.df['YOB'].values
-        lon = bufr_df1.df['XOB'].values
+        lat = bufr_df_sim['YOB'].values
+        lon = bufr_df_sim['XOB'].values
 
     # Plot actual values
     maxval = max(np.amax(field1), np.amax(field2))
@@ -116,12 +128,12 @@ for v in obs_vars:
 
         ax2 = fig.add_subplot(2, 3, j+4)
         ax2.hist(f, bins=40, range=(minval, maxval))
-        ax2.set_xlabel('%s (%s)' % (v, bufr_df1.meta[v]['units']), size=12)
+        ax2.set_xlabel('%s (%s)' % (v, meta[v]['units']), size=12)
         ax2.set_ylabel('counts', size=12)
         ax2.grid()
 
     cbar = plt.colorbar(cax, ax=axlist, orientation='horizontal')
-    cbar.set_label('%s (%s)' % (v, bufr_df1.meta[v]['units']), size=12)
+    cbar.set_label('%s (%s)' % (v, meta[v]['units']), size=12)
 
     # Plot differences
     dlim = np.percentile(np.abs(diff), 99)
@@ -130,7 +142,7 @@ for v in obs_vars:
     cax = ax1.scatter(lon[sort_idx], lat[sort_idx], s=2, c=diff[sort_idx], cmap='bwr', 
                       vmin=-dlim, vmax=dlim, transform=ccrs.PlateCarree())
     cbar = plt.colorbar(cax, ax=ax1, orientation='horizontal')
-    cbar.set_label('%s diffs (%s)' % (v, bufr_df1.meta[v]['units']), size=14)
+    cbar.set_label('%s diffs (%s)' % (v, meta[v]['units']), size=14)
 
     ax1.coastlines('50m')
     ax1.add_feature(borders, linewidth=0.5, edgecolor='k')
@@ -140,7 +152,7 @@ for v in obs_vars:
         
     ax2 = fig.add_subplot(2, 3, 6)
     ax2.hist(diff, bins=40, range=(-dlim, dlim))
-    ax2.set_xlabel('%s diff (%s)' % (v, bufr_df1.meta[v]['units']), size=12)
+    ax2.set_xlabel('%s diff (%s)' % (v, meta[v]['units']), size=12)
     ax2.set_ylabel('counts', size=12)
     ax2.grid()
 
