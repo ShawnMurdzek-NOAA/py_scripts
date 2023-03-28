@@ -55,6 +55,11 @@ for i in ${!tags[@]}; do
                               ${last_UPP} \
                               ${tags[i]}
 
+    conv_error=$?
+    if [ ${conv_error} -gt 0 ]; then
+      exit ${conv_error}
+    fi
+
     if [ ${nADPUPA} -gt 0 ]; then
       python create_adpupa_obs.py ${WRF_DIR} \
                                   ${BUFR_DIR} \
