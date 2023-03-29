@@ -16,49 +16,121 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.path as mplpath
+import pyproj
+import scipy.interpolate as si
+import datetime as dt
+import xarray as xr
+import shapefile
 
 
 #---------------------------------------------------------------------------------------------------
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-# Spacing between UAS sites (km)
-dx = 35.
+# Spacing between UAS sites (m)
+dx = 35000.
 
-# Lower-left and upper-right corners of domain (deg N, deg E)
-ll_lat =
-ll_lon =
-ur_lat =
-ur_lon =
+# Grid points in east-west and north-south directions (similar to e_we and e_sn in WPS namelist)
+npts_we = 155
+npts_sn = 91
 
-# Map projection
-proj = ccrs.LambertConformal()
+# Nature run output (for landmask)
+upp_file = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291200.grib2'
+
+# Shapefile (and shape index) containing the outline of the US
+shp_fname = '/home/smurdzek/.local/share/cartopy/shapefiles/natural_earth/cultural/ne_50m_admin_0_countries'
+nshape = 16
+
+# Map projection in proj4 format. See documentation here for Lambert Conformal parameters: 
+# https://proj.org/operations/projections/lcc.html
+proj_str = '+proj=lcc +lat_0=39 +lon_0=-96 +lat_1=33 +lat_2=45'
 
 # Output text file to dump UAS site (lat, lon) coordinates
 out_file = 'uas_site_locs.txt'
 
 # Options for plotting UAS sites
 make_plot = True
+plot_save_fname = 'conus_uas_sites.pdf'
+#lon_lim = [-76.75, -73.5]
+#lat_lim = [38.75, 41.5]
+lon_lim = [-127, -65]
+lat_lim = [23, 49]
 
 
 #---------------------------------------------------------------------------------------------------
 # Compute (lat, lon) coordinates of UAS Sites
 #---------------------------------------------------------------------------------------------------
 
-# Can use proj.transform_points() to convert (x, y) coordinates to (lat, lon) coordinates (in m, I 
-# think)
+x_uas, y_uas = np.meshgrid(np.arange(-0.5*npts_we*dx, 0.5*npts_we*dx + (0.1*dx), dx),
+                           np.arange(-0.5*npts_sn*dx, 0.5*npts_sn*dx + (0.1*dx), dx))
+x_uas = x_uas.ravel()
+y_uas = y_uas.ravel()
 
-# The trick will be how to convert the bounds (ll_lat, ll_lon, ur_lat, ur_lon) to Cartesian points.
-# There doesn't appear to be a function that does that. This will be needed in order to create the
-# initial arrays of (x, y) coordinates
+# Create projection and convert to (lat, lon) coordinates
+proj = pyproj.Proj(proj_str)
+lon_uas, lat_uas = proj(x_uas, y_uas, inverse=True)
 
-# Also need a shapefile containing the land mask in order to remove sites that occur over lakes and
-# oceans.
+# Extract and apply landmask
+upp_ds = xr.open_dataset(upp_file, engine='pynio')
+landmask = upp_ds['LAND_P0_L1_GLC0'].values.ravel()
+lat_upp = upp_ds['gridlat_0'].values.ravel()
+lon_upp = upp_ds['gridlon_0'].values.ravel()
+
+print('performing landmask interpolation (%s)' % dt.datetime.now().strftime('%H:%M:%S'))
+interp_fct = si.NearestNDInterpolator(list(zip(lon_upp, lat_upp)), landmask)
+uas_mask_land = np.array(interp_fct(list(zip(lon_uas, lat_uas))), dtype=bool)
+lon_uas = lon_uas[uas_mask_land]
+lat_uas = lat_uas[uas_mask_land]
+print('done with landmask interpolation (%s)' % dt.datetime.now().strftime('%H:%M:%S'))
+
+# Remove UAS sites outside of the US
+# pyshp documentation: https://pypi.org/project/pyshp/#reading-shapefiles
+full_shp = shapefile.Reader(shp_fname)
+us_shape = full_shp.shapes()[nshape]
+uas_mask_us = np.zeros(len(lon_uas))
+for istart, iend in zip(us_shape.parts[:-1], us_shape.parts[1:]):
+    polygon = mplpath.Path(us_shape.points[istart:iend], closed=True)
+    uas_mask_us = np.logical_or(uas_mask_us, polygon.contains_points(list(zip(lon_uas, lat_uas))))
+lon_uas = lon_uas[uas_mask_us]
+lat_uas = lat_uas[uas_mask_us]
+
+# Save results
+fptr = open(out_file, 'w')
+fptr.write('lon (deg E), lat (deg N)\n')
+for lon, lat in zip(lon_uas, lat_uas):
+    fptr.write('%.3f, %.3f\n' % (lon, lat))
+fptr.close()
+
 
 #---------------------------------------------------------------------------------------------------
 # Make Plot
 #---------------------------------------------------------------------------------------------------
 
+if make_plot:
+    proj_cartopy = ccrs.PlateCarree()
+    #proj_cartopy = ccrs.LambertConformal()
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1, projection=proj_cartopy)
+
+    ax.plot(lon_uas, lat_uas, 'r.', transform=proj_cartopy, markersize=1)
+
+    scale = '10m'
+    ax.coastlines(scale)
+    borders = cfeature.NaturalEarthFeature(category='cultural',
+                                           scale=scale,
+                                           facecolor='none',
+                                           name='admin_1_states_provinces')
+    ax.add_feature(borders)
+    lakes = cfeature.NaturalEarthFeature(category='physical',
+                                           scale=scale,
+                                           facecolor='none',
+                                           name='lakes')
+    ax.add_feature(lakes)
+    ax.set_extent([lon_lim[0], lon_lim[1], lat_lim[0], lat_lim[1]])
+
+    plt.savefig(plot_save_fname)
+    plt.show()
 
 
 """
