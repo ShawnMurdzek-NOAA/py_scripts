@@ -376,8 +376,13 @@ for i in range(ntimes):
                     out_df.loc[k, 'POB'], out_df.loc[k, 'pwgt'] = cou.interp_wrf_p1d(p1d, out_df.loc[k])
                 else:
                     drop_idx.append(k)
-                    k = k + 1
-                    continue
+                    if k == adpupa_last_idx[idx_sid]:
+                        print('reached end of RAOB %s in p extrapolation check' % sid)
+                        done_sid.append(sid)
+                        break
+                    else:
+                        k = k + 1
+                        continue
 
                 if debug > 1:
                     time_wgts = dt.datetime.now()

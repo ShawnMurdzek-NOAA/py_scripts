@@ -29,7 +29,7 @@ import shapefile
 #---------------------------------------------------------------------------------------------------
 
 # Spacing between UAS sites (m)
-dx = 35000.
+dx = 150000.
 
 # Grid points in east-west and north-south directions (similar to e_we and e_sn in WPS namelist)
 npts_we = 155
@@ -47,7 +47,7 @@ nshape = 16
 proj_str = '+proj=lcc +lat_0=39 +lon_0=-96 +lat_1=33 +lat_2=45'
 
 # Output text file to dump UAS site (lat, lon) coordinates
-out_file = 'uas_site_locs.txt'
+out_file = 'uas_site_locs_150km.txt'
 
 # Options for plotting UAS sites
 make_plot = True
