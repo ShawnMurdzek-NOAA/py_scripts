@@ -22,6 +22,7 @@ import scipy.interpolate as si
 import datetime as dt
 import xarray as xr
 import shapefile
+import scipy.ndimage as sn
 
 
 #---------------------------------------------------------------------------------------------------
@@ -29,7 +30,7 @@ import shapefile
 #---------------------------------------------------------------------------------------------------
 
 # Spacing between UAS sites (m)
-dx = 150000.
+dx = 35000.
 
 # Grid points in east-west and north-south directions (similar to e_we and e_sn in WPS namelist)
 npts_we = 155
@@ -37,6 +38,16 @@ npts_sn = 91
 
 # Nature run output (for landmask)
 upp_file = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220429/wrfnat_202204291200.grib2'
+
+# Apply binary closing after applying landmask?
+# Goal here is to include UAS sites over small inland bodies of water (i.e., not the Great Lakes).
+# Using binary closing is a bit aggressive, as it adds some UAS sites over the Great Lakes when
+# dx = 35000.
+land_closing = False
+
+# Maximum "hole" size. Gaps in the UAS network <= max_hole_size are filled. Set to 0 to not use 
+# this method. Removal of holes is applied after landmask, but before US mask.
+max_hole_size = 2
 
 # Shapefile (and shape index) containing the outline of the US
 shp_fname = '/home/smurdzek/.local/share/cartopy/shapefiles/natural_earth/cultural/ne_50m_admin_0_countries'
@@ -47,15 +58,15 @@ nshape = 16
 proj_str = '+proj=lcc +lat_0=39 +lon_0=-96 +lat_1=33 +lat_2=45'
 
 # Output text file to dump UAS site (lat, lon) coordinates
-out_file = 'uas_site_locs_150km.txt'
+out_file = 'uas_site_locs_35km.txt'
 
 # Options for plotting UAS sites
 make_plot = True
-plot_save_fname = 'conus_uas_sites.pdf'
-#lon_lim = [-76.75, -73.5]
-#lat_lim = [38.75, 41.5]
-lon_lim = [-127, -65]
-lat_lim = [23, 49]
+plot_save_fname = 'NJ_uas_sites.pdf'
+lon_lim = [-76.75, -73.5]
+lat_lim = [38.75, 41.5]
+#lon_lim = [-127, -65]
+#lat_lim = [23, 49]
 
 
 #---------------------------------------------------------------------------------------------------
@@ -64,6 +75,7 @@ lat_lim = [23, 49]
 
 x_uas, y_uas = np.meshgrid(np.arange(-0.5*npts_we*dx, 0.5*npts_we*dx + (0.1*dx), dx),
                            np.arange(-0.5*npts_sn*dx, 0.5*npts_sn*dx + (0.1*dx), dx))
+shape_uas = x_uas.shape
 x_uas = x_uas.ravel()
 y_uas = y_uas.ravel()
 
@@ -80,6 +92,21 @@ lon_upp = upp_ds['gridlon_0'].values.ravel()
 print('performing landmask interpolation (%s)' % dt.datetime.now().strftime('%H:%M:%S'))
 interp_fct = si.NearestNDInterpolator(list(zip(lon_upp, lat_upp)), landmask)
 uas_mask_land = np.array(interp_fct(list(zip(lon_uas, lat_uas))), dtype=bool)
+
+if land_closing:
+    uas_mask_land_2d = np.reshape(uas_mask_land, shape_uas)
+    uas_mask_land_2d = sn.binary_closing(uas_mask_land_2d)
+    uas_mask_land = uas_mask_land_2d.ravel()
+
+if max_hole_size > 0:
+    uas_mask_land_2d = np.reshape(uas_mask_land, shape_uas)
+    uas_mask_land_labeled = sn.label(np.logical_not(uas_mask_land_2d))[0]
+    for label in np.unique(uas_mask_land_labeled):
+        if np.sum(uas_mask_land_labeled == label) <= max_hole_size: 
+            label_idx = np.where(uas_mask_land_labeled == label)
+            uas_mask_land_2d[label_idx[0], label_idx[1]] = True
+    uas_mask_land = uas_mask_land_2d.ravel()
+
 lon_uas = lon_uas[uas_mask_land]
 lat_uas = lat_uas[uas_mask_land]
 print('done with landmask interpolation (%s)' % dt.datetime.now().strftime('%H:%M:%S'))
@@ -113,7 +140,7 @@ if make_plot:
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1, projection=proj_cartopy)
 
-    ax.plot(lon_uas, lat_uas, 'r.', transform=proj_cartopy, markersize=1)
+    ax.plot(lon_uas, lat_uas, 'r.', transform=proj_cartopy)
 
     scale = '10m'
     ax.coastlines(scale)
