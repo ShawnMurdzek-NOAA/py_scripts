@@ -50,7 +50,7 @@ class bufrCSV():
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
         # Load metadata from JSON file
-        self.meta = json.load(open('/work2/noaa/wrfruc/murdzek/src/py_scripts/modules/bufr_meta.json', 
+        self.meta = json.load(open('/work2/noaa/wrfruc/murdzek/src/py_scripts/metadata/bufr_meta.json', 
                                    'r'))
 
     def sample(self, fname, n=2):

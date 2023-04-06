@@ -59,7 +59,7 @@ to use for a given task.
 <workflow realtime="F" scheduler="&SCHED;" cyclethrottle="20" cyclelifespan="30:00:00:00">
 
 
-  <cycledef group="create_obs"> 202204291200 202205061200 01:00:00 </cycledef>
+  <cycledef group="create_obs"> 202204291200 202205061100 01:00:00 </cycledef>
 
   <log>
     <cyclestr>&WFLOW_DIR;/SIM_OB_wflow.log</cyclestr>

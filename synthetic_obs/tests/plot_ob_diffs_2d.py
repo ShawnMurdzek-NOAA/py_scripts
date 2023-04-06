@@ -17,6 +17,7 @@ import numpy as np
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import datetime as dt
+import pandas as pd
 
 
 #---------------------------------------------------------------------------------------------------
@@ -24,23 +25,28 @@ import datetime as dt
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV directory
-bufr_dr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+
+# Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
+bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
-date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(12)]
+date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
+date_range = [dt.datetime(2022, 4, 29, 12)]
 
 # Dataset names
 name1 = 'Sim Obs'
 name2 = 'Real Obs'
 
-# Output file name (include %s placeholder for variable name)
-save_fname = './ob_diffs_%s.png'
+# Output file name (include %s placeholders for bufr_tag, variable name, and start and end of date 
+# range)
+save_fname = './ob_diffs_%s_%s_%s_%s.png'
 
 # Observation subsets
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'XOB', 'YOB', 'ZOB']
+obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
 
 
 #---------------------------------------------------------------------------------------------------
@@ -67,17 +73,20 @@ real_ob_dfs = []
 sim_ob_dfs = []
 for d in date_range:
     date_str = d.strftime('%Y%m%d%H%M')
-    real_bufr_csv = bufr.bufrCSV('%s/%s.rap.real_red.prepbufr.csv' % (bufr_dir, date_str))
-    real_ob_dfs.append(real_bufr_df.df)
-    sim_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % (bufr_dir, date_str))
-    sim_ob_dfs.append(real_bufr_df.df)
+    real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    real_ob_dfs.append(real_bufr_csv.df)
+    sim_bufr_csv = bufr.bufrCSV('%s/%s.%s.fake.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    sim_ob_dfs.append(sim_bufr_csv.df)
     meta = sim_bufr_csv.meta
-bufr_df_real = pd.concat(real_ob_dfs)
-bufr_df_sim = pd.concat(sim_ob_dfs)
+bufr_df_real = pd.concat(real_ob_dfs, ignore_index=True)
+bufr_df_sim = pd.concat(sim_ob_dfs, ignore_index=True)
 
 # Only retain obs with DHR between 0 and -1 to prevent double-counting
 bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
 bufr_df_sim = bufr_df_sim.loc[np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0)]
+
+bufr_df_real.reset_index(inplace=True)
+bufr_df_sim.reset_index(inplace=True)
 
 # Apply rounding so precision in simulated obs matches real obs
 bufr_df_sim = bufr.match_bufr_prec(bufr_df_sim)
@@ -161,7 +170,8 @@ for v in obs_vars:
                  (np.mean(diff), np.std(diff), np.sqrt(np.mean(diff**2)), 
                   len(diff) - np.isnan(diff).sum()), size=16)
 
-    plt.savefig(save_fname % v)
+    plt.savefig(save_fname % (bufr_tag, v, date_range[0].strftime('%Y%m%d%H'), 
+                              date_range[-1].strftime('%Y%m%d%H')))
     plt.close()
 
 
