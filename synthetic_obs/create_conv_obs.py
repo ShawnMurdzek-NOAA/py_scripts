@@ -62,13 +62,13 @@ ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPS
 fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/conv/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime(2022, 4, 29, 12)
-bufr_end = dt.datetime(2022, 4, 29, 13)
+bufr_start = dt.datetime(2022, 4, 29, 19)
+bufr_end = dt.datetime(2022, 4, 29, 20)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 29, 12, 0)
-wrf_end = dt.datetime(2022, 4, 29, 15, 0)
+wrf_start = dt.datetime(2022, 4, 29, 17, 0)
+wrf_end = dt.datetime(2022, 4, 29, 20, 0)
 wrf_step = 15
 
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
@@ -159,7 +159,7 @@ for i in range(ntimes):
     print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
     
     # Extract size of latitude and longitude grids
-    shape = wrf_ds[0]['gridlat_0'].shape
+    shape = wrf_ds[list(wrf_ds.keys())[0]]['gridlat_0'].shape
     imax = shape[0] - 2
     jmax = shape[1] - 2
     
@@ -188,6 +188,10 @@ for i in range(ntimes):
         print('Finished with map projection and computing horiz interp weights (time = %.3f s)' % 
               (dt.datetime.now() - start_map_proj).total_seconds())
         print('# BUFR entries remaining = %d' % len(bufr_csv.df))
+
+    # Round time offsets to 6 decimal places to eliminate machine error
+    # (this helps avoid some rare bugs in upper-air obs that leads to all obs being 0)
+    bufr_csv.df['DHR'] = np.around(bufr_csv.df['DHR'], 6)
 
     # Create output DataFrame
     out_df = bufr_csv.df.copy()
@@ -381,7 +385,7 @@ for i in range(ntimes):
                         # Determine weight for temporal interpolation
                         ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
                         out_df.loc[j, 'twgt']  = twgt 
-
+           
                         # Determine surface height above sea level and surface pressure
                         if hr > out_df.loc[j, 'DHR']:
                             hr1 = hr - wrf_step_dec

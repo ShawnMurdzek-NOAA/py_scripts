@@ -14,6 +14,8 @@ Date Created: 14 February 2023
 import bufr
 import matplotlib.pyplot as plt
 import numpy as np
+import datetime as dt
+import pandas as pd
 
 
 #---------------------------------------------------------------------------------------------------
@@ -21,17 +23,21 @@ import numpy as np
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV directory
-bufr_dr = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+
+# Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
+bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
-date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(12)]
+#date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
+date_range = [dt.datetime(2022, 4, 30, 0)]
 
-# Output file name
-save_fname = './ob_diffs_aircraft_vprof.png'
+# Output file name (include %s placeholders for bufr_tag and start and end dates)
+save_fname = './ob_diffs_aircraft_vprof_%s_%s_%s.png'
 
 # Observation subsets
-subsets = ['ADPUPA', 'AIRCFT', 'AIRCAR']
-#subsets = ['ADPUPA']
+#subsets = ['AIRCFT', 'AIRCAR']
+subsets = ['ADPUPA']
 
 # Variables to plot
 obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
@@ -62,17 +68,20 @@ real_ob_dfs = []
 sim_ob_dfs = []
 for d in date_range:
     date_str = d.strftime('%Y%m%d%H%M')
-    real_bufr_csv = bufr.bufrCSV('%s/%s.rap.real_red.prepbufr.csv' % (bufr_dir, date_str))
-    real_ob_dfs.append(real_bufr_df.df)
-    sim_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % (bufr_dir, date_str))
-    sim_ob_dfs.append(real_bufr_df.df)
+    real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    real_ob_dfs.append(real_bufr_csv.df)
+    sim_bufr_csv = bufr.bufrCSV('%s/%s.%s.fake.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    sim_ob_dfs.append(sim_bufr_csv.df)
     meta = sim_bufr_csv.meta
-bufr_df_real = pd.concat(real_ob_dfs)
-bufr_df_sim = pd.concat(sim_ob_dfs)
+bufr_df_real = pd.concat(real_ob_dfs, ignore_index=True)
+bufr_df_sim = pd.concat(sim_ob_dfs, ignore_index=True)
 
 # Only retain obs with DHR between 0 and -1 to prevent double-counting
 bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
 bufr_df_sim = bufr_df_sim.loc[np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0)]
+
+bufr_df_real.reset_index(inplace=True)
+bufr_df_sim.reset_index(inplace=True)
 
 # Only retain obs from desired subset
 boo = np.zeros(len(bufr_df_sim))
@@ -90,7 +99,7 @@ for i, v in enumerate(obs_vars):
 
     # Only plot if the quality marker is <= 2
     if v in qm.keys():
-        cond = np.logical_and(bufr_df_sim[qm[v]] <= 2, bufr_df_real[qm[v]])
+        cond = np.logical_and(bufr_df_sim[qm[v]] <= 2, bufr_df_real[qm[v]] <= 2)
         diff = bufr_df_sim.loc[cond, v] - bufr_df_real.loc[cond, v]
         pres = bufr_df_sim.loc[cond, 'POB'].values
     else:
@@ -127,7 +136,8 @@ for i in range(2):
     axes[i, 0].set_ylabel('pressure (%s)' % meta['POB']['units'], size=12)
 
 plt.suptitle(title, size=16)
-plt.savefig(save_fname)
+plt.savefig(save_fname % (bufr_tag, date_range[0].strftime('%Y%m%d%H'), 
+                          date_range[-1].strftime('%Y%m%d%H')))
 plt.close()
 
 
