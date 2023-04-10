@@ -34,12 +34,17 @@ years = np.arange(1993, 2023)
 startdate = '04290000'
 enddate = '05070000'
 
-# Parameter for fake obs
+# Parameters for fake obs
+# analysis_times are dt.timedelta objects relative to 0000
 fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
-analysis_times = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(168)]
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
-# Maximum time allowed between matched real and fake obs (sec)
-max_time_allowed = 600.
+# Maximum time allowed between analysis_times and either the real or fake ob (sec)
+max_time_allowed = 480.
+
+# Maximum distance allowed between real surface station and simulated surface station (km)
+max_dist_allowed = 10.
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare.png'
@@ -51,13 +56,16 @@ out_fname = '%s_sfc_station_compare.png'
 
 # Variables to extract
 real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby']
-fake_varnames = ['TOB', 'QOB', 'UOB', 'VOB', 'POB']
+fake_var_thermo = ['TOB', 'QOB', 'POB']
+fake_var_wind = ['UOB', 'VOB']
+fake_varnames = fake_var_thermo + fake_var_wind
 
-# Convert analysis times to seconds since 1 January
-analysis_year = analysis_times[0].year
-analysis_days = np.arange(analysis_times[0].day, analysis_times[-1].day+1)
-analysis_times_tot_sec = np.array([(t - dt.datetime(analysis_year, 1, 1)).total_seconds() 
-                                   for t in analysis_times])
+# Extract some values that will be used a lot
+ndays = len(analysis_days)
+ntimes = len(analysis_times)
+analysis_year = analysis_days[0].year
+min_hr = -max_time_allowed / 3600.
+max_hr = max_time_allowed / 3600.
 
 # Extract real surface station obs first
 real_stations = {}
@@ -65,22 +73,23 @@ for ID in station_ids:
     print('Extracting real obs at %s' % ID)
     real_stations[ID] = {}
     for v in real_varnames:
-        real_stations[ID][v] = np.ones([len(years), len(analysis_times)]) * np.nan
+        real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
     for j, yr in enumerate(years):
         tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
                              skiprows=5)
         station_times = [dt.datetime.strptime(s, '%Y-%m-%d %H:%M').replace(year=analysis_year) 
                          for s in tmp_df['valid'].values]
-        station_times_tot_sec = np.array([(t - dt.datetime(analysis_year, 1, 1)).total_seconds()
-                                          for t in station_times]) 
-        for k, time in enumerate(analysis_times_tot_sec):
-            diff = np.abs(station_times_tot_sec - time)
-            idx = np.argmin(diff)
-            for v in real_varnames:
-                if (diff.min() > max_time_allowed) or (tmp_df.loc[idx, v] == 'M'):
-                    real_stations[ID][v][j, k] = np.nan
-                else:
-                    real_stations[ID][v][j, k] = tmp_df.loc[idx, v]
+        station_times_tot = np.array([(s - dt.datetime(analysis_year, 1, 1)).total_seconds() 
+                                      for s in station_times])
+        for k, d in enumerate(analysis_days):
+            for l, time in enumerate(analysis_times):
+                diff = np.abs(station_times_tot - ((d + time) - dt.datetime(analysis_year, 1, 1)).total_seconds())
+                idx = np.argmin(diff)
+                for v in real_varnames:
+                    if (diff.min() > max_time_allowed) or (tmp_df.loc[idx, v] == 'M'):
+                        real_stations[ID][v][(j*ndays) + k, l] = np.nan
+                    else:
+                        real_stations[ID][v][(j*ndays) + k, l] = tmp_df.loc[idx, v]
 
 # Convert real obs to same units/variables as fake obs
 for ID in station_ids:
@@ -99,65 +108,53 @@ fake_stations = {}
 for ID in station_ids:
     fake_stations[ID] = {}
     for v in fake_varnames:
-        fake_stations[ID][v] = np.ones(len(analysis_times)) * np.nan
-for i, t in enumerate(analysis_times):
-    print(t.strftime('%Y%m%d %H:%M'))
-    full_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % (fake_obs_dir, t.strftime('%Y%m%d%H%M')))
-    red_csv = full_bufr_csv.df.loc[np.logical_or(full_bufr_csv.df['subset'] == 'ADPSFC', 
-                                                 full_bufr_csv.df['subset'] == 'MSONET')]
-    red_csv.reset_index(inplace=True, drop=True)
-    YOB = red_csv['YOB'].values
-    XOB = red_csv['XOB'].values
-    for ID in station_ids:
-        dist2 = (real_stations[ID]['lon'][0, 0] - XOB)**2 + (real_stations[ID]['lat'][0, 0] - YOB)**2
-        idx = np.argmin(dist2)
-        true_distance = gd.distance((real_stations[ID]['lat'][0, 0], real_stations[ID]['lon'][0, 0]), 
-                                    (YOB[idx], XOB[idx])).km 
-        if true_distance < 10:
-            for v in fake_varnames:
-                fake_stations[ID][v][i] = red_csv.loc[idx, v]
+        fake_stations[ID][v] = np.ones([ndays, ntimes]) * np.nan
+for i, d in enumerate(analysis_days):
+    for j, t in enumerate(analysis_times):
+        time = d + t
+        print(time.strftime('%Y%m%d %H:%M'))
+        try:
+            full_bufr_csv = bufr.bufrCSV('%s/%s.rap.fake.prepbufr.csv' % 
+                                         (fake_obs_dir, time.strftime('%Y%m%d%H%M')))
+        except FileNotFoundError:
+            print('file not found, continuing to next time')
+            continue
+        red_csv = full_bufr_csv.df.loc[((full_bufr_csv.df['subset'] == 'ADPSFC') | 
+                                        (full_bufr_csv.df['subset'] == 'MSONET')) & 
+                                       ((full_bufr_csv.df['DHR'] >= min_hr) &
+                                        (full_bufr_csv.df['DHR'] <= max_hr))]
+        red_csv.reset_index(inplace=True, drop=True)
+        csv_thermo = red_csv.loc[red_csv['TYP'] < 200]
+        csv_wind = red_csv.loc[red_csv['TYP'] > 200]
+        csv_thermo.reset_index(inplace=True, drop=True)
+        csv_wind.reset_index(inplace=True, drop=True)
+        for csv, names in zip([csv_thermo, csv_wind], [fake_var_thermo, fake_var_wind]):
+            YOB = csv['YOB'].values
+            XOB = csv['XOB'].values
+            for ID in station_ids:
+                dist2 = (real_stations[ID]['lon'][0, 0] - XOB)**2 + (real_stations[ID]['lat'][0, 0] - YOB)**2
+                idx = np.argmin(dist2)
+                true_distance = gd.distance((real_stations[ID]['lat'][0, 0], real_stations[ID]['lon'][0, 0]), 
+                                            (YOB[idx], XOB[idx])).km 
+                if true_distance < max_dist_allowed:
+                    for v in names:
+                        fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
-# Create diurnal cycles
-"""
-Current problem:
-
-analysis_days is an empty array b/c the starting day (29) is > the ending day (6). A Julian day 
-would solve this, but then we would need to contend with leap years... Maybe I can create my own
-"pseudo" Julian day using the month and day? This is starting to become a pain... Maybe I can do
-this during data extraction to make things simpler?
-"""
-diurnal_cycle = {}
-for typ in ['fake', 'real']:
-    diurnal_cycle[typ] = {}
-    for ID in station_ids:
-        diurnal_cycle[typ][ID] = {}
-        for v in fake_varnames:
-            if typ == 'fake':
-               yrs = years
-            elif typ == 'real':
-               yrs = np.array([analysis_year]) 
-            diurnal_cycle[typ][ID][v] = np.ones([24, len(yrs) * len(analysis_days)]) * np.nan
-            for iyr, yr in enumerate(yrs):
-                for itime, t in enumerate(analysis_times):
-                    hr = t.hour
-                    iday = np.where(t.day == analysis_days)[0]
-                    icycle = iyr * len(analysis_days) + iday
-                    if typ == 'fake':
-                        diurnal_cycle[typ][ID][v][hr, icycle] = fake_stations[ID][v][itime]
-                    elif typ == 'real':
-                        diurnal_cycle[typ][ID][v][hr, icycle] = real_stations[ID][v][iyr, itime]
-         
 # Plot results
+plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
 for ID in station_ids:
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10, 8), sharey=True)
+    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10, 8), sharex=True)
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.9, wspace=0.35)
     for j, v in enumerate(fake_varnames):
         ax = axes[int(j/3), j%3]
-        for k in range(diurnal_cycle['fake'][ID][v].shape[1]):
-            ax.plot(np.arange(24), diurnal_cycle['fake'][ID][v][:, k], 'k-')
+        for k in range(ndays):
+            ax.plot(plot_hr, fake_stations[ID][v][k, :], 'k-')
         ax.grid()
-        ax.set_ylim('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
+        ax.set_ylabel('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
     for j in range(3):
-        axes[-1, j].set_xlim('hour', size=14)
+        axes[-1, j].set_xlabel('hour', size=14)
+        axes[-1, j].set_xlim([plot_hr.min(), plot_hr.max()])
+    plt.suptitle(ID, size=18)
     plt.savefig(out_fname % ID)
     plt.close()
 

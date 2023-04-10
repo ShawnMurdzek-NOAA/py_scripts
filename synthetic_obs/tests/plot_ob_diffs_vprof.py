@@ -29,18 +29,23 @@ bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfe
 bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
-#date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
+date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
 date_range = [dt.datetime(2022, 4, 30, 0)]
 
 # Output file name (include %s placeholders for bufr_tag and start and end dates)
-save_fname = './ob_diffs_aircraft_vprof_%s_%s_%s.png'
+save_fname = './ob_diffs_adpupa_vprof_%s_%s_%s.png'
 
 # Observation subsets
 #subsets = ['AIRCFT', 'AIRCAR']
 subsets = ['ADPUPA']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+
+# SIDs to exclude.
+# Some aircraft have bad temperature data (e.g., T < -50 degC below 500 hPa), but TQM < 2, so
+# the values are still plotted
+exclude_sid = ['00000775']
 
 # Bins for binning each variable in the vertical. First entry is left-most edge whereas all 
 # subsequent entries are the right edge of the bin. Must be in descending order.
@@ -61,20 +66,29 @@ qm = {'POB':'PQM',
       'ZOB':'ZQM',
       'UOB':'WQM',
       'VOB':'WQM',
-      'PWQ':'PWO'}
+      'PWO':'PWQ'}
 
 # Open files
 real_ob_dfs = []
 sim_ob_dfs = []
 for d in date_range:
     date_str = d.strftime('%Y%m%d%H%M')
-    real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    try:
+        real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    except FileNotFoundError:
+        # Skip to next file
+        continue
     real_ob_dfs.append(real_bufr_csv.df)
     sim_bufr_csv = bufr.bufrCSV('%s/%s.%s.fake.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
     sim_ob_dfs.append(sim_bufr_csv.df)
     meta = sim_bufr_csv.meta
 bufr_df_real = pd.concat(real_ob_dfs, ignore_index=True)
 bufr_df_sim = pd.concat(sim_ob_dfs, ignore_index=True)
+
+# Remove excluded SIDs
+for s in exclude_sid:
+    bufr_df_real = bufr_df_real.loc[bufr_df_real['SID'] != s]
+    bufr_df_sim = bufr_df_sim.loc[bufr_df_sim['SID'] != s]
 
 # Only retain obs with DHR between 0 and -1 to prevent double-counting
 bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
@@ -91,11 +105,13 @@ ind = np.where(boo)
 bufr_df_sim = bufr_df_sim.loc[ind]
 bufr_df_real = bufr_df_real.loc[ind]
 
-fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(8, 6), sharey=True)
-plt.subplots_adjust(left=0.1, bottom=0.1, right=0.95, top=0.9, hspace=0.3, wspace=0.3)
+nrows = 2
+ncols = int(np.ceil(len(obs_vars) / nrows))
+fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, 6), sharey=True)
+plt.subplots_adjust(left=0.1, bottom=0.08, right=0.98, top=0.88, hspace=0.4, wspace=0.1)
 for i, v in enumerate(obs_vars):
     print('Plotting %s' % v)
-    ax = axes[int(i/4), i%4]
+    ax = axes[int(i/ncols), i%ncols]
 
     # Only plot if the quality marker is <= 2
     if v in qm.keys():
@@ -130,12 +146,13 @@ for i, v in enumerate(obs_vars):
     ticks = np.array([1000, 850, 700, 500, 400, 300, 200, 100])
     ax.set_yticks(np.log10(ticks))
     ax.set_yticklabels(ticks)
-    ax.set_xlabel('%s (%s)' % (v, meta[v]['units']), size=12)
+    ax.set_title('%s ($n$ = %d)' % (v, len(diff)), size=14)
+    ax.set_xlabel('%s' % meta[v]['units'], size=12)
 
 for i in range(2):
     axes[i, 0].set_ylabel('pressure (%s)' % meta['POB']['units'], size=12)
 
-plt.suptitle(title, size=16)
+plt.suptitle(title, size=18)
 plt.savefig(save_fname % (bufr_tag, date_range[0].strftime('%Y%m%d%H'), 
                           date_range[-1].strftime('%Y%m%d%H')))
 plt.close()

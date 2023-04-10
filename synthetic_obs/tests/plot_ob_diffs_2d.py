@@ -28,11 +28,11 @@ import pandas as pd
 bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
-bufr_tag = 'rap'
+bufr_tag = 'rap_p'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
-date_range = [dt.datetime(2022, 4, 29, 12)]
+#date_range = [dt.datetime(2022, 4, 29, 12)]
 
 # Dataset names
 name1 = 'Sim Obs'
@@ -43,10 +43,10 @@ name2 = 'Real Obs'
 save_fname = './ob_diffs_%s_%s_%s_%s.png'
 
 # Observation subsets
-subsets = ['SFCSHP', 'ADPSFC', 'MSONET']
+subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
 
 # Variables to plot
-obs_vars = ['ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['PWO', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
 
 
 #---------------------------------------------------------------------------------------------------
@@ -60,7 +60,7 @@ qm = {'POB':'PQM',
       'ZOB':'ZQM',
       'UOB':'WQM',
       'VOB':'WQM',
-      'PWQ':'PWO'}
+      'PWO':'PWQ'}
 
 # Load borders
 borders = cfeature.NaturalEarthFeature(category='cultural',
@@ -73,7 +73,11 @@ real_ob_dfs = []
 sim_ob_dfs = []
 for d in date_range:
     date_str = d.strftime('%Y%m%d%H%M')
-    real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    try:
+        real_bufr_csv = bufr.bufrCSV('%s/%s.%s.real_red.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
+    except FileNotFoundError:
+        # Skip to next file
+        continue
     real_ob_dfs.append(real_bufr_csv.df)
     sim_bufr_csv = bufr.bufrCSV('%s/%s.%s.fake.prepbufr.csv' % (bufr_dir, date_str, bufr_tag))
     sim_ob_dfs.append(sim_bufr_csv.df)
@@ -82,8 +86,11 @@ bufr_df_real = pd.concat(real_ob_dfs, ignore_index=True)
 bufr_df_sim = pd.concat(sim_ob_dfs, ignore_index=True)
 
 # Only retain obs with DHR between 0 and -1 to prevent double-counting
-bufr_df_real = bufr_df_real.loc[np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0)]
-bufr_df_sim = bufr_df_sim.loc[np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0)]
+# UNLESS ob is from GPSIPW, in which case keep all obs b/c DHR is always -1 for these obs
+bufr_df_real = bufr_df_real.loc[np.logical_or(np.logical_and(bufr_df_real['DHR'] > -1, bufr_df_real['DHR'] <= 0),
+                                              bufr_df_real['subset'] == 'GPSIPW')]
+bufr_df_sim = bufr_df_sim.loc[np.logical_or(np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0),
+                                            bufr_df_sim['subset'] == 'GPSIPW')]
 
 bufr_df_real.reset_index(inplace=True)
 bufr_df_sim.reset_index(inplace=True)
