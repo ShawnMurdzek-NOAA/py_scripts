@@ -45,9 +45,9 @@ for ss_file in sfc_station_files:
 ss_df = pd.concat(ss_df_list)
 ss_cols = ss_df.columns
 
-# Switch missing values ("M") to a float (the numbers here don't really matter)
+# Switch missing values ("M") to NaN
 for c in ss_cols:
-    ss_df.loc[ss_df[c] == 'M', c] = 300.
+    ss_df.loc[ss_df[c] == 'M', c] = np.nan
 
 # Convert surface station DataFrame to correct format for prepBUFR CSVs
 ss_df['POB'] = mc.altimeter_to_station_pressure(np.float64(ss_df['alti'].values) * units.inHg, 
@@ -85,7 +85,7 @@ for t in bufr_times:
     full_df = ss_df.loc[(ss_df['time'] >= (t_datetime - dt.timedelta(hours=1))) & 
                         (ss_df['time'] <= t_datetime)].copy()
     full_df['cycletime'] = [t] * len(full_df)
-    full_df['DHR'] = (t_datetime - full_df['time']).dt.total_seconds() / 3600.
+    full_df['DHR'] = (full_df['time'] - t_datetime).dt.total_seconds() / 3600.
     bufr_df = full_df.drop(ss_cols, axis=1)
     bufr_df = bufr_df[bufr_col_order]
     bufr.df_to_csv(bufr_df, '%s/%s00%s' % (out_dir, t, out_suffix)) 
