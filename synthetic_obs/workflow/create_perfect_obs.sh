@@ -15,7 +15,7 @@ esac
 
 # Different rap prepbufr tags and the time (in min from DHR=0) to terminate radiosonde drift
 # calculations
-tags=( 'rap' 'rap_e' 'rap_p' )
+tags=( 'rap' 'rap_e' 'rap_p' 'sfc' )
 end_interp=( 50 25 70 )
 
 # Compute 
