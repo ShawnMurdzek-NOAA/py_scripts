@@ -4,6 +4,12 @@ Perform Comparisons Between Real and Simulated Surface Station Observations
 Real surface station obs come from the Iowa Environmental Mesonet database:
 https://mesonet.agron.iastate.edu/request/download.phtml
 
+This script uses "imperfect" station matching. This means that the NR output was NOT intentionally
+interpolated to the real surface stations used for comparison here, so the closest station (in
+space, not time) in the NR fake prepBUFR files is selected for comparison. This might create some
+discrepancies between the real-data diurnal cycles and fake-data diurnal cycles, especially in
+regions of complex terrain.
+
 shawn.s.murdzek@noaa.gov
 Date Created: 7 April 2023
 """
@@ -29,7 +35,7 @@ import geopy.distance as gd
 # Parameters for real obs
 real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations'
 station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
-station_ids = ['TUS']
+#station_ids = ['TUS']
 years = np.arange(1993, 2023) 
 startdate = '04290000'
 enddate = '05070000'
@@ -41,7 +47,7 @@ analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
-max_time_allowed = 480.
+max_time_allowed = 450.
 
 # Maximum distance allowed between real surface station and simulated surface station (km)
 max_dist_allowed = 10.
@@ -55,7 +61,7 @@ out_fname = '%s_sfc_station_compare.png'
 #---------------------------------------------------------------------------------------------------
 
 # Variables to extract
-real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby']
+real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
 fake_var_thermo = ['TOB', 'QOB', 'POB']
 fake_var_wind = ['UOB', 'VOB']
 fake_varnames = fake_var_thermo + fake_var_wind
@@ -92,8 +98,11 @@ for ID in station_ids:
                         real_stations[ID][v][(j*ndays) + k, l] = tmp_df.loc[idx, v]
 
 # Convert real obs to same units/variables as fake obs
+# Note that the surface stations report the altimeter setting rather than station-level pressure.
+# The difference between these two is discussed here: https://www.weather.gov/bou/pressure_definitions
 for ID in station_ids:
-    real_stations[ID]['POB'] = (real_stations[ID]['alti'] * units.inHg).to('mbar').magnitude
+    real_stations[ID]['POB'] = mc.altimeter_to_station_pressure(real_stations[ID]['alti'] * units.inHg, 
+                                                                real_stations[ID]['elevation'] * units.m).to('mbar').magnitude
     real_stations[ID]['TOB'] = (real_stations[ID]['tmpf'] * units.degF).to('degC').magnitude       
     real_stations[ID]['QOB'] = mc.specific_humidity_from_dewpoint(real_stations[ID]['POB'] * units.mbar,
                                                                   real_stations[ID]['dwpf'] * units.degF).magnitude * 1e6
@@ -138,7 +147,9 @@ for i, d in enumerate(analysis_days):
                                             (YOB[idx], XOB[idx])).km 
                 if true_distance < max_dist_allowed:
                     for v in names:
-                        fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
+                        fake_stations[ID][v][i, j] = csv.loc[idx, v]
+                else:
+                    print('distance test failed for %s (dist = %.3f km)' % (ID, true_distance))
 
 # Plot results
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
@@ -147,8 +158,23 @@ for ID in station_ids:
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.9, wspace=0.35)
     for j, v in enumerate(fake_varnames):
         ax = axes[int(j/3), j%3]
+
         for k in range(ndays):
-            ax.plot(plot_hr, fake_stations[ID][v][k, :], 'k-')
+            ax.plot(plot_hr, fake_stations[ID][v][k, :], 'k-', lw=0.75)
+
+        pcts = [0, 10, 25, 50, 75, 90, 100]
+        var_percentiles = {}
+        for p in pcts:
+            var_percentiles[p] = np.zeros(ntimes)
+            for l in range(ntimes):
+                var_percentiles[p][l] = np.nanpercentile(real_stations[ID][v][:, l], p) 
+        
+        ax.plot(plot_hr, var_percentiles[50], 'r-', lw=2)
+        ax.fill_between(plot_hr, var_percentiles[25], var_percentiles[75], color='r', alpha=0.4)
+        ax.fill_between(plot_hr, var_percentiles[10], var_percentiles[90], color='r', alpha=0.2)
+        ax.plot(plot_hr, var_percentiles[0], 'r-', lw=0.5)
+        ax.plot(plot_hr, var_percentiles[100], 'r-', lw=0.5)
+
         ax.grid()
         ax.set_ylabel('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
     for j in range(3):
