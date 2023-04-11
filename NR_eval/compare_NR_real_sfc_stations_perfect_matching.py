@@ -75,8 +75,14 @@ for ID in station_ids:
     for j, yr in enumerate(years):
         tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
                              skiprows=5)
+
+        # Only retain times with thermodynamic and kinematic obs (this eliminates special obs for 
+        # gusts, etc.)
+        ss_df = tmp_df.loc[(tmp_df['tmpf'] != 'M') & (tmp_df['drct'] != 'M')].copy()
+        ss_df.reset_index(inplace=True, drop=True)
+
         station_times = [dt.datetime.strptime(s, '%Y-%m-%d %H:%M').replace(year=analysis_year) 
-                         for s in tmp_df['valid'].values]
+                         for s in ss_df['valid'].values]
         station_times_tot = np.array([(s - dt.datetime(analysis_year, 1, 1)).total_seconds() 
                                       for s in station_times])
         for k, d in enumerate(analysis_days):
@@ -84,10 +90,10 @@ for ID in station_ids:
                 diff = np.abs(station_times_tot - ((d + time) - dt.datetime(analysis_year, 1, 1)).total_seconds())
                 idx = np.argmin(diff)
                 for v in real_varnames:
-                    if (diff.min() > max_time_allowed) or (tmp_df.loc[idx, v] == 'M'):
+                    if (diff.min() > max_time_allowed) or (ss_df.loc[idx, v] == 'M'):
                         real_stations[ID][v][(j*ndays) + k, l] = np.nan
                     else:
-                        real_stations[ID][v][(j*ndays) + k, l] = tmp_df.loc[idx, v]
+                        real_stations[ID][v][(j*ndays) + k, l] = ss_df.loc[idx, v]
 
 # Convert real obs to same units/variables as fake obs
 # Note that the surface stations report the altimeter setting rather than station-level pressure.
@@ -120,8 +126,13 @@ for i, d in enumerate(analysis_days):
         except FileNotFoundError:
             print('file not found, continuing to next time')
             continue
+        
+        # Remove rows that do not have thermodynamic AND kinematic data
+        bufr_csv_no_nan = full_bufr_csv.loc[np.logical_not(np.isnan(full_bufr_csv['TOB']) |
+                                                           np.isnan(full_bufr_csv['UOB']))].copy()
+
         for ID in station_ids:
-            red_csv = full_bufr_csv.df.loc[full_bufr_csv.df['SID'] == ID]
+            red_csv = bufr_csv_no_nan.df.loc[full_bufr_csv_no_nan.df['SID'] == ID].copy()
             red_csv.reset_index(inplace=True, drop=True)
             idx = np.argmin(np.abs(red_csv['DHR']))
             if (3600*np.abs(red_csv['DHR'].loc[idx])) < max_time_allowed:
