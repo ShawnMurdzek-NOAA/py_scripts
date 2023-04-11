@@ -45,9 +45,9 @@ for ss_file in sfc_station_files:
 ss_df = pd.concat(ss_df_list)
 ss_cols = ss_df.columns
 
-# Switch missing values ("M") to NaN
+# Switch missing values ("M") to a float (the numbers here don't really matter)
 for c in ss_cols:
-    ss_df.loc[ss_df[c] == 'M', c] = np.nan
+    ss_df.loc[ss_df[c] == 'M', c] = 300.
 
 # Convert surface station DataFrame to correct format for prepBUFR CSVs
 ss_df['POB'] = mc.altimeter_to_station_pressure(np.float64(ss_df['alti'].values) * units.inHg, 
@@ -62,9 +62,10 @@ ss_df['VOB'] = wnd_tmp[1].to(units.m / units.s).magnitude
 ss_df['XOB'] = ss_df['lon'] + 360.
 ss_df['YOB'] = ss_df['lat']
 ss_df['ELV'] = ss_df['elevation']
+ss_df['SID'] = ss_df['station']
 
-bufr_fixed_cols = {'nmsg':1, 'subset':'ADPSFC', 'ntb':2, 'SID':ss_file.split('/')[-1][:3], 
-                   'TYP':300, 'T29':512, 'CAT':0, 'PQM':2, 'QQM':2, 'TQM':2, 'WQM':2}
+bufr_fixed_cols = {'nmsg':1, 'subset':'ADPSFC', 'ntb':2, 'TYP':300, 'T29':512, 'CAT':0, 'PQM':2, 
+                   'QQM':2, 'TQM':2, 'WQM':2}
 for c in bufr_fixed_cols.keys():
     ss_df[c] = [bufr_fixed_cols[c]] * len(ss_df)
 bufr_nan_cols = ['SAID', 'ZOB', 'PWO', 'PRSS', 'ZQM', 'NUL', 'PWQ', 'POE', 'QOE', 'TOE', 'NUL.1', 
