@@ -33,6 +33,10 @@ sfc_station_files = glob.glob('/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/
 out_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/bufr_csv'
 out_suffix = '.sfc.prepbufr.csv'
 
+# Add fake obs at DHR = 0? This ensures that simulated surface station data is created at the top
+# of every hour
+fake_dhr0 = True
+
 
 #---------------------------------------------------------------------------------------------------
 # Create BUFR Files
@@ -72,6 +76,16 @@ bufr_nan_cols = ['SAID', 'ZOB', 'PWO', 'PRSS', 'ZQM', 'NUL', 'PWQ', 'POE', 'QOE'
                  'WOE', 'NUL.2', 'PWE']
 for c in bufr_nan_cols:
     ss_df[c] = [np.nan] * len(ss_df)
+
+# Create fake obs for DHR = 0 (one for each station)
+if fake_dhr0:
+    tmp_series = []
+    for ID in np.unique(ss_df['SID'].values):
+        tmp_series.append(ss_df.loc[ss_df['SID'] == ID].iloc[0])
+    fake_df = pd.concat(tmp_series, axis=1).T
+    fake_df['DHR'] = 0.
+    for v in ['TOB', 'QOB', 'UOB', 'VOB', 'POB']:
+        fake_df[v] = 300.    
                  
 # Split up surface station DataFrame into hourly prepBUFR files
 bufr_col_order = ['nmsg', 'subset', 'cycletime', 'ntb', 'SID', 'XOB', 'YOB', 'DHR', 'TYP', 'ELV', 
@@ -84,8 +98,11 @@ for t in bufr_times:
     t_datetime = dt.datetime.strptime(t, '%Y%m%d%H')
     full_df = ss_df.loc[(ss_df['time'] >= (t_datetime - dt.timedelta(hours=1))) & 
                         (ss_df['time'] <= t_datetime)].copy()
-    full_df['cycletime'] = [t] * len(full_df)
+    full_df['cycletime'] = t
     full_df['DHR'] = (full_df['time'] - t_datetime).dt.total_seconds() / 3600.
+    if fake_dhr0:
+        fake_df['cycletime'] = t
+        full_df = pd.concat([full_df, fake_df])
     bufr_df = full_df.drop(ss_cols, axis=1)
     bufr_df = bufr_df[bufr_col_order]
     bufr.df_to_csv(bufr_df, '%s/%s00%s' % (out_dir, t, out_suffix)) 

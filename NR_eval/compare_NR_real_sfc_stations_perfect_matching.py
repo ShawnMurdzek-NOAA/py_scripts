@@ -30,8 +30,7 @@ from metpy.units import units
 
 # Parameters for real obs
 real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations'
-#station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
-station_ids = ['ABR']
+station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
 years = np.arange(1993, 2023) 
 startdate = '04290000'
 enddate = '05070000'
@@ -39,8 +38,7 @@ enddate = '05070000'
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
 fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/perfect'
-#analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
-analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(3)]
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -128,11 +126,15 @@ for i, d in enumerate(analysis_days):
             continue
         
         # Remove rows that do not have thermodynamic AND kinematic data
-        bufr_csv_no_nan = full_bufr_csv.loc[np.logical_not(np.isnan(full_bufr_csv['TOB']) |
-                                                           np.isnan(full_bufr_csv['UOB']))].copy()
+        bufr_csv_no_nan = full_bufr_csv.df.loc[np.logical_not(np.isnan(full_bufr_csv.df['TOB']) |
+                                                              np.isnan(full_bufr_csv.df['UOB']))].copy()
 
         for ID in station_ids:
-            red_csv = bufr_csv_no_nan.df.loc[full_bufr_csv_no_nan.df['SID'] == ID].copy()
+            red_csv = bufr_csv_no_nan.loc[bufr_csv_no_nan['SID'] == ID].copy()
+            if len(red_csv) == 0:
+                # No obs, switching to next station
+                print('no simulated obs for %s' % ID)
+                continue
             red_csv.reset_index(inplace=True, drop=True)
             idx = np.argmin(np.abs(red_csv['DHR']))
             if (3600*np.abs(red_csv['DHR'].loc[idx])) < max_time_allowed:
