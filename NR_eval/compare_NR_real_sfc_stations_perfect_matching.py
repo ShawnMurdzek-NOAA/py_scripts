@@ -55,6 +55,7 @@ out_fname = '%s_sfc_station_compare_perfect.png'
 # Variables to extract
 real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
 fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB']
+fake_varnames_derived = ['WSPD', 'WDIR']
 
 # Extract some values that will be used a lot
 ndays = len(analysis_days)
@@ -105,6 +106,8 @@ for ID in station_ids:
     wnd_tmp = mc.wind_components(real_stations[ID]['sknt'] * units.kt, real_stations[ID]['drct'] * units.deg)
     real_stations[ID]['UOB'] = wnd_tmp[0].to(units.m / units.s).magnitude
     real_stations[ID]['VOB'] = wnd_tmp[1].to(units.m / units.s).magnitude
+    real_stations[ID]['WSPD'] = (real_stations[ID]['sknt'] * units.kt).to(units.m / units.s).magnitude
+    real_stations[ID]['WDIR'] = real_stations[ID]['drct']
     real_stations[ID]['lon'] = real_stations[ID]['lon'] + 360.
 
 # Extract fake observations
@@ -141,13 +144,23 @@ for i, d in enumerate(analysis_days):
                 for v in fake_varnames:
                     fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
+# Compute wind speed and direction for fake obs
+for ID in station_ids:
+    fake_stations[ID]['WSPD'] = mc.wind_speed(fake_stations[ID]['UOB'] * units.m / units.s,
+                                              fake_stations[ID]['VOB'] * units.m / units.s).to(units.m / units.s).magnitude
+    fake_stations[ID]['WDIR'] = mc.wind_direction(fake_stations[ID]['UOB'] * units.m / units.s,
+                                                  fake_stations[ID]['VOB'] * units.m / units.s).magnitude
+full_bufr_csv.meta['WSPD'] = {'units':'m/s'}
+full_bufr_csv.meta['WDIR'] = {'units':'deg'}
+
 # Plot results
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
 for ID in station_ids:
-    fig, axes = plt.subplots(nrows=2, ncols=3, figsize=(10, 8), sharex=True)
-    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.9, wspace=0.35)
-    for j, v in enumerate(fake_varnames):
-        ax = axes[int(j/3), j%3]
+    ncols = 4
+    fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8), sharex=True)
+    plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
+    for j, v in enumerate(fake_varnames + fake_varnames_derived):
+        ax = axes[int(j/ncols), j%ncols]
 
         for k in range(ndays):
             ax.plot(plot_hr, fake_stations[ID][v][k, :], 'k-', lw=0.75)
@@ -167,7 +180,7 @@ for ID in station_ids:
 
         ax.grid()
         ax.set_ylabel('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
-    for j in range(3):
+    for j in range(ncols):
         axes[-1, j].set_xlabel('hour', size=14)
         axes[-1, j].set_xlim([plot_hr.min(), plot_hr.max()])
     plt.suptitle(ID, size=18)

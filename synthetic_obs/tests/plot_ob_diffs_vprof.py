@@ -16,6 +16,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import datetime as dt
 import pandas as pd
+import metpy.calc as mc
+from metpy.units import units
 
 
 #---------------------------------------------------------------------------------------------------
@@ -30,17 +32,17 @@ bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
-date_range = [dt.datetime(2022, 4, 30, 0)]
+#date_range = [dt.datetime(2022, 4, 30, 0)]
 
 # Output file name (include %s placeholders for bufr_tag and start and end dates)
-save_fname = './ob_diffs_adpupa_vprof_%s_%s_%s.png'
+save_fname = './ob_diffs_aircraft_vprof_%s_%s_%s.png'
 
 # Observation subsets
-#subsets = ['AIRCFT', 'AIRCAR']
-subsets = ['ADPUPA']
+subsets = ['AIRCFT', 'AIRCAR']
+#subsets = ['ADPUPA']
 
 # Variables to plot
-obs_vars = ['POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['POB', 'ZOB', 'TOB', 'QOB', 'UOB', 'VOB', 'WSPD', 'WDIR']
 
 # SIDs to exclude.
 # Some aircraft have bad temperature data (e.g., T < -50 degC below 500 hPa), but TQM < 2, so
@@ -66,7 +68,9 @@ qm = {'POB':'PQM',
       'ZOB':'ZQM',
       'UOB':'WQM',
       'VOB':'WQM',
-      'PWO':'PWQ'}
+      'PWO':'PWQ',
+      'WSPD':'WQM',
+      'WDIR':'WQM'}
 
 # Open files
 real_ob_dfs = []
@@ -105,6 +109,18 @@ ind = np.where(boo)
 bufr_df_sim = bufr_df_sim.loc[ind]
 bufr_df_real = bufr_df_real.loc[ind]
 
+# Compute wind speed and direction from U and V components
+bufr_df_sim['WSPD'] = mc.wind_speed(bufr_df_sim['UOB'].values * units.m / units.s,
+                                    bufr_df_sim['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+bufr_df_real['WSPD'] = mc.wind_speed(bufr_df_real['UOB'].values * units.m / units.s,
+                                     bufr_df_real['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+bufr_df_sim['WDIR'] = mc.wind_direction(bufr_df_sim['UOB'].values * units.m / units.s,
+                                        bufr_df_sim['VOB'].values * units.m / units.s).magnitude
+bufr_df_real['WDIR'] = mc.wind_direction(bufr_df_real['UOB'].values * units.m / units.s,
+                                         bufr_df_real['VOB'].values * units.m / units.s).magnitude
+meta['WSPD'] = {'units':'m/s'}
+meta['WDIR'] = {'units':'deg'}
+
 nrows = 2
 ncols = int(np.ceil(len(obs_vars) / nrows))
 fig, axes = plt.subplots(nrows=nrows, ncols=ncols, figsize=(8, 6), sharey=True)
@@ -131,7 +147,7 @@ for i, v in enumerate(obs_vars):
         subset = diff[np.logical_and(pres <= prs1, pres > prs2)]
         if len(subset) > 0:
             for p in pcts:
-                var_percentiles[p][j] = np.percentile(subset, p)
+                var_percentiles[p][j] = np.nanpercentile(subset, p)
 
     bin_ctr = np.log10(pbins[:-1] + (0.5 * (pbins[1:] - pbins[:-1])))
     ax.plot(var_percentiles[50], bin_ctr, 'b-', lw=2)
@@ -146,7 +162,7 @@ for i, v in enumerate(obs_vars):
     ticks = np.array([1000, 850, 700, 500, 400, 300, 200, 100])
     ax.set_yticks(np.log10(ticks))
     ax.set_yticklabels(ticks)
-    ax.set_title('%s ($n$ = %d)' % (v, len(diff)), size=14)
+    ax.set_title('%s ($n$ = %d)' % (v, len(diff)), size=12)
     ax.set_xlabel('%s' % meta[v]['units'], size=12)
 
 for i in range(2):

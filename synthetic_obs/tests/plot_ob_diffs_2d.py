@@ -18,6 +18,8 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import datetime as dt
 import pandas as pd
+import metpy.calc as mc
+from metpy.units import units
 
 
 #---------------------------------------------------------------------------------------------------
@@ -28,7 +30,7 @@ import pandas as pd
 bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
-bufr_tag = 'rap_p'
+bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
@@ -46,7 +48,7 @@ save_fname = './ob_diffs_%s_%s_%s_%s.png'
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
 
 # Variables to plot
-obs_vars = ['PWO', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
+obs_vars = ['WSPD', 'WDIR', 'PWO', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
 
 
 #---------------------------------------------------------------------------------------------------
@@ -60,7 +62,9 @@ qm = {'POB':'PQM',
       'ZOB':'ZQM',
       'UOB':'WQM',
       'VOB':'WQM',
-      'PWO':'PWQ'}
+      'PWO':'PWQ',
+      'WDIR':'WQM',
+      'WSPD':'WQM'}
 
 # Load borders
 borders = cfeature.NaturalEarthFeature(category='cultural',
@@ -107,6 +111,18 @@ ind = np.where(boo)
 bufr_df_sim = bufr_df_sim.loc[ind]
 bufr_df_real = bufr_df_real.loc[ind]
 
+# Compute wind speed and direction from U and V components
+bufr_df_sim['WSPD'] = mc.wind_speed(bufr_df_sim['UOB'].values * units.m / units.s,
+                                    bufr_df_sim['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+bufr_df_real['WSPD'] = mc.wind_speed(bufr_df_real['UOB'].values * units.m / units.s,
+                                     bufr_df_real['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+bufr_df_sim['WDIR'] = mc.wind_direction(bufr_df_sim['UOB'].values * units.m / units.s,
+                                        bufr_df_sim['VOB'].values * units.m / units.s).magnitude
+bufr_df_real['WDIR'] = mc.wind_direction(bufr_df_real['UOB'].values * units.m / units.s,
+                                         bufr_df_real['VOB'].values * units.m / units.s).magnitude
+meta['WSPD'] = {'units':'m/s'}
+meta['WDIR'] = {'units':'deg'}
+
 for v in obs_vars:
     print('Plotting %s' % v)
     fig = plt.figure(figsize=(12, 8))
@@ -152,7 +168,7 @@ for v in obs_vars:
     cbar.set_label('%s (%s)' % (v, meta[v]['units']), size=12)
 
     # Plot differences
-    dlim = np.percentile(np.abs(diff), 99)
+    dlim = np.nanpercentile(np.abs(diff), 99)
     ax1 = fig.add_subplot(2, 3, 3, projection=ccrs.PlateCarree())
     sort_idx = np.argsort(np.abs(diff))
     cax = ax1.scatter(lon[sort_idx], lat[sort_idx], s=2, c=diff[sort_idx], cmap='bwr', 
