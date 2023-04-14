@@ -34,21 +34,36 @@ bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
-#date_range = [dt.datetime(2022, 4, 29, 12)]
 
 # Dataset names
 name1 = 'Sim Obs'
 name2 = 'Real Obs'
 
-# Output file name (include %s placeholders for bufr_tag, variable name, and start and end of date 
-# range)
-save_fname = './ob_diffs_%s_%s_%s_%s.png'
+# Output file name (include %s placeholders for domain, bufr_tag, variable name, and start and end 
+# of date range)
+save_fname = './ob_diffs_MSONET_WSPDgt4_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
+subsets = ['MSONET']
 
 # Variables to plot
-obs_vars = ['WSPD', 'WDIR', 'PWO', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['WSPD', 'WDIR']
+
+# Domain to examine ('all', 'easternUS', 'westernUS')
+domain = 'all'
+
+# Option to only plot a certain prepBUFR ob type (set to None to not use this option)
+ob_type = None
+
+# Option to set simulated wind speeds below a certain threshold to 0
+remove_small_sim_wspd = False
+sim_wspd_thres = 4.
+
+# Option to only compare winds if the real wind speed exceeds a threshold
+only_compare_strong_winds = True
+real_wspd_thres = 4.
 
 
 #---------------------------------------------------------------------------------------------------
@@ -111,6 +126,22 @@ ind = np.where(boo)
 bufr_df_sim = bufr_df_sim.loc[ind]
 bufr_df_real = bufr_df_real.loc[ind]
 
+# Only retain obs from a certain observation type if desired
+if ob_type != None:
+    bufr_df_sim = bufr_df_sim.loc[bufr_df_sim['TYP'] == ob_type]
+    bufr_df_real = bufr_df_real.loc[bufr_df_real['TYP'] == ob_type]
+
+# Only retain obs from desired domain
+if domain == 'easternUS':
+    bufr_df_real = bufr_df_real.loc[bufr_df_real['XOB'] >= 260]
+    bufr_df_sim = bufr_df_sim.loc[bufr_df_sim['XOB'] >= 260]
+elif domain == 'westernUS':
+    bufr_df_real = bufr_df_real.loc[bufr_df_real['XOB'] < 260]
+    bufr_df_sim = bufr_df_sim.loc[bufr_df_sim['XOB'] < 260]
+
+bufr_df_real.reset_index(inplace=True)
+bufr_df_sim.reset_index(inplace=True)
+
 # Compute wind speed and direction from U and V components
 bufr_df_sim['WSPD'] = mc.wind_speed(bufr_df_sim['UOB'].values * units.m / units.s,
                                     bufr_df_sim['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
@@ -122,6 +153,18 @@ bufr_df_real['WDIR'] = mc.wind_direction(bufr_df_real['UOB'].values * units.m / 
                                          bufr_df_real['VOB'].values * units.m / units.s).magnitude
 meta['WSPD'] = {'units':'m/s'}
 meta['WDIR'] = {'units':'deg'}
+
+# Set sim wind obs to 0 if WPSD < sim_wspd_thres
+if remove_small_sim_wspd:
+    cond = bufr_df_sim['WSPD'] < sim_wspd_thres
+    for f in ['WSPD', 'WDIR', 'UOB', 'VOB']:
+        bufr_df_sim.loc[cond, f] = 0
+
+# Only compare winds if real WSPD >= real_wspd_thres
+if only_compare_strong_winds:
+    cond = bufr_df_real['WSPD'] < real_wspd_thres
+    bufr_df_sim.loc[cond, 'WQM'] = 3
+    bufr_df_real.loc[cond, 'WQM'] = 3
 
 for v in obs_vars:
     print('Plotting %s' % v)
@@ -144,9 +187,11 @@ for v in obs_vars:
         lon = bufr_df_sim['XOB'].values
 
     # Plot actual values
-    maxval = max(np.amax(field1), np.amax(field2))
-    minval = min(np.amin(field1), np.amin(field2))
-    axlist = []
+    maxval = max(np.percentile(field1, 99.75), np.percentile(field2, 99.75))
+    minval = min(np.percentile(field1, 0.25), np.percentile(field2, 0.25))
+    ax1list = []
+    ax2list = []
+    max_hist_val = 0
     for j, (f, ttl) in enumerate(zip([field1, field2], [name1, name2])):
         ax1 = fig.add_subplot(2, 3, j+1, projection=ccrs.PlateCarree())
         cax = ax1.scatter(lon, lat, s=2, c=f, cmap='plasma', vmin=minval, vmax=maxval,
@@ -156,16 +201,21 @@ for v in obs_vars:
         ax1.set_xlim([-135, -50])
         ax1.set_ylim([20, 55])
         ax1.set_title(ttl, size=18)
-        axlist.append(ax1)
+        ax1list.append(ax1)
 
         ax2 = fig.add_subplot(2, 3, j+4)
-        ax2.hist(f, bins=40, range=(minval, maxval))
+        hist_out = ax2.hist(f, bins=40, range=(minval, maxval))
         ax2.set_xlabel('%s (%s)' % (v, meta[v]['units']), size=12)
         ax2.set_ylabel('counts', size=12)
         ax2.grid()
+        ax2list.append(ax2)
+        if hist_out[0].max() > max_hist_val:
+            max_hist_val = hist_out[0].max()
 
-    cbar = plt.colorbar(cax, ax=axlist, orientation='horizontal')
+    cbar = plt.colorbar(cax, ax=ax1list, orientation='horizontal')
     cbar.set_label('%s (%s)' % (v, meta[v]['units']), size=12)
+    for j in range(2):
+        ax2list[j].set_ylim(0, max_hist_val + (0.05*max_hist_val))
 
     # Plot differences
     dlim = np.nanpercentile(np.abs(diff), 99)
@@ -193,7 +243,7 @@ for v in obs_vars:
                  (np.mean(diff), np.std(diff), np.sqrt(np.mean(diff**2)), 
                   len(diff) - np.isnan(diff).sum()), size=16)
 
-    plt.savefig(save_fname % (bufr_tag, v, date_range[0].strftime('%Y%m%d%H'), 
+    plt.savefig(save_fname % (domain, bufr_tag, v, date_range[0].strftime('%Y%m%d%H'), 
                               date_range[-1].strftime('%Y%m%d%H')))
     plt.close()
 

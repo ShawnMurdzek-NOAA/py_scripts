@@ -19,6 +19,8 @@ import cartopy.feature as cfeature
 import numpy as np
 import scipy.interpolate as si
 import collections.abc
+import metpy.calc as mc
+from metpy.units import units
 
 import meteo_util as mu
 
