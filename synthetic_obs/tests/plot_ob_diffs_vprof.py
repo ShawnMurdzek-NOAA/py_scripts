@@ -109,17 +109,11 @@ ind = np.where(boo)
 bufr_df_sim = bufr_df_sim.loc[ind]
 bufr_df_real = bufr_df_real.loc[ind]
 
+bufr_df_sim = bufr.match_bufr_prec(bufr_df_sim)
+
 # Compute wind speed and direction from U and V components
-bufr_df_sim['WSPD'] = mc.wind_speed(bufr_df_sim['UOB'].values * units.m / units.s,
-                                    bufr_df_sim['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
-bufr_df_real['WSPD'] = mc.wind_speed(bufr_df_real['UOB'].values * units.m / units.s,
-                                     bufr_df_real['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
-bufr_df_sim['WDIR'] = mc.wind_direction(bufr_df_sim['UOB'].values * units.m / units.s,
-                                        bufr_df_sim['VOB'].values * units.m / units.s).magnitude
-bufr_df_real['WDIR'] = mc.wind_direction(bufr_df_real['UOB'].values * units.m / units.s,
-                                         bufr_df_real['VOB'].values * units.m / units.s).magnitude
-meta['WSPD'] = {'units':'m/s'}
-meta['WDIR'] = {'units':'deg'}
+bufr_df_sim = bufr.compute_wspd_wdir(bufr_df_sim)
+bufr_df_real = bufr.compute_wspd_wdir(bufr_df_real)
 
 nrows = 2
 ncols = int(np.ceil(len(obs_vars) / nrows))

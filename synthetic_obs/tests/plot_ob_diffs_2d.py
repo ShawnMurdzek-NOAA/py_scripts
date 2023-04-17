@@ -41,15 +41,15 @@ name2 = 'Real Obs'
 
 # Output file name (include %s placeholders for domain, bufr_tag, variable name, and start and end 
 # of date range)
-save_fname = './ob_diffs_MSONET_WSPDgt4_%s_%s_%s_%s_%s.png'
+save_fname = './ob_diffs_ADPSFC_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
-subsets = ['MSONET']
+subsets = ['ADPSFC']
 
 # Variables to plot
 obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
-obs_vars = ['WSPD', 'WDIR']
+#obs_vars = ['WSPD', 'WDIR']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
@@ -62,7 +62,7 @@ remove_small_sim_wspd = False
 sim_wspd_thres = 4.
 
 # Option to only compare winds if the real wind speed exceeds a threshold
-only_compare_strong_winds = True
+only_compare_strong_winds = False
 real_wspd_thres = 4.
 
 
@@ -103,6 +103,7 @@ for d in date_range:
     meta = sim_bufr_csv.meta
 bufr_df_real = pd.concat(real_ob_dfs, ignore_index=True)
 bufr_df_sim = pd.concat(sim_ob_dfs, ignore_index=True)
+print('Done opening files')
 
 # Only retain obs with DHR between 0 and -1 to prevent double-counting
 # UNLESS ob is from GPSIPW, in which case keep all obs b/c DHR is always -1 for these obs
@@ -116,7 +117,7 @@ bufr_df_sim.reset_index(inplace=True)
 
 # Apply rounding so precision in simulated obs matches real obs
 bufr_df_sim = bufr.match_bufr_prec(bufr_df_sim)
-bufr_df_real = bufr.match_bufr_prec(bufr_df_real)
+print('Done adjusting precision')
 
 # Only retain obs from desired subset
 boo = np.zeros(len(bufr_df_sim))
@@ -141,18 +142,12 @@ elif domain == 'westernUS':
 
 bufr_df_real.reset_index(inplace=True)
 bufr_df_sim.reset_index(inplace=True)
+print('Done subsetting obs')
 
 # Compute wind speed and direction from U and V components
-bufr_df_sim['WSPD'] = mc.wind_speed(bufr_df_sim['UOB'].values * units.m / units.s,
-                                    bufr_df_sim['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
-bufr_df_real['WSPD'] = mc.wind_speed(bufr_df_real['UOB'].values * units.m / units.s,
-                                     bufr_df_real['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
-bufr_df_sim['WDIR'] = mc.wind_direction(bufr_df_sim['UOB'].values * units.m / units.s,
-                                        bufr_df_sim['VOB'].values * units.m / units.s).magnitude
-bufr_df_real['WDIR'] = mc.wind_direction(bufr_df_real['UOB'].values * units.m / units.s,
-                                         bufr_df_real['VOB'].values * units.m / units.s).magnitude
-meta['WSPD'] = {'units':'m/s'}
-meta['WDIR'] = {'units':'deg'}
+bufr_df_sim = bufr.compute_wspd_wdir(bufr_df_sim)
+bufr_df_real = bufr.compute_wspd_wdir(bufr_df_real)
+print('Done computing WSPD and WDIR')
 
 # Set sim wind obs to 0 if WPSD < sim_wspd_thres
 if remove_small_sim_wspd:

@@ -16,6 +16,8 @@
 "ZOB": {"desc": "Height observation", "units": "m"}, 
 "UOB": {"desc": "U-component of wind observation", "units": "m/s"}, 
 "VOB": {"desc": "V-component of wind observation", "units": "m/s"}, 
+"WSPD": {"desc": "Wind speed", "units": "m/s"}, 
+"WDIR": {"desc": "Wind direction", "units": "deg"}, 
 "PWO": {"desc": "Total precipitable water observation", "units": "mm"}, 
 "CAT": {"desc": "Prepbufr data level category (see EMC prepbufr tables)", "units": null}, 
 "PRSS": {"desc": "Surface pressure observation", "units": "Pa"}, 

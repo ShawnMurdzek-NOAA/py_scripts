@@ -21,6 +21,8 @@ import scipy.interpolate as si
 import collections.abc
 import metpy.calc as mc
 from metpy.units import units
+import os
+import inspect
 
 import meteo_util as mu
 
@@ -52,8 +54,8 @@ class bufrCSV():
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
         # Load metadata from JSON file
-        self.meta = json.load(open('/work2/noaa/wrfruc/murdzek/src/py_scripts/metadata/bufr_meta.json', 
-                                   'r'))
+        metadata_path = '/'.join(os.path.abspath(inspect.getfile(bufrCSV)).split('/')[:-2])
+        self.meta = json.load(open('%s/metadata/bufr_meta.json' % metadata_path, 'r'))
 
     def sample(self, fname, n=2):
         """
@@ -468,7 +470,31 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
     return out_df
 
 
-def match_bufr_prec(df, ndec={'ELV':0, 'POB':1, 'TOB':1, 'QOB':0, 'UOB':1, 'VOB':1, 'ZOB':0}):
+def compute_wspd_wdir(df):
+    """
+    Compute wind speed (m/s) and wind direction (deg)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with WSPD and WDIR fields
+
+    """
+
+    df['WSPD'] = mc.wind_speed(df['UOB'].values * units.m / units.s,
+                               df['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+    df['WDIR'] = mc.wind_direction(df['UOB'].values * units.m / units.s,
+                                   df['VOB'].values * units.m / units.s).magnitude
+
+    return df
+
+
+def match_bufr_prec(df, prec_csv='bufr_precision.csv'):
     """
     Round observations so the precision matches what is typically found in a BUFR file
 
@@ -476,8 +502,9 @@ def match_bufr_prec(df, ndec={'ELV':0, 'POB':1, 'TOB':1, 'QOB':0, 'UOB':1, 'VOB'
     ----------
     df : pd.DataFrame
         Pandas DataFrame with the same format as a BUFR DataFrame
-    ndec : dictionary
-        Number of decimal points to round each observation type
+    prec_csv : string
+        File name (within the py_scripts/metadata directory) that contains the number of decimal
+        points and minimum values for each variable
 
     Returns
     -------
@@ -486,13 +513,42 @@ def match_bufr_prec(df, ndec={'ELV':0, 'POB':1, 'TOB':1, 'QOB':0, 'UOB':1, 'VOB'
 
     """
 
-    # Set winds to 0 if they fall below the measurement threshold
-    for ob in ['UOB', 'VOB']:
-        idx = np.where(np.logical_and(df[ob] < 0.1, df[ob] > -0.1))[0]
-        df.loc[idx, ob] = 0.
+    # Open precision CSV file
+    metadata_path = '/'.join(os.path.abspath(inspect.getfile(match_bufr_prec)).split('/')[:-2])
+    prec_df = pd.read_csv('%s/metadata/%s' % (metadata_path, prec_csv))
 
-    for ob in ndec.keys():
-        df[ob] = np.around(df[ob], decimals=ndec[ob])
+    # Compute wind speed (in kts) and direction (in deg)
+    df = compute_wspd_wdir(df)
+    df['WSPD'] = (df['WSPD'].values * units.m / units.s).to('kt').magnitude    
+
+    for t in np.unique(df['TYP']):
+        cond = (df['TYP'] == int(t))
+        for v in ['TOB', 'QOB', 'POB', 'WSPD', 'WDIR', 'ELV', 'ZOB', 'ZOB', 'PWO']:
+
+            # Apply minimum threshold for each variable
+            thres = prec_df.loc[prec_df['TYP'] == t, '%s_min' % v].values[0]
+            if not np.isnan(thres):
+                df.loc[cond & (df[v] <= thres), v] = 0
+            
+            # Round results
+            ndec = int(prec_df.loc[prec_df['TYP'] == t, '%s_ndec' % v].values[0])
+            df.loc[cond & (df[v] <= (10**(-ndec))), v] = 0
+            df.loc[cond, v] = np.around(df.loc[cond, v], decimals=ndec)       
+   
+        # Convert WSPD and WDIR back to UOB and VOB
+        tmp = mc.wind_components(df.loc[cond, 'WSPD'].values * units('kt'), 
+                                 df.loc[cond, 'WDIR'].values * units('deg'))
+        df.loc[cond, 'UOB'] = tmp[0].to(units.m / units.s).magnitude
+        df.loc[cond, 'VOB'] = tmp[1].to(units.m / units.s).magnitude
+
+        # Round UOB and VOB
+        for v in ['UOB', 'VOB']:
+            ndec = int(prec_df.loc[prec_df['TYP'] == t, '%s_ndec' % v].values[0])
+            df.loc[cond & (df[v] <= (10**(-ndec))) & (df[v] >= (-10**(-ndec))), v] = 0
+            df.loc[cond, v] = np.around(df.loc[cond, v], decimals=ndec)
+
+    # Drop WSPD and WDIR
+    df.drop(labels=['WSPD', 'WDIR'], axis=1, inplace=True)
 
     return df
 

@@ -27,7 +27,7 @@ from metpy.units import units
 #---------------------------------------------------------------------------------------------------
 
 # Surface station files (from IEM)
-sfc_station_files = glob.glob('/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/*2022*.txt')
+sfc_station_files = glob.glob('/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter/*2022*.txt')
 
 # Output directory and file suffix
 out_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/bufr_csv'
