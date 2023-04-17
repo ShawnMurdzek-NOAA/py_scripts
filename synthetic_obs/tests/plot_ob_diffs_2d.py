@@ -3,6 +3,12 @@ Plot Observation Differences Between Two Prepbufr CSV
 
 This script should ideally be used to compare synthetic obs vs. real obs
 
+Optional passed arguments:
+    argv[1] = bufr_tag
+    argv[2] = save_fname
+    argv[3] = observation subsets to use
+    argv[4] = domain
+
 shawn.s.murdzek@noaa.gov
 Date Created: 7 February 2023
 """
@@ -20,6 +26,7 @@ import datetime as dt
 import pandas as pd
 import metpy.calc as mc
 from metpy.units import units
+import sys
 
 
 #---------------------------------------------------------------------------------------------------
@@ -30,7 +37,7 @@ from metpy.units import units
 bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
-bufr_tag = 'rap'
+bufr_tag = 'rap_p'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
@@ -41,15 +48,14 @@ name2 = 'Real Obs'
 
 # Output file name (include %s placeholders for domain, bufr_tag, variable name, and start and end 
 # of date range)
-save_fname = './ob_diffs_ADPSFC_%s_%s_%s_%s_%s.png'
+save_fname = './ob_diffs_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
-subsets = ['ADPSFC']
+#subsets = ['MSONET']
 
 # Variables to plot
 obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
-#obs_vars = ['WSPD', 'WDIR']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
@@ -64,6 +70,16 @@ sim_wspd_thres = 4.
 # Option to only compare winds if the real wind speed exceeds a threshold
 only_compare_strong_winds = False
 real_wspd_thres = 4.
+
+# Option to used passed arguments
+if len(sys.argv) > 1:
+    bufr_tag = str(sys.argv[1])
+    save_fname = str(sys.argv[2])
+    if sys.argv[3] == 'all':
+        subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
+    else:
+        subsets = [str(sys.argv[3])]
+    domain = str(sys.argv[4])
 
 
 #---------------------------------------------------------------------------------------------------

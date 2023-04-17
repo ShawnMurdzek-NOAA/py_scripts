@@ -523,7 +523,7 @@ def match_bufr_prec(df, prec_csv='bufr_precision.csv'):
 
     for t in np.unique(df['TYP']):
         cond = (df['TYP'] == int(t))
-        for v in ['TOB', 'QOB', 'POB', 'WSPD', 'WDIR', 'ELV', 'ZOB', 'ZOB', 'PWO']:
+        for v in ['TOB', 'QOB', 'POB', 'WSPD', 'WDIR', 'ELV', 'ZOB', 'PWO']:
 
             # Apply minimum threshold for each variable
             thres = prec_df.loc[prec_df['TYP'] == t, '%s_min' % v].values[0]
@@ -532,7 +532,8 @@ def match_bufr_prec(df, prec_csv='bufr_precision.csv'):
             
             # Round results
             ndec = int(prec_df.loc[prec_df['TYP'] == t, '%s_ndec' % v].values[0])
-            df.loc[cond & (df[v] <= (10**(-ndec))), v] = 0
+            if v in ['QOB', 'POB', 'WSPD', 'WDIR', 'PWO']:
+                df.loc[cond & (df[v] <= (10**(-ndec))), v] = 0
             df.loc[cond, v] = np.around(df.loc[cond, v], decimals=ndec)       
    
         # Convert WSPD and WDIR back to UOB and VOB

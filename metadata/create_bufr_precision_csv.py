@@ -38,7 +38,7 @@ prec_dict['PWO_ndec'] = [1] * ntyp
 
 # Minimum value for each ob (values below this value are set to 0)
 # NaN = no minimum value
-prec_dict['TOB_min'] = [0] * ntyp
+prec_dict['TOB_min'] = [np.nan] * ntyp
 prec_dict['QOB_min'] = [0] * ntyp
 prec_dict['POB_min'] = [0] * ntyp
 prec_dict['UOB_min'] = [np.nan] * ntyp
