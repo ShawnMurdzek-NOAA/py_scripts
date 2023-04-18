@@ -24,6 +24,7 @@ import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 import datetime as dt
 import pandas as pd
+import xarray as xr
 import metpy.calc as mc
 from metpy.units import units
 import sys
@@ -37,10 +38,11 @@ import sys
 bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
-bufr_tag = 'rap_p'
+bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
 date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
+date_range = [dt.datetime(2022, 4, 30, 7)]
 
 # Dataset names
 name1 = 'Sim Obs'
@@ -48,20 +50,26 @@ name2 = 'Real Obs'
 
 # Output file name (include %s placeholders for domain, bufr_tag, variable name, and start and end 
 # of date range)
-save_fname = './ob_diffs_%s_%s_%s_%s_%s.png'
+save_fname = './ob_diffs_MSONET_assim_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
-subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
-#subsets = ['MSONET']
+#subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
+#subsets = ['SFCSHP', 'ADPSFC']
+subsets = ['MSONET']
 
 # Variables to plot
 obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
+obs_vars = ['WSPD', 'WDIR']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
 
 # Option to only plot a certain prepBUFR ob type (set to None to not use this option)
 ob_type = None
+
+# Option to only plot obs from stations that have Analysis_Use_Flag = 1
+use_assim_sites = True
+gsi_diag_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/07/diag_conv_uv_anl.2022043007.nc4'
 
 # Option to set simulated wind speeds below a certain threshold to 0
 remove_small_sim_wspd = False
@@ -128,8 +136,8 @@ bufr_df_real = bufr_df_real.loc[np.logical_or(np.logical_and(bufr_df_real['DHR']
 bufr_df_sim = bufr_df_sim.loc[np.logical_or(np.logical_and(bufr_df_sim['DHR'] > -1, bufr_df_sim['DHR'] <= 0),
                                             bufr_df_sim['subset'] == 'GPSIPW')]
 
-bufr_df_real.reset_index(inplace=True)
-bufr_df_sim.reset_index(inplace=True)
+bufr_df_real.reset_index(inplace=True, drop=True)
+bufr_df_sim.reset_index(inplace=True, drop=True)
 
 # Apply rounding so precision in simulated obs matches real obs
 bufr_df_sim = bufr.match_bufr_prec(bufr_df_sim)
@@ -156,8 +164,23 @@ elif domain == 'westernUS':
     bufr_df_real = bufr_df_real.loc[bufr_df_real['XOB'] < 260]
     bufr_df_sim = bufr_df_sim.loc[bufr_df_sim['XOB'] < 260]
 
-bufr_df_real.reset_index(inplace=True)
-bufr_df_sim.reset_index(inplace=True)
+# Only retain obs with Analysis_Use_Flag = 1
+if use_assim_sites:
+    bufr_df_real.reset_index(inplace=True, drop=True)
+    bufr_df_sim.reset_index(inplace=True, drop=True)
+    gsi_diag = xr.open_dataset(gsi_diag_fname).to_dataframe()
+    assim_diag = gsi_diag.loc[gsi_diag['Analysis_Use_Flag'] == 1]
+    all_sites = bufr_df_sim['SID'].values
+    all_times = bufr_df_sim['DHR'].values
+    use_idx = np.zeros(len(all_sites), dtype=bool)
+    for i, (s, t) in enumerate(zip(assim_diag['Station_ID'].values, assim_diag['Time'].values)):
+        s = s.strip().decode('utf-8')
+        use_idx[np.logical_and(all_sites == s, np.isclose(t, all_times))] = True
+    bufr_df_real = bufr_df_real.loc[use_idx]
+    bufr_df_sim = bufr_df_sim.loc[use_idx]
+
+bufr_df_real.reset_index(inplace=True, drop=True)
+bufr_df_sim.reset_index(inplace=True, drop=True)
 print('Done subsetting obs')
 
 # Compute wind speed and direction from U and V components

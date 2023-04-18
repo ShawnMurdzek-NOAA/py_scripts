@@ -20,15 +20,15 @@ import matplotlib.pyplot as plt
 #---------------------------------------------------------------------------------------------------
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
-omb_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/07/diag_conv_uv_ges.2022043007.nc4'
-oma_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/07/diag_conv_uv_anl.2022043007.nc4'
+omb_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/08/diag_conv_uv_ges.2022043008.nc4'
+oma_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/08/diag_conv_uv_anl.2022043008.nc4'
 
 # Observation types
-ob_types = [288]
+ob_types = [280, 281, 282, 284, 287]
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = '288'
+out_str = 'adpsfc_sfcshp'
 
 
 #---------------------------------------------------------------------------------------------------
