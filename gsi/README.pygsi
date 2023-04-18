@@ -1,0 +1,3 @@
+EMC has a PyGSI package that can be used for several of the analyses here, but the package seems a
+bit buggy and the documentation is sparse. Thus, I have elected to use an approach here based on
+XArray that I'm more confident in.

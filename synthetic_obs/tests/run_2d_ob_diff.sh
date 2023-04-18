@@ -11,7 +11,7 @@ date
 my_py
 
 bufr_tag='rap rap_e rap_p'
-subsets='all ADPSFC SFCSHP MSONET'
+subsets='all'
 domain='all easternUS westernUS'
 for b in ${bufr_tag}; do
   for s in ${subsets}; do

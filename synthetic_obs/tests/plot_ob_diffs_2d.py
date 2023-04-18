@@ -55,7 +55,7 @@ subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
 #subsets = ['MSONET']
 
 # Variables to plot
-obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB']
+obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
