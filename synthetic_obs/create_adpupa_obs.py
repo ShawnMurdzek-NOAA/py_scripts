@@ -48,22 +48,22 @@ import map_proj as mp
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
+wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP/'
 
 # Directory containing real prepbufr CSV output
 bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/adpupa/'
+fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/adpupa/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime(2022, 4, 30, 1)
+bufr_start = dt.datetime(2022, 2, 1, 12)
 bufr_end = bufr_start + dt.timedelta(hours=1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 29, 21, 0)
-wrf_end = dt.datetime(2022, 4, 30, 2, 0)
+wrf_start = dt.datetime(2022, 2, 1, 11, 30)
+wrf_end = dt.datetime(2022, 2, 1, 13, 0)
 wrf_step = 15
 
 # Prepbufr tag ('rap', 'rap_e', 'rap_p')
@@ -418,8 +418,8 @@ for i in range(ntimes):
                     adpupa_t_s[idx_sid] = adpupa_t_s[idx_sid] + delta_t    
  
                     # Switch to next radiosonde if balloon exits the domain
-                    if ((adpupa_x[idx_sid] < 0) or (adpupa_x[idx_sid] > xmax) or 
-                        (adpupa_x[idx_sid] < 0) or (adpupa_y[idx_sid] > ymax)):
+                    if ((adpupa_x[idx_sid] < 0) or (adpupa_x[idx_sid] > (xmax-1)) or 
+                        (adpupa_y[idx_sid] < 0) or (adpupa_y[idx_sid] > (ymax-1))):
                         drop_idx = drop_idx + list(range(k+1, adpupa_last_idx[idx_sid]+1))
                         done_sid.append(sid)
                         print('RAOB %s exited lateral boundaries of domain' % sid)
