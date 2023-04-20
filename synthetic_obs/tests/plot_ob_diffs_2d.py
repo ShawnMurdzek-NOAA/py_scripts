@@ -35,14 +35,13 @@ import sys
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV directory
-bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
 bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
-date_range = [dt.datetime(2022, 4, 29, 12) + dt.timedelta(hours=i) for i in range(13)]
-date_range = [dt.datetime(2022, 4, 30, 7)]
+date_range = [dt.datetime(2022, 2, 1, 0) + dt.timedelta(hours=i) for i in range(13)]
 
 # Dataset names
 name1 = 'Sim Obs'
@@ -50,16 +49,13 @@ name2 = 'Real Obs'
 
 # Output file name (include %s placeholders for domain, bufr_tag, variable name, and start and end 
 # of date range)
-save_fname = './ob_diffs_MSONET_assim_%s_%s_%s_%s_%s.png'
+save_fname = './ob_diffs_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
-#subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
-#subsets = ['SFCSHP', 'ADPSFC']
-subsets = ['MSONET']
+subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
 
 # Variables to plot
 obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
-obs_vars = ['WSPD', 'WDIR']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
@@ -68,7 +64,7 @@ domain = 'all'
 ob_type = None
 
 # Option to only plot obs from stations that have Analysis_Use_Flag = 1
-use_assim_sites = True
+use_assim_sites = False
 gsi_diag_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/07/diag_conv_uv_anl.2022043007.nc4'
 
 # Option to set simulated wind speeds below a certain threshold to 0

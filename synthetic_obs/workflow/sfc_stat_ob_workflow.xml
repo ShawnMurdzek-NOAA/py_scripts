@@ -38,7 +38,7 @@ Directories and environment variables
 <!ENTITY WRF_DIR         "&HOME;/nature_run_spring/UPP">
 <!ENTITY BUFR_DIR        "&HOME;/real_obs/sfc_stations/bufr_csv">
 <!ENTITY OUT_DIR         "&HOME;/nature_run_spring/sfc_stat_obs_csv">
-<!ENTITY PERF_OB_SCRIPT  "&WFLOW_DIR;/create_perfect_obs.sh">
+<!ENTITY PERF_OB_SCRIPT  "&WFLOW_DIR;/create_sfc_stat_obs.sh">
 <!ENTITY start_UPP       "2022042912">
 <!ENTITY end_UPP         "2022050612">
 <!ENTITY MACHINE         "ORION">

@@ -29,8 +29,9 @@ from metpy.units import units
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations'
+real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
 station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
+station_ids = ['OAK']
 years = np.arange(1993, 2023) 
 startdate = '04290000'
 enddate = '05070000'
@@ -38,7 +39,7 @@ enddate = '05070000'
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
 fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/perfect'
-analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(1)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -54,8 +55,8 @@ out_fname = '%s_sfc_station_compare_perfect.png'
 
 # Variables to extract
 real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
-fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB']
-fake_varnames_derived = ['WSPD', 'WDIR']
+fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB', 'WSPD', 'WDIR']
+fake_varnames_noplot = ['ceil']
 
 # Extract some values that will be used a lot
 ndays = len(analysis_days)
@@ -71,6 +72,7 @@ for ID in station_ids:
     real_stations[ID] = {}
     for v in real_varnames:
         real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
+    real_stations[ID]['frac_ceil'] = np.zeros(len(years))
     for j, yr in enumerate(years):
         tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
                              skiprows=5)
@@ -84,6 +86,11 @@ for ID in station_ids:
                          for s in ss_df['valid'].values]
         station_times_tot = np.array([(s - dt.datetime(analysis_year, 1, 1)).total_seconds() 
                                       for s in station_times])
+
+        # Temporary variables for determining fraction of time with a ceiling
+        ceil_obs = 0
+        tot_obs = 0
+
         for k, d in enumerate(analysis_days):
             for l, time in enumerate(analysis_times):
                 diff = np.abs(station_times_tot - ((d + time) - dt.datetime(analysis_year, 1, 1)).total_seconds())
@@ -93,6 +100,15 @@ for ID in station_ids:
                         real_stations[ID][v][(j*ndays) + k, l] = np.nan
                     else:
                         real_stations[ID][v][(j*ndays) + k, l] = ss_df.loc[idx, v]
+
+                # Determine if there is a ceiling
+                tmp = ss_df.loc[idx, ['skyc%d' % n for n in range(1, 5)]].values
+                if ('OVC' in tmp) or ('BKN' in tmp):
+                    ceil_obs = ceil_obs + 1
+                if not np.all(tmp == 'M'):
+                    tot_obs = tot_obs + 1
+
+        real_stations[ID]['frac_ceil'][j] = ceil_obs / tot_obs
 
 # Convert real obs to same units/variables as fake obs
 # Note that the surface stations report the altimeter setting rather than station-level pressure.
@@ -109,13 +125,13 @@ for ID in station_ids:
     real_stations[ID]['WSPD'] = (real_stations[ID]['sknt'] * units.kt).to(units.m / units.s).magnitude
     real_stations[ID]['WDIR'] = real_stations[ID]['drct']
     real_stations[ID]['lon'] = real_stations[ID]['lon'] + 360.
-
+    
 # Extract fake observations
 print()
 fake_stations = {}
 for ID in station_ids:
     fake_stations[ID] = {}
-    for v in fake_varnames:
+    for v in fake_varnames + fake_varnames_noplot:
         fake_stations[ID][v] = np.ones([ndays, ntimes]) * np.nan
 for i, d in enumerate(analysis_days):
     for j, t in enumerate(analysis_times):
@@ -123,7 +139,8 @@ for i, d in enumerate(analysis_days):
         print(time.strftime('%Y%m%d %H:%M'))
         try:
             full_bufr_csv = bufr.bufrCSV('%s/%s.sfc.fake.prepbufr.csv' % 
-                                         (fake_obs_dir, time.strftime('%Y%m%d%H%M')))
+                                         (fake_obs_dir, time.strftime('%Y%m%d%H%M')), use_all_col=True)
+            full_bufr_csv.df = bufr.compute_wspd_wdir(full_bufr_csv.df)
         except FileNotFoundError:
             print('file not found, continuing to next time')
             continue
@@ -141,25 +158,20 @@ for i, d in enumerate(analysis_days):
             red_csv.reset_index(inplace=True, drop=True)
             idx = np.argmin(np.abs(red_csv['DHR']))
             if (3600*np.abs(red_csv['DHR'].loc[idx])) < max_time_allowed:
-                for v in fake_varnames:
+                for v in fake_varnames + fake_varnames_noplot:
                     fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
-# Compute wind speed and direction for fake obs
+# Compute binary ceiling
 for ID in station_ids:
-    fake_stations[ID]['WSPD'] = mc.wind_speed(fake_stations[ID]['UOB'] * units.m / units.s,
-                                              fake_stations[ID]['VOB'] * units.m / units.s).to(units.m / units.s).magnitude
-    fake_stations[ID]['WDIR'] = mc.wind_direction(fake_stations[ID]['UOB'] * units.m / units.s,
-                                                  fake_stations[ID]['VOB'] * units.m / units.s).magnitude
-full_bufr_csv.meta['WSPD'] = {'units':'m/s'}
-full_bufr_csv.meta['WDIR'] = {'units':'deg'}
+    fake_stations[ID]['bin_ceil'] = np.float64(np.isnan(fake_stations[ID]['ceil']))
 
 # Plot results
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
 for ID in station_ids:
     ncols = 4
-    fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8), sharex=True)
+    fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
     plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
-    for j, v in enumerate(fake_varnames + fake_varnames_derived):
+    for j, v in enumerate(fake_varnames):
         ax = axes[int(j/ncols), j%ncols]
 
         for k in range(ndays):
@@ -180,9 +192,21 @@ for ID in station_ids:
 
         ax.grid()
         ax.set_ylabel('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
+        ax.set_xlim([plot_hr.min(), plot_hr.max()])
     for j in range(ncols):
-        axes[-1, j].set_xlabel('hour', size=14)
-        axes[-1, j].set_xlim([plot_hr.min(), plot_hr.max()])
+        if j != 3:
+            axes[-1, j].set_xlabel('hour', size=14)
+        axes[0, 3].set_xlabel('hour', size=14)
+
+    # Add fraction of time with a ceiling in the final subplot
+    ax = axes[1, 3]
+    ax.hist(real_stations[ID]['frac_ceil'], color='red')
+    ax.axvline(np.sum(fake_stations[ID]['bin_ceil']) / fake_stations[ID]['bin_ceil'].size, c='k', lw=1)
+    ax.grid()
+    ax.set_xlabel('fraction of time with ceiling', size=10)
+    ax.set_ylabel('number of years', size=14)
+    ax.set_xlim([0, 1])
+
     plt.suptitle(ID, size=18)
     plt.savefig(out_fname % ID)
     plt.close()

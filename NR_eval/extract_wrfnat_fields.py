@@ -25,31 +25,32 @@ import os
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
-date = sys.argv[1]
-#date = '20220506'
+path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
+#date = sys.argv[1]
+date = '20220208'
 
 # Input UPP wrfnat files (file names MUST end in .grib2, or else Xarray will throw an error)
 
 # NR
-template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
-upp_files = [template % i for i in range(0, 1801, 600)]
+#template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
+#upp_files = [template % i for i in range(0, 1801, 600)]
+#upp_files = [upp_files[0]]
 
 # HRRR
-#t1 = dt.datetime.strptime(date, '%Y%m%d')
-#t0 = t1 - dt.timedelta(days=1)
-#upp_files =  ['%s/%s/%s23000001.grib2' % (path, t0.strftime('%Y%m%d'), t0.strftime('%y%j'))]
-#template = '%s/%s/%s' % (path, date, t1.strftime('%y%j')) + '%02d000001.grib2'
-#upp_files = upp_files + [template % i for i in range(5, 19, 6)]
+t1 = dt.datetime.strptime(date, '%Y%m%d')
+t0 = t1 - dt.timedelta(days=1)
+upp_files = []
+template = '%s/%s/%s' % (path, date, t1.strftime('%y%j')) + '%02d000001.grib2'
+upp_files = upp_files + [template % i for i in range(5, 19, 6)]
 
 # Output netcdf file
-out_file = '%s/%s/cref_%s.nc' % (path, date, date)
-#out_file = '%s/%s/precip1hr_%s.nc' % (path, date, date)
+#out_file = '%s/%s/cref_%s.nc' % (path, date, date)
+out_file = '%s/%s/precip1hr_%s.nc' % (path, date, date)
 
 # Field to extract from each UPP file
-field = 'REFC_P0_L200_GLC0'  # Used in NR
+#field = 'REFC_P0_L200_GLC0'  # Used in NR
 #field = 'REFC_P0_L10_GLC0'   # Used in HRRR
-#field = 'APCP_P8_L1_GLC0_acc'
+field = 'APCP_P8_L1_GLC0_acc'
 
 
 #---------------------------------------------------------------------------------------------------

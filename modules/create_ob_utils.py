@@ -66,7 +66,7 @@ def _linear_interp(val1, val2, wgt):
     return (val1 * wgt) + (val2 * (1. - wgt))
 
 
-def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
+def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False, mask=np.ones(4)):
     """
     Interpolate the given field in the horizontal
 
@@ -84,6 +84,9 @@ def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
         Lower-left index for the second dimension of field
     threeD : boolean, optional
         Is this field actually 3D?
+    mask : array, optional
+        Omit certain gridpoints from interpolation (1 = keep, 0 = omit)
+        Order: [(i0, j0), (i0, j0+1), (i0+1, j0), (i0+1, j0+1)]
 
     Returns
     -------
@@ -94,7 +97,7 @@ def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
 
     iind = np.array([i0,        i0,            i0+1,          i0+1])
     jind = np.array([j0,        j0+1,          j0,            j0+1])
-    wgts = np.array([iwgt*jwgt, iwgt*(1-jwgt), (1-iwgt)*jwgt, (1-iwgt)*(1-jwgt)])
+    wgts = np.array([iwgt*jwgt, iwgt*(1-jwgt), (1-iwgt)*jwgt, (1-iwgt)*(1-jwgt)]) * mask
 
     if threeD:
         val = np.zeros(field.shape[0])
@@ -105,10 +108,13 @@ def _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=False):
         for w, i, j in zip(wgts, iind, jind):
             val = val + w * field[i, j]
 
+    if mask.sum() < 4:
+        val = val / np.sum(wgts)
+
     return val
 
 
-def interp_x_y(field, ob_subset, threeD=False):
+def interp_x_y(field, ob_subset, threeD=False, mask=np.ones(4)):
     """
     Wrapper function for interpolation in x and y
 
@@ -120,6 +126,9 @@ def interp_x_y(field, ob_subset, threeD=False):
         Pandas series containing a single observation
     threeD : boolean, optional
         Is this UPP field 3D?
+    mask : array, optional
+        Omit certain gridpoints from interpolation (1 = keep, 0 = omit)
+        Order: [(i0, j0), (i0, j0+1), (i0+1, j0), (i0+1, j0+1)]
 
     Returns
     -------
@@ -133,12 +142,12 @@ def interp_x_y(field, ob_subset, threeD=False):
     i0 = ob_subset['i0']
     j0 = ob_subset['j0']
 
-    val = _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=threeD)
+    val = _bilinear_interp_horiz(field, iwgt, jwgt, i0, j0, threeD=threeD, mask=mask)
 
     return val
 
 
-def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
+def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False, mask=np.ones(4)):
     """
     Wrapper function for interpolation in x, y, and t
 
@@ -158,6 +167,9 @@ def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
         Interpolation weight associated with the ihr UPP dataset
     threeD : boolean, optional
         Is this UPP field 3D?
+    mask : array, optional
+        Omit certain gridpoints from interpolation (1 = keep, 0 = omit)
+        Order: [(i0, j0), (i0, j0+1), (i0+1, j0), (i0+1, j0+1)]
 
     Returns
     -------
@@ -173,8 +185,9 @@ def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False):
     i0 = ob_subset['i0']
     j0 = ob_subset['j0']
 
-    val = _linear_interp(_bilinear_interp_horiz(field1, iwgt, jwgt, i0, j0, threeD=threeD),
-                         _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD), twgt)
+    val = _linear_interp(_bilinear_interp_horiz(field1, iwgt, jwgt, i0, j0, threeD=threeD, mask=mask),
+                         _bilinear_interp_horiz(field2, iwgt, jwgt, i0, j0, threeD=threeD, mask=mask), 
+                         twgt)
 
     return val
 

@@ -40,12 +40,17 @@ class bufrCSV():
     ----------
     fname : string
         CSV file name
+    use_all_col : boolean, optional
+        Option to read in all columns
 
     """
 
-    def __init__(self, fname):
+    def __init__(self, fname, use_all_col=False):
    
-        df = pd.read_csv(fname, usecols=list(range(35)), dtype={'SID':str})
+        if use_all_col:
+            df = pd.read_csv(fname, dtype={'SID':str})
+        else:
+            df = pd.read_csv(fname, usecols=list(range(35)), dtype={'SID':str})
   
         # Set missing values (1e11) to NaN
         self.df = df.where(df != 1e11)

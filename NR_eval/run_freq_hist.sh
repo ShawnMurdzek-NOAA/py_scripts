@@ -10,18 +10,15 @@ date
 . ~/.bashrc
 my_py
 
-#model=( 'NR' 'HRRR' )
-#field=( 'cref' 'precip1hr' )
-#domain=( 'all' 'easternUS' )
-model=( 'HRRR' )
-field=( 'precip1hr' )
-domain=( 'easternUS' )
+model=( 'NR' 'HRRR' )
+field=( 'cref' 'precip1hr' )
+domain=( 'all' 'easternUS' )
 zoom=( 'regular' 'zoomed' )
 for m in ${model[@]}; do
   for f in ${field[@]}; do
     for d in ${domain[@]}; do
       for k in ${!zoom[@]}; do
-        python frequency_histograms.py $m $f $d $k "./${m}_${f}_${d}_${zoom[$k]}_freq_hist.png"
+        python frequency_histograms.py $m $f $d $k "./winterNR/${m}_${f}_${d}_${zoom[$k]}_freq_hist.png"
       done 
     done
   done

@@ -27,11 +27,11 @@ import sys
 model = sys.argv[1]
 
 # Dates to use
-eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':
-    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
+    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
 elif model == 'HRRR':
     NR_path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
 
@@ -39,7 +39,7 @@ elif model == 'HRRR':
 MRMS_path = '/work2/noaa/wrfruc/murdzek/real_obs/mrms'
 
 # MRMS years to use
-MRMS_years = np.arange(2015, 2023)
+MRMS_years = np.arange(2016, 2024)
 
 # Option to use days from MRMS before and after eval_dates. Offsets here are days relative to the 
 # first date in eval_dates
