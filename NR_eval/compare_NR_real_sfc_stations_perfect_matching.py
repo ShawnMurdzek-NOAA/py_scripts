@@ -31,7 +31,6 @@ from metpy.units import units
 # Parameters for real obs
 real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
 station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
-station_ids = ['OAK']
 years = np.arange(1993, 2023) 
 startdate = '04290000'
 enddate = '05070000'
@@ -39,7 +38,7 @@ enddate = '05070000'
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
 fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/perfect'
-analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(1)]
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -163,7 +162,10 @@ for i, d in enumerate(analysis_days):
 
 # Compute binary ceiling
 for ID in station_ids:
-    fake_stations[ID]['bin_ceil'] = np.float64(np.isnan(fake_stations[ID]['ceil']))
+    fake_stations[ID]['bin_ceil'] = np.float64(~np.isnan(fake_stations[ID]['ceil']))
+    fake_stations[ID]['bin_ceil'][np.isnan(fake_stations[ID]['TOB'])] = np.nan
+    fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
+                                      np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
 
 # Plot results
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
@@ -201,7 +203,7 @@ for ID in station_ids:
     # Add fraction of time with a ceiling in the final subplot
     ax = axes[1, 3]
     ax.hist(real_stations[ID]['frac_ceil'], color='red')
-    ax.axvline(np.sum(fake_stations[ID]['bin_ceil']) / fake_stations[ID]['bin_ceil'].size, c='k', lw=1)
+    ax.axvline(fake_stations[ID]['frac_ceil'], c='k', lw=2)
     ax.grid()
     ax.set_xlabel('fraction of time with ceiling', size=10)
     ax.set_ylabel('number of years', size=14)

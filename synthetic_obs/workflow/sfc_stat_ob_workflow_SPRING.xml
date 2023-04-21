@@ -35,12 +35,12 @@ Directories and environment variables
 <!ENTITY PY_ENV          "&HOME;/src/nature_run_wflow/env">
 <!ENTITY CODE_DIR        "&HOME;/src/py_scripts/synthetic_obs">
 <!ENTITY WFLOW_DIR       "&HOME;/src/py_scripts/synthetic_obs/workflow">
-<!ENTITY WRF_DIR         "&HOME;/nature_run_winter/UPP">
+<!ENTITY WRF_DIR         "&HOME;/nature_run_spring/UPP">
 <!ENTITY BUFR_DIR        "&HOME;/real_obs/sfc_stations/bufr_csv">
-<!ENTITY OUT_DIR         "&HOME;/nature_run_winter/sfc_stat_obs_csv">
+<!ENTITY OUT_DIR         "&HOME;/nature_run_spring/sfc_stat_obs_csv">
 <!ENTITY PERF_OB_SCRIPT  "&WFLOW_DIR;/create_sfc_stat_obs.sh">
-<!ENTITY start_UPP       "2022020100">
-<!ENTITY end_UPP         "2022020723">
+<!ENTITY start_UPP       "2022042912">
+<!ENTITY end_UPP         "2022050611">
 <!ENTITY MACHINE         "ORION">
 
 <!--
@@ -59,10 +59,10 @@ to use for a given task.
 <workflow realtime="F" scheduler="&SCHED;" cyclethrottle="20" cyclelifespan="30:00:00:00">
 
 
-  <cycledef group="create_obs"> 202202010000 202202072300 01:00:00 </cycledef>
+  <cycledef group="create_obs"> 202204291200 202205061100 01:00:00 </cycledef>
 
   <log>
-    <cyclestr>&WFLOW_DIR;/SFC_STAT_OB_wflow.log</cyclestr>
+    <cyclestr>&WFLOW_DIR;/SFC_STAT_OB_wflow_SPRING.log</cyclestr>
   </log>
 
 

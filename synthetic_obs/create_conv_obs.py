@@ -83,6 +83,17 @@ interp_z_aircft = False
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
 debug = 2
 
+# Option to "correct" obs that occur near coastlines
+coastline_correct = False 
+
+# Option to add ceiling observations to surface-based platforms (ADPSFC, SFCSHP, MSONET)
+add_ceiling = True
+ceil_field = 'HGT_P0_L215_GLC0'
+#ceil_field = 'CEIL_P0_L215_GLC0'  # Experimental ceiling diagnostic #1
+
+# Option for debugging output (0 = none, 1 = some, 2 = a lot)
+debug = 2
+
 # Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
 # Helpful for debugging, but should usually be set to False b/c it increases runtime
 interp_latlon = False
@@ -185,6 +196,11 @@ for i in range(ntimes):
     bufr_csv.df['iwgt'] = 1. - (bufr_csv.df['ylc'] - bufr_csv.df['i0'])
     bufr_csv.df['jwgt'] = 1. - (bufr_csv.df['xlc'] - bufr_csv.df['j0'])
 
+    # Determine nearest neighbor for cloud ceiling
+    if add_ceiling:
+        bufr_csv.df['inear'] = np.int32(np.around(bufr_csv.df['ylc']))
+        bufr_csv.df['jnear'] = np.int32(np.around(bufr_csv.df['xlc']))
+
     if debug > 0:
         print('Finished with map projection and computing horiz interp weights (time = %.3f s)' % 
               (dt.datetime.now() - start_map_proj).total_seconds())
@@ -226,6 +242,9 @@ for i in range(ntimes):
     extra_col_int = extra_col_int + ['i0', 'j0']
     extra_col_float = extra_col_float + ['xlc', 'ylc', 'iwgt', 'jwgt']
 
+    if add_ceiling:
+        extra_col_int = extra_col_int + ['inear', 'jnear']
+        out_df['ceil'] = np.zeros(nrow) * np.nan
 
     #-----------------------------------------------------------------------------------------------
     # Create Obs Based on 2-D Fields (ADPSFC, SFCSHP, MSONET, GPSIPW)
@@ -233,10 +252,13 @@ for i in range(ntimes):
 
     # Extract 2D fields ONLY
     fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'HGT_P0_L1_GLC0', 
-                'PWAT_P0_L200_GLC0', 'LAND_P0_L1_GLC0']
+                'PWAT_P0_L200_GLC0']
+    if coastline_correct:
+        fields2D = fields2D + ['LAND_P0_L1_GLC0']
     if interp_latlon:
-        fields2D.append('gridlat_0')
-        fields2D.append('gridlon_0')
+        fields2D = fields2D + ['gridlat_0', 'gridlon_0']
+    if add_ceiling:
+        fields2D = fields2D + [ceil_field]
     fields2D1 = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
     wrf_data = {}
     for hr in wrf_hr:
@@ -256,9 +278,30 @@ for i in range(ntimes):
         # Determine WRF hour right before observation and weight for temporal interpolation
         ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
 
+        # Option to use only land gridpoints for land stations and only water gridpoints for 
+        # marine stations
+        if coastline_correct:
+            i0 = out_df.loc[j, 'i0']
+            j0 = out_df.loc[j, 'j0']
+            hr = wrf_hr[ihr]
+            f = 'LAND_P0_L1_GLC0'
+            tmp_mask = np.array([wrf_data[hr][f][i0, j0], wrf_data[hr][f][i0, j0+1],
+                                 wrf_data[hr][f][i0+1, j0], wrf_data[hr][f][i0+1, j0+1]])
+            print('number of nearby land gridpoints = %d' % tmp_mask.sum())
+            if out_df.loc[j, 'subset'] in ['ADPSFC', 'MSONET']:
+                landmask = tmp_mask
+            elif out_df.loc[j, 'subset'] in ['SFCSHP']:
+                landmask = np.float64(np.logical_not(tmp_mask))
+            else:
+                landmask = np.ones(4)
+        else:
+            landmask = np.ones(4)
+
         # Determine surface height above sea level and surface pressure
-        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j], ihr, twgt)
-        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], ihr, twgt) * 1e-2
+        sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j], ihr, twgt,
+                                mask=landmask)
+        sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], ihr, twgt,
+                                mask=landmask) * 1e-2
 
         if debug > 1:
             time_sfc = dt.datetime.now()
@@ -272,12 +315,6 @@ for i in range(ntimes):
                   (out_df.loc[j, 'DHR'], out_df.loc[j, 'XOB'], out_df.loc[j, 'YOB']))
             print('sfch = %.6f, sfcp = %.6f' % (sfch, sfcp))
              
-            # Determine number of pts used for interpolation w/ land or water mask
-            i0 = out_df.loc[j, 'i0']
-            j0 = out_df.loc[j, 'j0']
-            print('number of land gridpoints used in interp = %d' % 
-                  wrf_data[wrf_hr[ihr]]['LAND_P0_L1_GLC0'][i0:i0+2, j0:j0+2].sum())
-
         # Surface obs only: Reset surface values to match NR and assign surface pressure values
         if out_df.loc[j, 'subset'] in ['ADPSFC', 'SFCSHP', 'MSONET']:
             for o, v in zip(['ZOB', 'ELV', 'POB', 'PRSS'], [sfch, sfch, sfcp, sfcp]):
@@ -295,12 +332,20 @@ for i in range(ntimes):
             if not np.isnan(out_df.loc[j, o]):
                 if debug > 1:
                     time_before_interp = dt.datetime.now()
-                out_df.loc[j, o] = cou.interp_x_y_t(wrf_data, wrf_hr, m, out_df.loc[j], ihr, twgt)
+                out_df.loc[j, o] = cou.interp_x_y_t(wrf_data, wrf_hr, m, out_df.loc[j], ihr, twgt,
+                                                    mask=landmask)
                 if debug > 1:
                     time_after_interp = dt.datetime.now()
                     print('finished interp for %s (%.6f s)' % 
                           (o, (time_after_interp - time_before_interp).total_seconds()))
                     entry_times2d.append((dt.datetime.now() - time_jstart).total_seconds())
+
+        # Option to include cloud ceiling (interpolation is nearest neighbor)
+        if add_ceiling and (out_df.loc[j, 'subset'] in ['ADPSFC', 'MSONET', 'SFCSHP']):
+             inear = out_df.loc[j, 'inear']
+             jnear = out_df.loc[j, 'jnear']
+             HRnear = wrf_hr[np.argmin(np.abs(wrf_hr - out_df.loc[j, 'DHR']))]
+             out_df.loc[j, 'ceil'] = wrf_data[HRnear][ceil_field][inear, jnear]
 
 
     #-----------------------------------------------------------------------------------------------
