@@ -56,7 +56,7 @@ to use for a given task.
 
 
 ]>
-<workflow realtime="F" scheduler="&SCHED;" cyclethrottle="20" cyclelifespan="30:00:00:00">
+<workflow realtime="F" scheduler="&SCHED;" cyclethrottle="24" cyclelifespan="30:00:00:00">
 
 
   <cycledef group="create_obs"> 202202010000 202202072300 01:00:00 </cycledef>

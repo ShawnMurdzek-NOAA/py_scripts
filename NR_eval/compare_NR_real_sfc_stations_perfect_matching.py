@@ -20,6 +20,7 @@ import bufr
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime as dt
+import metpy.constants as const
 import metpy.calc as mc
 from metpy.units import units
 
@@ -31,18 +32,24 @@ from metpy.units import units
 # Parameters for real obs
 real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
 station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
-years = np.arange(1993, 2023) 
+years = np.arange(1993, 2023)
 startdate = '04290000'
 enddate = '05070000'
+#startdate = '02010000'
+#enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
 fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/perfect'
 analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+#analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
 max_time_allowed = 450.
+
+# Option to plot ceiling obs as a binary histogram ('binary') or CDF of ceiling height ('hgt')
+ceil_plot = 'hgt'
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -55,7 +62,7 @@ out_fname = '%s_sfc_station_compare_perfect.png'
 # Variables to extract
 real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
 fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB', 'WSPD', 'WDIR']
-fake_varnames_noplot = ['ceil']
+fake_varnames_noplot = ['ELV', 'ceil']
 
 # Extract some values that will be used a lot
 ndays = len(analysis_days)
@@ -71,6 +78,8 @@ for ID in station_ids:
     real_stations[ID] = {}
     for v in real_varnames:
         real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
+    real_stations[ID]['ceil'] = np.ones([len(years), ntimes * ndays]) * np.nan
+    real_stations[ID]['n_skyl'] = np.zeros(len(years))
     real_stations[ID]['frac_ceil'] = np.zeros(len(years))
     for j, yr in enumerate(years):
         tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
@@ -101,11 +110,20 @@ for ID in station_ids:
                         real_stations[ID][v][(j*ndays) + k, l] = ss_df.loc[idx, v]
 
                 # Determine if there is a ceiling
-                tmp = ss_df.loc[idx, ['skyc%d' % n for n in range(1, 5)]].values
-                if ('OVC' in tmp) or ('BKN' in tmp):
+                skyc = ss_df.loc[idx, ['skyc%d' % n for n in range(1, 5)]].values
+                skyl = ss_df.loc[idx, ['skyl%d' % n for n in range(1, 5)]].values
+                skyl[skyl == 'M'] = np.nan
+                skyl = np.float64(skyl)
+                ceil_idx = np.where((skyc == 'OVC') | (skyc == 'BKN'))[0]
+                if len(ceil_idx) > 0:
                     ceil_obs = ceil_obs + 1
-                if not np.all(tmp == 'M'):
+                    if not np.all(np.isnan(skyl[ceil_idx])):
+                        real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
+                        real_stations[ID]['ceil'][j, (k*ntimes) + l] = np.nanmin(skyl[ceil_idx])
+                if not np.all(skyc == 'M'):
                     tot_obs = tot_obs + 1
+                    if len(ceil_idx) == 0:
+                        real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
 
         real_stations[ID]['frac_ceil'][j] = ceil_obs / tot_obs
 
@@ -124,7 +142,8 @@ for ID in station_ids:
     real_stations[ID]['WSPD'] = (real_stations[ID]['sknt'] * units.kt).to(units.m / units.s).magnitude
     real_stations[ID]['WDIR'] = real_stations[ID]['drct']
     real_stations[ID]['lon'] = real_stations[ID]['lon'] + 360.
-    
+    real_stations[ID]['ceil'] = (real_stations[ID]['ceil'] * units.ft).to(units.km).magnitude    
+
 # Extract fake observations
 print()
 fake_stations = {}
@@ -160,8 +179,10 @@ for i, d in enumerate(analysis_days):
                 for v in fake_varnames + fake_varnames_noplot:
                     fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
-# Compute binary ceiling
+# Convert ceiling from gpm to km and compute binary ceiling
 for ID in station_ids:
+    fake_stations[ID]['ceil'] = (mc.geopotential_to_height(fake_stations[ID]['ceil'] * units.m * const.g).to('km').magnitude -
+                                 mc.geopotential_to_height(fake_stations[ID]['ELV'] * units.m * const.g).to('km').magnitude)
     fake_stations[ID]['bin_ceil'] = np.float64(~np.isnan(fake_stations[ID]['ceil']))
     fake_stations[ID]['bin_ceil'][np.isnan(fake_stations[ID]['TOB'])] = np.nan
     fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
@@ -202,12 +223,44 @@ for ID in station_ids:
 
     # Add fraction of time with a ceiling in the final subplot
     ax = axes[1, 3]
-    ax.hist(real_stations[ID]['frac_ceil'], color='red')
-    ax.axvline(fake_stations[ID]['frac_ceil'], c='k', lw=2)
+    if ceil_plot == 'binary':
+        ax.hist(real_stations[ID]['frac_ceil'], color='red')
+        ax.axvline(fake_stations[ID]['frac_ceil'], c='k', lw=2)
+        ax.set_xlabel('fraction of time with ceiling', size=10)
+        ax.set_ylabel('number of years', size=14)
+        ax.set_xlim([0, 1])
+    elif ceil_plot == 'hgt':
+        bins = np.arange(0, 12.5, 0.5)
+        ctrs = 0.5 * (bins[1:] + bins[:-1]) 
+        
+        real_cdf = np.zeros([len(years), len(ctrs)])
+        for j in range(len(years)):
+            tmp, _ = np.histogram(real_stations[ID]['ceil'][j, :], bins=bins)
+            real_cdf[j, :] = (np.array([np.sum(tmp[:(n+1)]) for n in range(len(tmp))]) / 
+                              real_stations[ID]['n_skyl'][j])
+        pcts = [0, 10, 25, 50, 75, 90, 100]
+        var_percentiles = {}
+        for p in pcts:
+            var_percentiles[p] = np.zeros(len(ctrs))
+            for l in range(len(ctrs)):
+                var_percentiles[p][l] = np.nanpercentile(real_cdf[:, l], p) 
+        
+        ax.plot(ctrs, var_percentiles[50], 'r-', lw=2)
+        ax.fill_between(ctrs, var_percentiles[25], var_percentiles[75], color='r', alpha=0.4)
+        ax.fill_between(ctrs, var_percentiles[10], var_percentiles[90], color='r', alpha=0.2)
+        ax.plot(ctrs, var_percentiles[0], 'r-', lw=0.5)
+        ax.plot(ctrs, var_percentiles[100], 'r-', lw=0.5)
+        
+        tmp, _ = np.histogram(fake_stations[ID]['ceil'], bins=bins)
+        fake_cdf = (np.array([np.sum(tmp[:(n+1)]) for n in range(len(tmp))]) / 
+                    np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
+        ax.plot(ctrs, fake_cdf, 'k-')
+        ax.set_xlabel('cloud ceiling (km)', size=14)
+        ax.set_ylabel('cumulative fraction of days', size=14)
+        ax.set_xlim([0, 12])
+        ax.set_ylim([0, 1])
+
     ax.grid()
-    ax.set_xlabel('fraction of time with ceiling', size=10)
-    ax.set_ylabel('number of years', size=14)
-    ax.set_xlim([0, 1])
 
     plt.suptitle(ID, size=18)
     plt.savefig(out_fname % ID)
