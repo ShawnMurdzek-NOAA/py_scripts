@@ -37,6 +37,9 @@ import datetime as dt
 import math
 import os
 import sys
+import metpy.constants as const
+import metpy.calc as mc
+from metpy.units import units
 
 import create_ob_utils as cou 
 import bufr
@@ -457,6 +460,7 @@ for i in range(ntimes):
     out_df['QOB'] = out_df['QOB'] * 1e6
     out_df['TOB'] = out_df['TOB'] - 273.15
     out_df['ELV'] = np.int64(out_df['ELV'])
+    out_df['ZOB'] = mc.geopotential_to_height(out_df['ZOB'] * units.m * const.g).to('m').magnitude
 
     if save_debug_df:
         # Convert (x, y) coords back to km
