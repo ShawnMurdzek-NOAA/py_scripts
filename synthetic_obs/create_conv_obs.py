@@ -551,7 +551,7 @@ for i in range(ntimes):
     out_df['ELV'] = np.int64(out_df['ELV'])
     idx_3d = np.where((out_df['subset'] == 'AIRCAR') | (out_df['subset'] == 'AIRCFT') | 
                       (out_df['subset'] == 'ADPUPA'))[0]
-    out_df[idx_3d, 'ZOB'] = mc.geopotential_to_height(out_df[idx_3d, 'ZOB'] * units.m * const.g).to('m').magnitude
+    out_df.loc[idx_3d, 'ZOB'] = mc.geopotential_to_height(out_df.loc[idx_3d, 'ZOB'].values * units.m * const.g).to('m').magnitude
     if interp_latlon:
         idx = np.where((out_df['subset'] == 'ADPSFC') | (out_df['subset'] == 'SFCSHP') |
                        (out_df['subset'] == 'MSONET'))[0] 
