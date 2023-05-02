@@ -83,9 +83,6 @@ bufr_tag = 'sfc'
 # real obs b/c the pressures are the same.
 interp_z_aircft = False
 
-# Option for debugging output (0 = none, 1 = some, 2 = a lot)
-debug = 2
-
 # Option to "correct" obs that occur near coastlines
 coastline_correct = False 
 
