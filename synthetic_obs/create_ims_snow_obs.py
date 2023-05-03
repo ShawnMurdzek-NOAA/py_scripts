@@ -32,17 +32,17 @@ import map_proj as mp
 #---------------------------------------------------------------------------------------------------
 
 # Directory containing wrfnat output from UPP
-wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP/'
+wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real IMS snow grib2 data files
-ims_dir = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/'
+ims_dir = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/spring/snow/ims96/grib2/'
 
 # Output directory for synthetic IMS snow files
-fake_ims_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/'
+fake_ims_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_ims/'
 
 # Start and end times for IMS snow files. Step is in hrs
-ims_start = dt.datetime(2022, 2, 1, 22)
-ims_end = dt.datetime(2022, 2, 8, 22)
+ims_start = dt.datetime(2022, 4, 29, 22)
+ims_end = dt.datetime(2022, 5, 5, 22)
 ims_step = 24
 
 # Use passed arguments, if they exist

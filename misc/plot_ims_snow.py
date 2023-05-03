@@ -21,9 +21,10 @@ import plot_model_data as pmd
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-template = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/22%03d2200000000.grib2'
+#template = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/22%03d2200000000.grib2'
+template = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/22%03d2200000000.grib2'
 #fnames = [template % i for i in range(118, 129)]
-fnames = [template % i for i in range(30, 40)]
+fnames = [template % i for i in range(32, 39)]
 
 minlon = -130.
 maxlon = -60.
@@ -49,7 +50,7 @@ for f in fnames:
     out.ax_title(size=14)
     out.set_lim(minlat, maxlat, minlon, maxlon)
 
-    plt.savefig('%s/ims_snow_%s.png' % (save_dir, f.split('/')[-1].split('.')[0]))
+    plt.savefig('%s/ims_snow_NR_%s.png' % (save_dir, f.split('/')[-1].split('.')[0]))
     plt.close()
 
 
