@@ -27,7 +27,7 @@ import sys
 
 # netcdf and grib files
 nc_fname = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/220322200000000.nc'
-grib_fname = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/220322200000000.grib2'
+grib_fname = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/snow/ims96/grib2/220322200000000.grib2'
 save_fname = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/220322200000000.grib2'
 
 # Fields to copy from netcdf to grib. Key is grib message number, value is netcdf field
@@ -38,7 +38,7 @@ fields = {2:'SNOWC_P0_L1_GST0',
 if len(sys.argv) > 1:
     day = int(sys.argv[1])
     nc_fname = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/22%03d2200000000.nc' % day
-    grib_fname = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/22%03d2200000000.grib2' % day
+    grib_fname = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/snow/ims96/grib2/22%03d2200000000.grib2' % day
     save_fname = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/22%03d2200000000.grib2' % day
     
 

@@ -35,7 +35,7 @@ import map_proj as mp
 wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP/'
 
 # Directory containing real IMS snow grib2 data files
-ims_dir = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/'
+ims_dir = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/snow/ims96/grib2/'
 
 # Output directory for synthetic IMS snow files
 fake_ims_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/'
@@ -62,8 +62,11 @@ if len(sys.argv) > 1:
 # Timing
 begin = dt.datetime.now()
 
-wrf_snow_field = 'SNOD_P0_L1_GLC0'
+#wrf_snow_field = 'SNOD_P0_L1_GLC0'
+wrf_snow_field = 'SNOWC_P0_L1_GLC0'
+wrf_ice_field = 'ICEC_P0_L1_GLC0'
 ims_snow_field = 'SNOWC_P0_L1_GST0'
+ims_ice_field = 'ICEC_P0_L1_GST0'
 
 ntimes = int((ims_end - ims_start) / dt.timedelta(hours=ims_step) + 1)
 for i in range(ntimes):
@@ -75,11 +78,13 @@ for i in range(ntimes):
     ims_fname = '%s/%s.grib2' % (ims_dir, t.strftime('%y%j%H%M%S0000'))
     ims_real_ds = xr.open_dataset(ims_fname, engine='pynio')
     ims_snow = ims_real_ds[ims_snow_field].values
+    ims_ice = ims_real_ds[ims_ice_field].values
     ims_shape = ims_snow.shape
 
     # Open wrfnat files
     wrf_ds = xr.open_dataset(wrf_dir + t.strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), engine='pynio')
     wrf_snow = wrf_ds[wrf_snow_field].values
+    wrf_ice = wrf_ds[wrf_ice_field].values
     imax_wrf = wrf_snow.shape[0] - 1
     jmax_wrf = wrf_snow.shape[1] - 1
 
@@ -98,16 +103,22 @@ for i in range(ntimes):
     # Create output DataSet
     start_interp = dt.datetime.now()
     out_ds = ims_real_ds.copy()
-    unmasked_idx = np.where(~np.isnan(np.ravel(ims_snow)) & (inear_ims >= 0) & (jnear_ims >= 0) & 
-                            (inear_ims <= imax_wrf) & (jnear_ims <= jmax_wrf))[0]
-    print('interpolating to %d gridpoints' % len(unmasked_idx))
-    for ct, ims_idx in enumerate(unmasked_idx):
-        if (ct % 50000 == 0):
-            print('ob number %d' % ct)
-        i_wrf = inear_ims[ims_idx]
-        j_wrf = jnear_ims[ims_idx]
-        i_ims, j_ims = np.unravel_index(ims_idx, ims_shape)
-        out_ds[ims_snow_field][i_ims, j_ims] = 100*np.float32(wrf_snow[i_wrf, j_wrf] > 0)
+
+    for wrf_field, ims_field, ims_field_name in zip([wrf_snow, wrf_ice], [ims_snow, ims_ice], 
+                                                    [ims_snow_field, ims_ice_field]):
+        unmasked_idx = np.where(~np.isnan(np.ravel(ims_field)) & (inear_ims >= 0) & 
+                                (jnear_ims >= 0) & (inear_ims <= imax_wrf) & 
+                                (jnear_ims <= jmax_wrf))[0]
+        print('------------------------------------')
+        print('%s: interpolating to %d gridpoints' % (ims_field_name, len(unmasked_idx)))
+        for ct, ims_idx in enumerate(unmasked_idx):
+            if (ct % 50000 == 0):
+                print('ob number %d' % ct)
+            i_wrf = inear_ims[ims_idx]
+            j_wrf = jnear_ims[ims_idx]
+            i_ims, j_ims = np.unravel_index(ims_idx, ims_shape)
+            out_ds[ims_field_name][i_ims, j_ims] = 100*np.float32(wrf_field[i_wrf, j_wrf] > 0)
+
     print('Finished with interpolation (time = %.3f s)' % 
           (dt.datetime.now() - start_interp).total_seconds())
 
