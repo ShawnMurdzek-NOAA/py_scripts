@@ -22,9 +22,9 @@ import plot_model_data as pmd
 #---------------------------------------------------------------------------------------------------
 
 #template = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/winter/snow/ims96/grib2/22%03d2200000000.grib2'
-template = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/22%03d2200000000.grib2'
-#fnames = [template % i for i in range(118, 129)]
-fnames = [template % i for i in range(32, 39)]
+template = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_ims/22%03d2200000000.grib2'
+fnames = [template % i for i in range(119, 127)]
+#fnames = [template % i for i in range(32, 39)]
 
 minlon = -130.
 maxlon = -60.
