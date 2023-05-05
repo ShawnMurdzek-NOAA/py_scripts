@@ -26,14 +26,14 @@ import sys
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV directory
-bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/perfect'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
 bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
 #date_range = [dt.datetime(2022, 2, 1, 0) + dt.timedelta(hours=i) for i in range(13)]
-date_range = [dt.datetime(2022, 4, 30, 0)]
+date_range = [dt.datetime(2022, 2, 1, 12)]
 
 # Output file name (include %s placeholders for bufr_tag and start and end dates)
 save_fname = './ob_diffs_adpupa_vprof_%s_%s_%s.png'
