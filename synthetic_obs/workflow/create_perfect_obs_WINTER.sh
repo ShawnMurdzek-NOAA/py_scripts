@@ -47,18 +47,18 @@ for i in ${!tags[@]}; do
     # Run simulated observation creation code
     cd ${CODE_DIR}
 
-    python create_conv_obs.py ${WRF_DIR} \
-                              ${BUFR_DIR} \
-                              ${OUT_DIR}/conv/ \
-                              ${cycle} \
-                              ${first_UPP} \
-                              ${last_UPP} \
-                              ${tags[i]}
-    
-    conv_error=$?
-    if [ ${conv_error} -gt 0 ]; then
-      exit ${conv_error}
-    fi
+    #python create_conv_obs.py ${WRF_DIR} \
+    #                          ${BUFR_DIR} \
+    #                          ${OUT_DIR}/conv/ \
+    #                          ${cycle} \
+    #                          ${first_UPP} \
+    #                          ${last_UPP} \
+    #                          ${tags[i]}
+    #
+    #conv_error=$?
+    #if [ ${conv_error} -gt 0 ]; then
+    #  exit ${conv_error}
+    #fi
 
     if [ ${nADPUPA} -gt 0 ]; then
       python create_adpupa_obs.py ${WRF_DIR} \

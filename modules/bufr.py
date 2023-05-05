@@ -196,6 +196,13 @@ def df_to_csv(df, fname):
         nmsg[np.where(nmsg == msg)] = i+1
     df['nmsg'] = nmsg        
 
+    # Place SIDs in quotes (otherwise an error occurs when converting back to BUFR format)
+    sid = df['SID'].values
+    for i in range(len(sid)):
+        if sid[i][0] != "'":
+            sid[i] = "'%s'" % sid[i]
+    df['SID'] = sid
+
     # Write to CSV
     df.to_csv(fname, index=False)
    
@@ -367,7 +374,8 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667
     return error
 
 
-def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, min_d=0.01667):
+def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, min_d=0.01667,
+                verbose=True):
     """
     Add random, uncorrelated Gaussian errors to observations based on error standard deviations in 
     errtable
@@ -417,15 +425,18 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
 
     # Loop over each observation type
     for t in ob_typ:
-        print()
-        print('TYP = %d' % t)
+        if verbose:
+            print()
+            print('TYP = %d' % t)
         for ob, err in zip(['TOB', 'RHOB', 'UOB', 'VOB', 'PRSS', 'PWO'],
                            ['Terr', 'RHerr', 'UVerr', 'UVerr', 'PSerr', 'PWerr']):
-            
-            print(ob)
+        
+            if verbose:    
+                print(ob)
             # Check to see if errors are defined
             if np.all(np.isnan(etable[t][err].values)):
-                print('no errors for ob_typ = %d, ob = %s' % (t, ob))
+                if verbose:
+                    print('no errors for ob_typ = %d, ob = %s' % (t, ob))
                 continue
 
             # Determine indices where errors are not NaN

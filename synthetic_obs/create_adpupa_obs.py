@@ -60,13 +60,13 @@ bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/adpupa/'
 
 # Start and end times for prepbufrs. Step is in min
-bufr_start = dt.datetime(2022, 2, 1, 12)
+bufr_start = dt.datetime(2022, 2, 1, 22)
 bufr_end = bufr_start + dt.timedelta(hours=1)
 bufr_step = 120
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 2, 1, 11, 30)
-wrf_end = dt.datetime(2022, 2, 1, 13, 0)
+wrf_start = dt.datetime(2022, 2, 1, 20, 30)
+wrf_end = dt.datetime(2022, 2, 1, 23, 0)
 wrf_step = 15
 
 # Prepbufr tag ('rap', 'rap_e', 'rap_p')
@@ -203,8 +203,8 @@ for i in range(ntimes):
     drop_idx = []
 
     # Initialize variables for 3D obs as zeros
-    for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
-        out_df[v] = 0.
+    #for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
+    #    out_df[v] = 0.
 
     # Add some DataFrame columns
     nrow = len(out_df)

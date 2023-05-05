@@ -17,8 +17,9 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
-import meteo_util as mu
+import glob
 
+import meteo_util as mu
 import bufr
 
 
@@ -26,22 +27,35 @@ import bufr
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-bufr_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/202204291200.rap.prepbufr.csv'
-errtable = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/errtable.rrfs'
+in_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
+out_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/realistic/gsi_err_autoreg_0p5'
 
-out_fname = './test.csv'
+fnames = [glob.glob('%s/*.fake.prepbufr.csv' % in_dir)[0]]
+for i in range(len(fnames)):
+    fnames[i] = fnames[i].split('/')[-1]
+
+fnames = ['202204291800.rap.fake.prepbufr.csv']
+
+in_fnames = ['%s/%s' % (in_dir, f) for f in fnames]
+out_fnames = ['%s/%s' % (out_dir, f) for f in fnames]
+
+errtable = '/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'
 
 # Observation types to use autocorrelated errors for
 autocor_POB_obs = [120, 220]
 autocor_DHR_obs = [130, 131, 133, 134, 135, 230, 231, 233, 234, 235]
-auto_reg_parm = 0.75
+auto_reg_parm = 0.5
 
-# Option to check obs errors by plotting differences between obs w/ and w/out errors
+# Verbose output when adding obs errors?
+verbose = False
+
+# Option to check obs errors by plotting differences between obs w/ and w/out errors (plots will
+# be made for the last BUFR CSV file)
 plot_diff_hist = False
 
 # Option to check autocorrelated obs errors by plotting timeseries or vertical profiles of errors
-# from a single station
-check_autocorr_err = True
+# from a single station (plots will be made for the last BUFR CSV file)
+check_autocorr_err = False
 timeseries_ob_types = [133,           135,           233,           235]
 timeseries_stations = ['MFOGUURA', 'CNJCA110', 'MFOGUURA', 'CNJCA110']
 vprof_ob_types = [120,     120,     220,     220]
@@ -55,25 +69,32 @@ vprof_stations = ['72520', '72476', '72520', '72476']
 start = dt.datetime.now()
 print('start time = %s' % start.strftime('%H:%M:%S'))
 
-bufr_csv = bufr.bufrCSV(bufr_fname)
+for i, (in_name, out_name) in enumerate(zip(in_fnames, out_fnames)):
 
-remaining_obs = []
-for o in np.int32(bufr_csv.df['TYP'].unique()):
-    if (o not in autocor_POB_obs) and (o not in autocor_DHR_obs):
-        remaining_obs.append(o)
+    print('-------------------------------------------------')
+    print('file %d of %d' % (i+1, len(in_fnames)))
+    cycle_start = dt.datetime.now()
 
-# Add random errors
-out_df = bufr.add_obs_err(bufr_csv.df, errtable, ob_typ=autocor_POB_obs, correlated='POB', 
-                          auto_reg_parm=auto_reg_parm, min_d=10.)
-out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
-                          auto_reg_parm=auto_reg_parm)
-out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs)
+    in_csv = bufr.bufrCSV(in_name)
 
-# Make precision match what is typically found in a prepBUFR file
-out_df = bufr.match_bufr_prec(out_df)
+    remaining_obs = []
+    for o in np.int32(in_csv.df['TYP'].unique()):
+        if (o not in autocor_POB_obs) and (o not in autocor_DHR_obs):
+            remaining_obs.append(o)
 
-out_df.to_csv(out_fname)
-#out_df = pd.read_csv(out_fname)
+    # Add random errors
+    out_df = bufr.add_obs_err(in_csv.df, errtable, ob_typ=autocor_POB_obs, correlated='POB', 
+                              auto_reg_parm=auto_reg_parm, min_d=10., verbose=verbose)
+    out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
+                              auto_reg_parm=auto_reg_parm, verbose=verbose)
+    out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs, verbose=verbose)
+
+    # Make precision match what is typically found in a prepBUFR file
+    out_df = bufr.match_bufr_prec(out_df)
+
+    bufr.df_to_csv(out_df, out_name)
+
+    print('time = %.2f s' % (dt.datetime.now() - cycle_start).total_seconds())
 
 end = dt.datetime.now()
 print('elapsed time = %s s' % (end - start).total_seconds()) 

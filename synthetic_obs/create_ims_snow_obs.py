@@ -104,8 +104,10 @@ for i in range(ntimes):
     start_interp = dt.datetime.now()
     out_ds = ims_real_ds.copy()
 
-    for wrf_field, ims_field, ims_field_name in zip([wrf_snow, wrf_ice], [ims_snow, ims_ice], 
-                                                    [ims_snow_field, ims_ice_field]):
+    for wrf_field, ims_field, ims_field_name, fact in zip([wrf_snow, wrf_ice], 
+                                                          [ims_snow, ims_ice], 
+                                                          [ims_snow_field, ims_ice_field],
+                                                          [100, 1]):
         unmasked_idx = np.where(~np.isnan(np.ravel(ims_field)) & (inear_ims >= 0) & 
                                 (jnear_ims >= 0) & (inear_ims <= imax_wrf) & 
                                 (jnear_ims <= jmax_wrf))[0]
@@ -117,7 +119,7 @@ for i in range(ntimes):
             i_wrf = inear_ims[ims_idx]
             j_wrf = jnear_ims[ims_idx]
             i_ims, j_ims = np.unravel_index(ims_idx, ims_shape)
-            out_ds[ims_field_name][i_ims, j_ims] = 100*np.float32(wrf_field[i_wrf, j_wrf] > 0)
+            out_ds[ims_field_name][i_ims, j_ims] = fact*np.float32(wrf_field[i_wrf, j_wrf] > 0)
 
     print('Finished with interpolation (time = %.3f s)' % 
           (dt.datetime.now() - start_interp).total_seconds())

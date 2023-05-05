@@ -31,7 +31,9 @@ grib_fname = '/work2/noaa/wrfruc/murdzek/RRFS_input_data/snow/ims96/grib2/220322
 save_fname = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_ims/220322200000000.grib2'
 
 # Fields to copy from netcdf to grib. Key is grib message number, value is netcdf field
-fields = {2:'SNOWC_P0_L1_GST0',
+fields = {1:'ICEC_P0_L1_GST0',
+          2:'SNOWC_P0_L1_GST0',
+          3:'ICEC_P0_L1_GST0',
           4:'SNOWC_P0_L1_GST0'}
 
 # Option to use arguments passed from the command line
