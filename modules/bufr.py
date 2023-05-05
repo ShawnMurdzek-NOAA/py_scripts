@@ -55,6 +55,11 @@ class bufrCSV():
         # Set missing values (1e11) to NaN
         self.df = df.where(df != 1e11)
 
+        # Remove single quotes from SIDs
+        sid = self.df['SID'].values
+        for i in range(len(sid)):
+            sid[i] = sid[i].strip("'")
+
         # Remove space before nmsg
         self.df.rename(columns={' nmsg':'nmsg'}, inplace=True)
 
