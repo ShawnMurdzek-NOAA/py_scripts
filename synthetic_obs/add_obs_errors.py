@@ -27,14 +27,12 @@ import bufr
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-in_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect'
-out_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/realistic/gsi_err_autoreg_0p5'
+in_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/perfect'
+out_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/realistic/gsi_err_autoreg_0p5'
 
-fnames = [glob.glob('%s/*.fake.prepbufr.csv' % in_dir)[0]]
+fnames = glob.glob('%s/*.fake.prepbufr.csv' % in_dir)
 for i in range(len(fnames)):
     fnames[i] = fnames[i].split('/')[-1]
-
-fnames = ['202204291800.rap.fake.prepbufr.csv']
 
 in_fnames = ['%s/%s' % (in_dir, f) for f in fnames]
 out_fnames = ['%s/%s' % (out_dir, f) for f in fnames]

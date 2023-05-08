@@ -23,6 +23,7 @@ import datetime as dt
 import metpy.constants as const
 import metpy.calc as mc
 from metpy.units import units
+import scipy.stats as ss
 
 
 #---------------------------------------------------------------------------------------------------
@@ -30,19 +31,19 @@ from metpy.units import units
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
+real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter'
 station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
 years = np.arange(1993, 2023)
-startdate = '04290000'
-enddate = '05070000'
-#startdate = '02010000'
-#enddate = '02080000'
+#startdate = '04290000'
+#enddate = '05070000'
+startdate = '02010000'
+enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
-fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/perfect'
-analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
-#analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
+fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/sfc_stat_obs_csv/perfect'
+#analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -50,6 +51,11 @@ max_time_allowed = 450.
 
 # Option to plot ceiling obs as a binary histogram ('binary') or CDF of ceiling height ('hgt')
 ceil_plot = 'hgt'
+
+# Type of z-score to use for z-score plots ('regular' or 'modified')
+# Also select cutoff value that denotes outliers
+zscore = 'modified'
+zcutoff = 3
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -188,18 +194,52 @@ for ID in station_ids:
     fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
                                       np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
 
+# Compute z-scores for fake stations
+# For modified z-scores explanation, see here: 
+# https://medium.com/analytics-vidhya/anomaly-detection-by-modified-z-score-f8ad6be62bac
+fake_stations_z = {}
+all_zscores = {}
+for v in fake_varnames:
+    all_zscores[v] = np.zeros([ndays*len(station_ids), ntimes])
+for i, ID in enumerate(station_ids):
+    fake_stations_z[ID] = {}
+    for v in fake_varnames:
+        fake_stations_z[ID][v] = np.zeros([ndays, ntimes])
+        for k in range(ndays):
+            if zscore == 'regular':
+                ctr = np.nanmean(real_stations[ID][v][k::ndays, :], axis=0)
+                spd = np.nanstd(real_stations[ID][v][k::ndays, :], axis=0)
+            elif zscore == 'modified':
+                ctr = np.nanmedian(real_stations[ID][v][k::ndays, :], axis=0)
+                spd = 1.4826 * ss.median_abs_deviation(real_stations[ID][v][k::ndays, :], axis=0, 
+                                                       nan_policy='omit')
+            spd[np.isclose(spd, 0)] = np.nan
+            fake_stations_z[ID][v][k, :] = (fake_stations[ID][v][k, :] - ctr) / spd
+            all_zscores[v][i*ndays+k, :] = fake_stations_z[ID][v][k, :]
+
 # Plot results
+ncols = 4
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
+fig_ztot, axes_ztot = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
+plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
 for ID in station_ids:
-    ncols = 4
     fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
+    plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
+    fig_z, axes_z = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
     plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
     for j, v in enumerate(fake_varnames):
         ax = axes[int(j/ncols), j%ncols]
+        ax_z = axes_z[int(j/ncols), j%ncols]
 
+        # Plot fake station data
         for k in range(ndays):
             ax.plot(plot_hr, fake_stations[ID][v][k, :], 'k-', lw=0.75)
+            ax_z.plot(plot_hr, fake_stations_z[ID][v][k, :], 'k-', lw=0.75)
+    
+        ax_z.axhline(zcutoff, c='r', ls='-', lw=1.5)
+        ax_z.axhline(-zcutoff, c='r', ls='-', lw=1.5)
 
+        # Plot real station data percentiles
         pcts = [0, 10, 25, 50, 75, 90, 100]
         var_percentiles = {}
         for p in pcts:
@@ -213,13 +253,17 @@ for ID in station_ids:
         ax.plot(plot_hr, var_percentiles[0], 'r-', lw=0.5)
         ax.plot(plot_hr, var_percentiles[100], 'r-', lw=0.5)
 
-        ax.grid()
         ax.set_ylabel('%s (%s)' % (v, full_bufr_csv.meta[v]['units']), size=14)
-        ax.set_xlim([plot_hr.min(), plot_hr.max()])
+        ax_z.set_ylabel('%s z-score' % v, size=14)
+        for a in [ax, ax_z]:
+            a.grid()
+            a.set_xlim([plot_hr.min(), plot_hr.max()])
     for j in range(ncols):
         if j != 3:
             axes[-1, j].set_xlabel('hour', size=14)
+            axes_z[-1, j].set_xlabel('hour', size=14)
         axes[0, 3].set_xlabel('hour', size=14)
+        axes_z[0, 3].set_xlabel('hour', size=14)
 
     # Add fraction of time with a ceiling in the final subplot
     ax = axes[1, 3]
@@ -262,9 +306,44 @@ for ID in station_ids:
 
     ax.grid()
 
-    plt.suptitle(ID, size=18)
-    plt.savefig(out_fname % ID)
-    plt.close()
+    for f, tag, ttl in zip([fig, fig_z], [ID, '%s_z%s' % (ID, zscore)], 
+                           [ID, '%s: %s z-score' % (ID, zscore)]):
+        plt.figure(f.number)
+        plt.suptitle(ttl, size=18)
+        plt.savefig(out_fname % tag)
+        plt.close()
+
+# Make ztot figure
+fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
+plt.subplots_adjust(left=0.06, bottom=0.08, right=0.99, top=0.9, wspace=0.4)
+for i, v in enumerate(fake_varnames):
+    ax = axes[int(i/ncols), i%ncols]
+        
+    pcts = [0, 10, 25, 50, 75, 90, 100]
+    var_percentiles = {}
+    for p in pcts:
+        var_percentiles[p] = np.zeros(ntimes)
+        for l in range(ntimes):
+            var_percentiles[p][l] = np.nanpercentile(all_zscores[v][:, l], p) 
+        
+    ax.plot(plot_hr, var_percentiles[50], 'k-', lw=2)
+    ax.fill_between(plot_hr, var_percentiles[25], var_percentiles[75], color='k', alpha=0.4)
+    ax.fill_between(plot_hr, var_percentiles[10], var_percentiles[90], color='k', alpha=0.2)
+    ax.plot(plot_hr, var_percentiles[0], 'k-', lw=0.5)
+    ax.plot(plot_hr, var_percentiles[100], 'k-', lw=0.5)
+
+    ax.grid()
+    ax.axhline(zcutoff, c='r', ls='-', lw=1.5)
+    ax.axhline(-zcutoff, c='r', ls='-', lw=1.5)
+    ax.set_ylabel('%s z-score' % v, size=14)
+    ax.set_xlim([plot_hr.min(), plot_hr.max()])
+for i in range(ncols):
+    if i != 3:
+        axes[-1, i].set_xlabel('hour', size=14)
+    axes[0, 3].set_xlabel('hour', size=14)
+plt.suptitle('all stations: %s z-score' % zscore, size=18)
+plt.savefig(out_fname % ('all_z_%s' % zscore))
+plt.close()
 
 
 """
