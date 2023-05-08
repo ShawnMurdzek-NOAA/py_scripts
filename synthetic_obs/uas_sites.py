@@ -62,11 +62,11 @@ out_file = 'uas_site_locs_35km.txt'
 
 # Options for plotting UAS sites
 make_plot = True
-plot_save_fname = 'NJ_uas_sites.pdf'
-lon_lim = [-76.75, -73.5]
-lat_lim = [38.75, 41.5]
-#lon_lim = [-127, -65]
-#lat_lim = [23, 49]
+plot_save_fname = 'uas_sites.pdf'
+#lon_lim = [-76.75, -73.5]
+#lat_lim = [38.75, 41.5]
+lon_lim = [-127, -65]
+lat_lim = [23, 49]
 
 
 #---------------------------------------------------------------------------------------------------
@@ -124,9 +124,9 @@ lat_uas = lat_uas[uas_mask_us]
 
 # Save results
 fptr = open(out_file, 'w')
-fptr.write('lon (deg E), lat (deg N)\n')
+fptr.write('lon (deg E),lat (deg N)\n')
 for lon, lat in zip(lon_uas, lat_uas):
-    fptr.write('%.3f, %.3f\n' % (lon, lat))
+    fptr.write('%.3f,%.3f\n' % (lon, lat))
 fptr.close()
 
 
