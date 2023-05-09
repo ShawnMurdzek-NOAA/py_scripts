@@ -192,9 +192,9 @@ def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False, mask
     return val
 
 
-def interp_x_y_z(wrf3d, ob_subset):
+def interp_x_y_z(wrf3d, ob_subset, wgt_name='pwgt', i0_name='pi0'):
     """
-    Wrapper function for interpolation in x, y, and p
+    Wrapper function for interpolation in x, y, and p or z
 
     Inputs
     ------
@@ -202,52 +202,65 @@ def interp_x_y_z(wrf3d, ob_subset):
         WRF 3D output array to interpolate
     ob_subset : series
         Pandas series containing a single observation
+    wgt_name : string, optional
+        Name of weight for vertical interpolation in ob_subset
+    i0_name : string, optional
+        Name of i0 index for vertical interpolation in ob_subset
 
     Returns
     -------
     val : float
-        UPP output linearly interpolated in x, y, and p to the observation location
+        UPP output linearly interpolated in x, y, and p or z to the observation location
 
     """
     
     iwgt = ob_subset['iwgt']
     jwgt = ob_subset['jwgt']
-    pwgt = ob_subset['pwgt']
+    wgt = ob_subset[wgt_name]
     i0 = ob_subset['i0']
     j0 = ob_subset['j0']
-    pi0 = ob_subset['pi0']
+    k0 = ob_subset[i0_name]
 
-    val = _linear_interp(_bilinear_interp_horiz(wrf3d[pi0, :, :], iwgt, jwgt, i0, j0),
-                         _bilinear_interp_horiz(wrf3d[pi0+1, :, :], iwgt, jwgt, i0, j0), pwgt)
+    val = _linear_interp(_bilinear_interp_horiz(wrf3d[k0, :, :], iwgt, jwgt, i0, j0),
+                         _bilinear_interp_horiz(wrf3d[k0+1, :, :], iwgt, jwgt, i0, j0), wgt)
 
     return val
 
 
-def interp_wrf_p1d(p1d, ob_subset):
+def interp_wrf_1d(a1d, ob_subset, i0_name='pi0', var='POB', itype='log'):
     """
-    Wrapper function for interpolation of pressure in one dimension
+    Wrapper function for interpolation in one dimension
 
     Inputs
     ------
-    p1d : array
-        1D pressure array to interpolate
+    a1d : array
+        1D array to interpolate
     ob_subset : series
         Pandas series containing a single observation
+    i0_name : string, optional
+        Column name in ob_subset corresponding to the i0 index
+    var : string, optional
+        Variable being interpolated in ob_subset
+    itype : string, optional
+        Interpolation type ('log' or 'linear')
 
     Returns
     -------
     val : float
-        UPP output logarithmically interpolated in p to the observation location
-    pwgt : float
+        UPP output interpolated to the observation location
+    wgt : float
         Weight used for interpolation
 
     """
 
-    pi0 = ob_subset['pi0']
-    pwgt = np.log10(p1d[pi0+1] / ob_subset['POB']) / np.log10(p1d[pi0+1] / p1d[pi0])
-    val = _linear_interp(p1d[pi0], p1d[pi0+1], pwgt)
+    i0 = ob_subset[i0_name]
+    if itype == 'log':
+        wgt = np.log10(a1d[i0+1] / ob_subset[var]) / np.log10(a1d[i0+1] / a1d[i0])
+    elif itype == 'linear':
+        wgt = (a1d[i0+1] - ob_subset[var]) / (a1d[i0+1] - a1d[i0])
+    val = _linear_interp(a1d[i0], a1d[i0+1], wgt)
 
-    return val, pwgt
+    return val, wgt
 
 
 """

@@ -497,7 +497,7 @@ for i in range(ntimes):
                                 # Prevent extrapolation in vertical
                                 drop_idx.append(j)
                                 continue
-                            out_df.loc[j, 'POB'], out_df.loc[j, 'pwgt'] = cou.interp_wrf_p1d(p1d[:, j], out_df.loc[j])
+                            out_df.loc[j, 'POB'], out_df.loc[j, 'pwgt'] = cou.interp_wrf_1d(p1d[:, j], out_df.loc[j])
                         else:
                             drop_idx.append(j)
                             continue

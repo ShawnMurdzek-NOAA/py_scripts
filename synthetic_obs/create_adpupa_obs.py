@@ -376,7 +376,7 @@ for i in range(ntimes):
                         done_sid.append(sid)
                         print('RAOB %s exited top of domain' % sid)
                         break
-                    out_df.loc[k, 'POB'], out_df.loc[k, 'pwgt'] = cou.interp_wrf_p1d(p1d, out_df.loc[k])
+                    out_df.loc[k, 'POB'], out_df.loc[k, 'pwgt'] = cou.interp_wrf_1d(p1d, out_df.loc[k])
                 else:
                     drop_idx.append(k)
                     if k == adpupa_last_idx[idx_sid]:
