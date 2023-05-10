@@ -32,6 +32,8 @@ import cartopy.feature as cfeature
 import netCDF4 as nc
 import xarray as xr
 from metpy.plots import SkewT, Hodograph
+import metpy.calc as mc
+from metpy.units import units
 
 try:
     import wrf
@@ -298,8 +300,11 @@ class PlotOutput():
         if self.outtype == 'wrf':
             lat2d = wrf.getvar(self.fptr, 'lat')
             lon2d = wrf.getvar(self.fptr, 'lon')
+        elif self.outtype == 'upp':
+            lat2d = self.ds['gridlat_0'].values
+            lon2d = self.ds['gridlon_0'].values
 
-        return np.unravel_index(np.argmin((wrflat.values - lat)**2 + (wrflon.values - lon)**2), wrflat.shape)
+        return np.unravel_index(np.argmin((lat2d - lat)**2 + (lon2d - lon)**2), lat2d.shape)
 
 
     def _create_hcrsxn_ax(self, data):
@@ -634,34 +639,48 @@ class PlotOutput():
         i, j = self._closest_gpt(lon, lat)
 
         # Extract variables
-        p = wrf.getvar(self.fptr, 'p', units='mb')[:, i, j] 
-        T = wrf.getvar(self.fptr, 'temp', units='degC')[:, i, j] 
-        Td = wrf.getvar(self.fptr, 'td', units='degC')[:, i, j] 
-        if (barbs or hodo):
-            u = wrf.getvar(self.fptr, 'ua', units='m s-1')[:, i, j]
-            v = wrf.getvar(self.fptr, 'va', units='m s-1')[:, i, j]
-        if hodo:
-            z = wrf.getvar(self.fptr, 'height_agl', units='m')[:, i, j]
+        if self.outtype == 'wrf':
+            p = wrf.getvar(self.fptr, 'p', units='mb')[:, i, j] 
+            T = wrf.getvar(self.fptr, 'temp', units='degC')[:, i, j] 
+            Td = wrf.getvar(self.fptr, 'td', units='degC')[:, i, j] 
+            if (barbs or hodo):
+                u = wrf.getvar(self.fptr, 'ua', units='m s-1')[:, i, j]
+                v = wrf.getvar(self.fptr, 'va', units='m s-1')[:, i, j]
+            if hodo:
+                z = wrf.getvar(self.fptr, 'height_agl', units='m')[:, i, j]
+            time = np.datetime_as_string(p.Time.values)[:-10] + ' UTC:\n'
+        elif self.outtype == 'upp':
+            p = self.ds['PRES_P0_L105_GLC0'][:, i, j] * 1e-2
+            T = self.ds['TMP_P0_L105_GLC0'][:, i, j] - 273.15
+            Td = mc.dewpoint_from_specific_humidity(p.values*units.hPa,
+                                                    T.values*units.degC,
+                                                    self.ds['SPFH_P0_L105_GLC0'][:, i, j].values).to('degC').magnitude
+            if (barbs or hodo):
+                u = self.ds['UGRD_P0_L105_GLC0'][:, i, j]
+                v = self.ds['VGRD_P0_L105_GLC0'][:, i, j]
+            if hodo:
+                z = self.ds['HGT_P0_L105_GLC0'][:, i, j] - self.ds['HGT_P0_L1_GLC0'][i, j]
+            time = self.time
 
         # Create figure
-        skew = SkewT(self.fig, rotation=45)
+        self.skew = SkewT(self.fig, rotation=45)
 
-        skew.plot(p, T, 'r', linewidth=2.5)        
-        skew.plot(p, Td, 'b', linewidth=2.5)        
+        self.skew.plot(p, T, 'r', linewidth=2.5)        
+        self.skew.plot(p, Td, 'b', linewidth=2.5)        
 
-        skew.plot_dry_adiabats(linewidth=0.75)
-        skew.plot_moist_adiabats(linewidth=0.75)
-        skew.plot_mixing_lines(linewidth=0.75)
+        self.skew.plot_dry_adiabats(linewidth=0.75)
+        self.skew.plot_moist_adiabats(linewidth=0.75)
+        self.skew.plot_mixing_lines(linewidth=0.75)
 
-        skew.ax.set_xlim(-40, 60)
-        skew.ax.set_ylim(1000, 100)
+        self.skew.ax.set_xlim(-40, 60)
+        self.skew.ax.set_ylim(1000, 100)
 
         if hodo:
 
             # Create hodograph axes
-            hod = inset_axes(skew.ax, '35%', '35%', loc=1) 
-            h = Hodograph(hod, component_range=50.)
-            h.add_grid(increment=10) 
+            hod = inset_axes(self.skew.ax, '35%', '35%', loc=1) 
+            self.h = Hodograph(hod, component_range=50.)
+            self.h.add_grid(increment=10) 
  
             # Color-code hodograph based on height AGL
             zbds = [0, 1000, 3000, 6000, 9000]
@@ -669,22 +688,21 @@ class PlotOutput():
             for zi, zf, c in zip(zbds[:-1], zbds[1:], colors):
                 ind = np.where(np.logical_and(z >= zi, z < zf))[0]
                 ind = np.append(ind, ind[-1]+1)
-                h.plot(u[ind], v[ind], c=c, linewidth=2)
+                self.h.plot(u[ind], v[ind], c=c, linewidth=2)
             ind = np.where(z >= zbds[-1])[0]
-            h.plot(u[ind], v[ind], c='goldenrod', linewidth=2) 
+            self.h.plot(u[ind], v[ind], c='goldenrod', linewidth=2) 
 
         if barbs:
             imax = np.where(p < 100)[0][0]
-            skew.plot_barbs(p[:imax:thin], u[:imax:thin], v[:imax:thin])
+            self.skew.plot_barbs(p[:imax:thin], u[:imax:thin], v[:imax:thin])
 
         # Add title
         loc = '(%.3f $^{\circ}$N, %.3f $^{\circ}$E)' % (lat, lon)
-        time = np.datetime_as_string(p.Time.values)[:-10] + ' UTC:\n'
         if (hodo or barbs):
-            ttl = r'%s$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C), wind (m s$^{-1}$) at %s' % (time, loc)
+            ttl = ('%s\n' % time) + r'$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C), wind (m s$^{-1}$) at %s' % loc
         else:
-            ttl = r'%s$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C) at %s' % (time, loc)
-        skew.ax.set_title(ttl)
+            ttl = ('%s\n' % time) + r'$T$ ($^{\circ}$C), $T_{d}$ ($^{\circ}$C) at %s' % loc
+        self.skew.ax.set_title(ttl)
  
 
     def set_lim(self, minlat, maxlat, minlon, maxlon):

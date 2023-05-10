@@ -47,10 +47,10 @@ valid_time = dt.datetime(2022, 4, 29, 12)
 max_time = 1500.
 
 # UAS ascent rate (m/s)
-ascent_rate = 3.
+ascent_rate = 50.
 
 # UAS sampling frequency (s)
-sample_freq = 60.
+sample_freq = 1.
 
 # UAS maximum height (m)
 max_height = 2000.
@@ -58,6 +58,7 @@ max_height = 2000.
 # Output BUFR CSV file
 out_fname = ('/work2/noaa/wrfruc/murdzek/nature_run_spring/synthetic_obs_csv/perfect_uas/%s.uas.prepbufr.csv' % 
              valid_time.strftime('%Y%m%d%H%M'))
+out_fname = 'test.uas.prepbufr.csv'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -104,15 +105,15 @@ out_dict['DHR'] = np.array(list(np.arange((valid_time - flight_time).total_secon
 out_dict['TYP'] = np.array(([typ_thermo]*nfobs + [typ_wind]*nfobs)*nlocs)
 out_dict['ELV'] = np.zeros(ntobs)
 out_dict['T29'] = np.array([t29]*ntobs)
-out_dict['POB'] = np.array([1000.]*ntobs)
+out_dict['POB'] = np.array([0.]*ntobs)
 out_dict['PQM'] = np.array([quality_m]*ntobs)
 out_dict['ZOB'] = np.array(list(uas_z[:nfobs])*2*nlocs)
 out_dict['ZQM'] = np.array([quality_m]*ntobs)
 for v, qm in zip(['QOB', 'TOB'], ['QQM', 'TQM']):
-    out_dict[v] = np.array(([300.]*nfobs + [np.nan]*nfobs)*nlocs)
+    out_dict[v] = np.array(([0.]*nfobs + [np.nan]*nfobs)*nlocs)
     out_dict[qm] = np.array(([quality_m]*nfobs + [np.nan]*nfobs)*nlocs)
 for v in['UOB', 'VOB']:
-    out_dict[v] = np.array(([np.nan]*nfobs + [300.]*nfobs)*nlocs)
+    out_dict[v] = np.array(([np.nan]*nfobs + [0.]*nfobs)*nlocs)
 out_dict['WQM'] = np.array(([np.nan]*nfobs + [quality_m]*nfobs)*nlocs)
 out_dict['CAT'] = np.ones(ntobs)
 
@@ -282,6 +283,7 @@ debug_df.drop(index=drop_idx, inplace=True)
 debug_df.reset_index(drop=True, inplace=True)
 
 # Convert to proper units
+out_df['POB'] = out_df['POB'] * 1e-2
 out_df['QOB'] = out_df['QOB'] * 1e6
 out_df['TOB'] = out_df['TOB'] - 273.15
 out_df['ELV'] = np.int64(out_df['ELV'])
@@ -289,7 +291,7 @@ out_df['ZOB'] = mc.geopotential_to_height(out_df['ZOB'].values * units.m * const
 
 bufr.df_to_csv(out_df, out_fname)
 
-print('elapsed time = %f.1s' % (dt.datetime.now() - program_start).total_seconds())
+print('elapsed time = %.1f s' % (dt.datetime.now() - program_start).total_seconds())
 
 
 """
