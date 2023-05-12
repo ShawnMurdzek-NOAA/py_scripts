@@ -31,7 +31,7 @@ import map_proj as mp
 #---------------------------------------------------------------------------------------------------
 
 # UAS location file
-uas_loc_fname = 'uas_site_locs_35km.txt'
+uas_loc_fname = 'uas_site_locs_TEST.txt'
 
 # Directory containing wrfnat output from UPP and time between UPP output files (min)
 wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
@@ -143,12 +143,15 @@ while time < (upp_endtime + dt.timedelta(minutes=wrf_step)):
                                          engine='pynio')
     wrf_data[wrf_hr[-1]] = {}
     for v in ['HGT_P0_L1_GLC0']:
-        wrf_data[wrf_hr[-1]][v] = wrf_ds[wrf_hr[-1]][v][:, :].values
+        if v == 'HGT_P0_L1_GLC0':
+            wrf_data[wrf_hr[-1]][v] = mc.geopotential_to_height(wrf_ds[wrf_hr[-1]][v].values * units.m * const.g).to('m').magnitude
+        else:
+            wrf_data[wrf_hr[-1]][v] = wrf_ds[wrf_hr[-1]][v][:, :].values
     time = time + dt.timedelta(minutes=wrf_step)
 
-shape = wrf_ds[wrf_hr[0]]['gridlat_0'].shape
-imax = shape[0] - 2
-jmax = shape[1] - 2
+shape = wrf_ds[wrf_hr[0]]['HGT_P0_L105_GLC0'].shape
+imax = shape[1] - 2
+jmax = shape[2] - 2
 
 # Compute (x, y) coordinates of obs using a Lambert Conformal projection
 print('Performing map projection with obs...')
@@ -206,6 +209,11 @@ for o, f in zip(obs_name, wrf_name):
 
         # Extract field from UPP
         wrf3d = wrf_ds[hr][f][:, :, :].values
+
+        # Convert from geopotential to geometric height
+        if o == 'ZOB':
+            wrf3d = mc.geopotential_to_height(wrf3d * units.m * const.g).to('m').magnitude
+
         print('Done extracting field')
 
         # Loop over each UAS observation within this time interval
@@ -221,8 +229,10 @@ for o, f in zip(obs_name, wrf_name):
                     out_df.loc[j, 'twgt']  = twgt
 
                     # Determine surface height above sea level
-                    sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
-                                            ihr, twgt)
+                    sfch = mc.geopotential_to_height(cou.interp_x_y_t(wrf_data, wrf_hr, 
+                                                                      'HGT_P0_L1_GLC0', 
+                                                                      out_df.loc[j],
+                                                                      ihr, twgt) * units.m * const.g).to('m').magnitude
 
                     out_df.loc[j, 'ELV'] = sfch
                     out_df.loc[j, 'ZOB'] = out_df.loc[j, 'ZOB'] + sfch
@@ -287,7 +297,6 @@ out_df['POB'] = out_df['POB'] * 1e-2
 out_df['QOB'] = out_df['QOB'] * 1e6
 out_df['TOB'] = out_df['TOB'] - 273.15
 out_df['ELV'] = np.int64(out_df['ELV'])
-out_df['ZOB'] = mc.geopotential_to_height(out_df['ZOB'].values * units.m * const.g).to('m').magnitude
 
 bufr.df_to_csv(out_df, out_fname)
 
