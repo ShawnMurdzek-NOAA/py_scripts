@@ -13,6 +13,7 @@ import xarray as xr
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import datetime as dt
 
 
 #---------------------------------------------------------------------------------------------------
@@ -20,30 +21,42 @@ import matplotlib.pyplot as plt
 #---------------------------------------------------------------------------------------------------
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
-omb_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/08/diag_conv_uv_ges.2022043008.nc4'
-oma_fname = '/work2/noaa/wrfruc/murdzek/sp22_retro_diag/08/diag_conv_uv_anl.2022043008.nc4'
+omb_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
+oma_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(18)]
+omb_fnames = [omb_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
+oma_fnames = [oma_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
 
 # Observation types
 ob_types = [280, 281, 282, 284, 287]
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'adpsfc_sfcshp'
+out_str = 'adpsfc_sfcshp_fake'
 
 
 #---------------------------------------------------------------------------------------------------
 # Compute Statistics
 #---------------------------------------------------------------------------------------------------
 
-# Save date and variable for O-A and O-B
-omf_date = omb_fname.split('/')[-1].split('.')[1]
-omf_var = omb_fname.split('/')[-1].split('_')[2]
-print('Date = %s, var = %s' % (omf_date, omf_var))
+omf_var = omb_fnames[0].split('/')[-1].split('_')[2]
+print('Var = %s' % omf_var)
 
 # Extract data
+partial_omb = []
+partial_oma = []
+omf_dates = np.zeros(len(omb_fnames))
+for i, (omb_f, oma_f) in enumerate(zip(omb_fnames, oma_fnames)):
+    ds_omb = xr.open_dataset(omb_f)
+    omf_dates[i] = ds_omb.attrs['date_time']
+    print('opening files for %d' % omf_dates[i])
+    partial_omb.append(ds_omb.to_dataframe())
+    partial_oma.append(xr.open_dataset(oma_f).to_dataframe())
+
 omf_df = {}
-omf_df['omb'] = xr.open_dataset(omb_fname).to_dataframe()
-omf_df['oma'] = xr.open_dataset(oma_fname).to_dataframe()
+omf_df['omb'] = pd.concat(partial_omb)
+omf_df['oma'] = pd.concat(partial_oma)
+
 for omf in ['omb', 'oma']:
     partial_df = []
     for typ in ob_types:
@@ -87,7 +100,8 @@ for i, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
             hist_out = ax.hist(data, bins=30, range=plot_lims)
             max_hist_val[k] = max(hist_out[0].max(), max_hist_val[k])
             ax.set_xlabel(xlabel, size=12)
-            ax.set_title('%s%s (mean = %.3f)' % (v, subset, np.mean(data)), size=14)
+            ax.set_title('%s%s ($\mu$=%.3f, $\sigma$=%.3f)' % 
+                         (v, subset, np.mean(data), np.std(data)), size=14)
             ax.grid() 
             axes[k, nx] = ax
 
@@ -96,17 +110,19 @@ for i in range(nrows):
         ax.set_ylim([0, 1.05*max_hist_val[i]])
     axes[i, 0].set_ylabel('counts', size=12)
 
-plt.subplots_adjust(hspace=0.3, wspace=0.3, right=0.97)
+plt.subplots_adjust(hspace=0.3, wspace=0.3, left=0.07, bottom=0.07, right=0.97, top=0.85)
 
 # Add additional metrics
 ttl = 'TYP ='
 for typ in ob_types:
     ttl = '%s %d,' % (ttl, typ)
-ttl = '%s\nn_obs=%d, n_assimilated=%d' % (ttl, len(omf_df['oma']), 
-                                          np.sum(omf_df['oma']['Analysis_Use_Flag'] == 1)) 
+ttl = ('%s\nstart=%d, end=%d,   n_obs=%d, n_assimilated=%d' % 
+       (ttl, np.amin(omf_dates), np.amax(omf_dates), len(omf_df['oma']), 
+        np.sum(omf_df['oma']['Analysis_Use_Flag'] == 1))) 
+
 plt.suptitle(ttl, size=14) 
 
-plt.savefig('%s/omf_diag_%s_%s_%s.png' % (out_dir, out_str, omf_var, omf_date))
+plt.savefig('%s/omf_diag_%s_%s_%d_%d.png' % (out_dir, out_str, omf_var, np.amin(omf_dates), np.amax(omf_dates)))
 plt.close() 
 
 
