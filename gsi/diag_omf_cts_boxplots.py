@@ -22,10 +22,10 @@ import datetime as dt
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can 1 or 2 datasets. Key is the name of the dataset
-omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
-oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
-omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
-oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
+omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_pw_ges.%s.nc4'
+oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_pw_anl.%s.nc4'
+omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_pw_ges.%s.nc4'
+oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_pw_anl.%s.nc4'
 dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(18)]
 
 omb_fnames = {}
@@ -129,6 +129,7 @@ for key, off, c in zip(data_names, offsets, colors):
         ax.barh(ylocs+off, plot_data[key][n_name], height=bar_hgt, label=key, color=c)
         ax.set_xlabel(xlabel, size=14)
         ax.set_xscale('log')
+        ax.set_xlim(left=1)
     for j, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
         ax = axes[j+2]
         ax.boxplot(plot_data[key][omf], positions=(ylocs+off), widths=bar_hgt, vert=False, patch_artist=True,
