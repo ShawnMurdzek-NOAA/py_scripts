@@ -24,6 +24,7 @@ from metpy.units import units
 import os
 import inspect
 
+import gsi
 import meteo_util as mu
 
 
@@ -229,55 +230,6 @@ def df_to_csv(df, fname):
     fptr.close() 
 
 
-def read_ob_errors(fname):
-    """
-    Parse out observation errors from an errtable file in GSI
-
-    Parameters
-    ----------
-    fname : string
-        Name of errtable text file
-
-    Returns
-    -------
-    errors: dictionary
-        A dictionary of pd.DataFrame objects containing the observation errors
-
-    Notes
-    -----
-    More information about the errtable format in GSI can be found here: 
-    https://dtcenter.ucar.edu/com-GSI/users/docs/users_guide/html_v3.7/gsi_ch4.html#conventional-observation-errors
-
-    """
-
-    # Extract contents of file
-    fptr = open(fname, 'r')
-    contents = fptr.readlines()
-    fptr.close()
-
-    # Loop over each line
-    errors = {}
-    headers = ['prs', 'Terr', 'RHerr', 'UVerr', 'PSerr', 'PWerr']
-    for l in contents:
-        if l[5:21] == 'OBSERVATION TYPE':
-            key = int(l[1:4])
-            errors[key] = {}
-            for h in headers:
-                errors[key][h] = []
-        else:
-            vals = l.strip().split(' ')
-            for k, h in enumerate(headers):
-                errors[key][h].append(float(vals[k]))
-
-    # Convert to DataFrame
-    for key in errors.keys():
-        errors[key] = pd.DataFrame(errors[key])
-        for h in headers[1:]:
-            errors[key][h].where(errors[key][h] < 5e8, inplace=True)
-
-    return errors
-
-
 def create_uncorr_obs_err(err_num, stdev):
     """
     Create uncorrelated observation errors using a Gaussian distribution with a mean of 0
@@ -417,7 +369,7 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
         ob_typ = np.int32(out_df['TYP'].unique())
 
     # Read in error table file 
-    etable = read_ob_errors(errtable)
+    etable = gsi.read_errtable(errtable)
     eprs = etable[100]['prs'].values
 
     # Convert specific humidities to relative humidities in BUFR CSV

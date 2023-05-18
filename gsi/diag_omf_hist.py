@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
+import gsi
 
 
 #---------------------------------------------------------------------------------------------------
@@ -43,19 +44,10 @@ omf_var = omb_fnames[0].split('/')[-1].split('_')[2]
 print('Var = %s' % omf_var)
 
 # Extract data
-partial_omb = []
-partial_oma = []
-omf_dates = np.zeros(len(omb_fnames))
-for i, (omb_f, oma_f) in enumerate(zip(omb_fnames, oma_fnames)):
-    ds_omb = xr.open_dataset(omb_f)
-    omf_dates[i] = ds_omb.attrs['date_time']
-    print('opening files for %d' % omf_dates[i])
-    partial_omb.append(ds_omb.to_dataframe())
-    partial_oma.append(xr.open_dataset(oma_f).to_dataframe())
-
 omf_df = {}
-omf_df['omb'] = pd.concat(partial_omb)
-omf_df['oma'] = pd.concat(partial_oma)
+omf_df['omb'] = gsi.read_diag(omb_fnames)
+omf_df['oma'] = gsi.read_diag(oma_fnames)
+omf_dates = np.unique(omf_df['omb']['date_time'])
 
 for omf in ['omb', 'oma']:
     partial_df = []
@@ -85,6 +77,7 @@ else:
     fig = plt.figure(figsize=(8, 8))
 
 # Plot data
+print('plotting data...')
 max_hist_val = [0, 0]
 axes = np.empty([nrows, ncols], dtype=object)
 for i, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):

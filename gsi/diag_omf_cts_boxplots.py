@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
+import gsi
 
 
 #---------------------------------------------------------------------------------------------------
@@ -61,31 +62,10 @@ else:
 omf_df = {}
 for key in data_names:
     print('Dataset = %s' % key)
-    partial_omb = []
-    partial_oma = []
-    omf_dates = np.zeros(len(omb_fnames[key]))
-    for i, (omb_f, oma_f) in enumerate(zip(omb_fnames[key], oma_fnames[key])):
-        try:
-            ds_omb = xr.open_dataset(omb_f)
-        except FileNotFoundError:
-            print('no GSI diag file for %s: %s' % (key, omb_f))
-            continue
-        omf_dates[i] = ds_omb.attrs['date_time']
-        print('opening files for %d' % omf_dates[i])
-        partial_omb.append(ds_omb.to_dataframe())
-        partial_oma.append(xr.open_dataset(oma_f).to_dataframe())
     omf_df[key] = {}
-    omf_df[key]['omb'] = pd.concat(partial_omb)
-    omf_df[key]['oma'] = pd.concat(partial_oma)
-
-# Determine min and max values for O-B and O-A
-maxvals = []
-minvals = []
-for key in data_names:
-    for omf in ['omb', 'oma']:
-        maxvals.append(np.percentile(omf_df[key][omf][vname], 99.5))
-        minvals.append(np.percentile(omf_df[key][omf][vname], 0.5))
-plot_lims = [np.amin(np.array(minvals)), np.amax(np.array(maxvals))]
+    omf_df[key]['omb'] = gsi.read_diag(omb_fnames[key])
+    omf_df[key]['oma'] = gsi.read_diag(oma_fnames[key])
+omf_dates = np.unique(omf_df[data_names[0]]['omb']['date_time'])
 
 # Create list of ob types
 ob_typ = np.unique(omf_df[data_names[0]]['omb']['Observation_Type'].values)
