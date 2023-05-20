@@ -18,8 +18,8 @@ import numpy as np
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/prepbufr.csv'
-save_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/figs/bufr_ob_locs.png'
+fname = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/202202011800.rap.prepbufr.csv'
+save_fname = './bufr_ob_locs_2022020118.png'
 
 
 #---------------------------------------------------------------------------------------------------

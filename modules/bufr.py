@@ -24,7 +24,7 @@ from metpy.units import units
 import os
 import inspect
 
-import gsi
+import gsi_fcts as gsi
 import meteo_util as mu
 
 
@@ -169,7 +169,6 @@ def plot_obs_locs(x, y, fig=None, nrows=1, ncols=1, axnum=1, proj=ccrs.PlateCarr
     ax.coastlines('50m')
     if borders:
         ax.add_feature(cfeature.BORDERS)
-    ax.gridlines()
 
     ax.plot(x, y, transform=proj, **kwargs)
 
@@ -334,8 +333,8 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667
 def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, min_d=0.01667,
                 verbose=True):
     """
-    Add random, uncorrelated Gaussian errors to observations based on error standard deviations in 
-    errtable
+    Add random Gaussian errors (correlated or uncorrelated) to observations based on error standard 
+    deviations in errtable
 
     Parameters
     ----------

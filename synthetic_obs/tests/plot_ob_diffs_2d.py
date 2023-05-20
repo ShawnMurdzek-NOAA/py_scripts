@@ -35,13 +35,13 @@ import sys
 #---------------------------------------------------------------------------------------------------
 
 # Input BUFR CSV directory
-bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/perfect'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/synthetic_obs_csv/realistic/gsi_err_autoreg_0p5'
 
 # Prepbufr file tag (e.g., 'rap', 'rap_e', 'rap_p')
 bufr_tag = 'rap'
 
 # Range of datetimes to use for the comparison
-date_range = [dt.datetime(2022, 2, 1, 0) + dt.timedelta(hours=i) for i in range(13)]
+date_range = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(4)]
 
 # Dataset names
 name1 = 'Sim Obs'
@@ -53,15 +53,17 @@ save_fname = './ob_diffs_%s_%s_%s_%s_%s.png'
 
 # Observation subsets
 subsets = ['SFCSHP', 'ADPSFC', 'MSONET', 'GPSIPW']
+subsets = ['MSONET']
 
 # Variables to plot
-obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
+#obs_vars = ['WSPD', 'WDIR', 'ELV', 'POB', 'TOB', 'QOB', 'UOB', 'VOB', 'ZOB', 'PWO']
+obs_vars = ['QOB', 'POB']
 
 # Domain to examine ('all', 'easternUS', 'westernUS')
 domain = 'all'
 
 # Option to only plot a certain prepBUFR ob type (set to None to not use this option)
-ob_type = None
+ob_type = 188
 
 # Option to only plot obs from stations that have Analysis_Use_Flag = 1
 use_assim_sites = False
