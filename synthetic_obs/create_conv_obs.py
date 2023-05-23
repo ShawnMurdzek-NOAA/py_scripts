@@ -59,7 +59,8 @@ wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/bufr_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
-ob_platforms = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
+obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW'] 
+obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/conv/'
@@ -130,6 +131,8 @@ if debug > 1:
 
 # Convert wrf_step to decimal hours for ease of use
 wrf_step_dec = wrf_step / 60.
+
+ob_platforms = obs_2d + obs_3d
 
 ntimes = int((bufr_end - bufr_start) / dt.timedelta(minutes=bufr_step) + 1)
 for i in range(ntimes):
@@ -219,15 +222,20 @@ for i in range(ntimes):
 
     # Determine row indices for each ob type
     ob_idx = {}
-    obs = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW', 'ADPUPA', 'AIRCAR', 'AIRCFT']
-    for o in obs:
+    ob_idx['2d'] = []
+    ob_idx['3d'] = []
+    for o in ob_platforms:
         ob_idx[o] = list(np.where(out_df['subset'] == o)[0]) 
+    for o in obs_2d:
+        ob_idx['2d'] = ob_idx['2d'] + ob_idx[o]
+    for o in obs_3d:
+        ob_idx['3d'] = ob_idx['3d'] + ob_idx[o]
 
     # Initialize variables for 3D obs as zeros
-    for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
-        rows = np.intersect1d(np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']), 
-                              np.where(np.logical_not(np.isnan(out_df[v]))))
-        out_df.loc[rows, v] = 0.
+    for o in obs_3d:
+        rows = np.intersect1d(np.array(ob_idx[o]), np.where(np.logical_not(np.isnan(out_df[v]))))
+        for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
+            out_df.loc[rows, v] = 0.
 
     # Set all ZOB values to NaN if we don't wish to interpolate ZOBs for AIRCAR and AIRCFT
     if not interp_z_aircft:
@@ -250,7 +258,7 @@ for i in range(ntimes):
         out_df['ceil'] = np.zeros(nrow) * np.nan
 
     #-----------------------------------------------------------------------------------------------
-    # Create Obs Based on 2-D Fields (ADPSFC, SFCSHP, MSONET, GPSIPW)
+    # Create Obs Based on 2-D Fields
     #-----------------------------------------------------------------------------------------------
 
     # Extract 2D fields ONLY
@@ -272,7 +280,7 @@ for i in range(ntimes):
             wrf_data[hr][f] = wrf_ds[hr][f][0, :, :].values
 
     # Loop over each ADPSFC, SFCSHP, MSONET, and GPSIPW observation
-    for j in (ob_idx['ADPSFC'] + ob_idx['SFCSHP'] + ob_idx['MSONET'] + ob_idx['GPSIPW']):
+    for j in ob_idx['2d']:
         
         if debug > 1:
             time_jstart = dt.datetime.now()
@@ -352,7 +360,7 @@ for i in range(ntimes):
 
 
     #-----------------------------------------------------------------------------------------------
-    # Create Obs Based on 3-D Fields (ADPUPA, AIRCAR, AIRCFT)
+    # Create Obs Based on 3-D Fields
     #-----------------------------------------------------------------------------------------------
 
     print()
@@ -393,7 +401,7 @@ for i in range(ntimes):
             # Determine indices of obs within wrf_step of this output time
             ind = np.where(np.logical_and(out_df['DHR'] > (hr - wrf_step_dec), 
                                           out_df['DHR'] < (hr + wrf_step_dec)))
-            ind = np.intersect1d(ind, np.array(ob_idx['ADPUPA'] + ob_idx['AIRCAR'] + ob_idx['AIRCFT']))
+            ind = np.intersect1d(ind, np.array(ob_idx['3d']))
 
             # If no indices, move to next time
             if ind.size == 0:
