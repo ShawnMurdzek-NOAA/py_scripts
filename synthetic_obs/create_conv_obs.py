@@ -79,7 +79,8 @@ wrf_step = 15
 bufr_tag = 'sfc'
 
 # Option to set all entries for a certain BUFR field to NaN
-nan_fields = ['MXGS', 'HOVI']
+nan_fields = ['MXGS', 'HOVI', 'MSST', 'DBSS', 'SST1', 'SSTQM', 'SSTOE', 'CDTP', 'GCDTT', 'CDTP_QM',
+              'HOWV', 'CEILING', 'QIFN', 'TOCC', 'HLBC']
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
