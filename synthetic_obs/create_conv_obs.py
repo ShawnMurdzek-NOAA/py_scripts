@@ -79,7 +79,7 @@ wrf_step = 15
 bufr_tag = 'sfc'
 
 # Option to set all entries for a certain BUFR field to NaN
-nan_fields = []
+nan_fields = ['MXGS', 'HOVI']
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
@@ -263,7 +263,7 @@ for i in range(ntimes):
 
     # Extract 2D fields ONLY
     fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'HGT_P0_L1_GLC0', 
-                'PWAT_P0_L200_GLC0']
+                'PWAT_P0_L200_GLC0', 'PRMSL_P0_L101_GLC0']
     if coastline_correct:
         fields2D = fields2D + ['LAND_P0_L1_GLC0']
     if interp_latlon:
@@ -333,9 +333,9 @@ for i in range(ntimes):
                     out_df.loc[j, o] = v
 
         # Interpolate temporally
-        obs_name = ['QOB', 'TOB', 'UOB', 'VOB', 'PWO']
+        obs_name = ['QOB', 'TOB', 'UOB', 'VOB', 'PWO', 'PMO']
         wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
-                    'VGRD_P0_L103_GLC0', 'PWAT_P0_L200_GLC0']
+                    'VGRD_P0_L103_GLC0', 'PWAT_P0_L200_GLC0', 'PRMSL_P0_L101_GLC0']
         if interp_latlon:
             obs_name = obs_name + ['XOB', 'YOB']
             wrf_name = wrf_name + ['gridlon_0', 'gridlat_0']
@@ -551,6 +551,13 @@ for i in range(ntimes):
     bufr_csv.df.reset_index(drop=True, inplace=True)
     debug_df.drop(index=drop_idx, inplace=True)
     debug_df.reset_index(drop=True, inplace=True)
+
+    # Compute derived quantities (TDO)
+    tdo_idx = np.where(np.logical_not(np.isnan(out_df['TDO'])))[0]
+    pmo_idx = np.where(np.logical_not(np.isnan(out_df['PMO'])))[0]
+    out_df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(out_df.loc[tdo_idx, 'POB'].values * units.mb,
+                                                                    out_df.loc[tdo_idx, 'TOB'].values * units.K,
+                                                                    out_df.loc[tdo_idx, 'QOB'].values)
 
     # Convert to proper units
     out_df['QOB'] = out_df['QOB'] * 1e6
