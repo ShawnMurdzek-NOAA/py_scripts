@@ -46,12 +46,10 @@ class bufrCSV():
 
     """
 
-    def __init__(self, fname, use_all_col=False):
+    def __init__(self, fname):
    
-        if use_all_col:
-            df = pd.read_csv(fname, dtype={'SID':str})
-        else:
-            df = pd.read_csv(fname, usecols=list(range(35)), dtype={'SID':str})
+        df = pd.read_csv(fname, dtype={'SID':str})
+        df.drop(labels=df.columns[-1], axis=1, inplace=True)
   
         # Set missing values (1e11) to NaN
         self.df = df.where(df != 1e11)

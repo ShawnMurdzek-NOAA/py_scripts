@@ -77,6 +77,9 @@ wrf_step = 15
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
 bufr_tag = 'sfc'
 
+# Option to set all entries for a certain BUFR field to NaN
+nan_fields = []
+
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
 # the US Standard Atmosphere. Therefore, the heights for the simulated obs should be the same as the
@@ -558,6 +561,11 @@ for i in range(ntimes):
     if not interp_z_aircft:
         air_idx = np.where((out_df['subset'] == 'AIRCAR') | (out_df['subset'] == 'AIRCFT'))[0]
         out_df.loc[air_idx, 'ZOB'] = bufr_csv.df.loc[air_idx, 'ZOB']
+
+    # Set certain fields all to NaN if desired
+    for field in nan_fields:
+        out_df.loc[field, :] = np.nan
+        bufr_csv.df.loc[field, :] = np.nan
 
     # Write output DataFrame to a CSV file
     # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
