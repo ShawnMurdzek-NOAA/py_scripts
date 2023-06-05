@@ -88,6 +88,9 @@ nan_fields = ['MXGS', 'HOVI', 'MSST', 'DBSS', 'SST1', 'SSTQM', 'SSTOE', 'CDTP', 
 # real obs b/c the pressures are the same.
 interp_z_aircft = False
 
+# Option to use (XDR, YDR) for ADPUPA obs rather than (XOB, YOB)
+use_raob_drift = True
+
 # Option to "correct" obs that occur near coastlines
 coastline_correct = False 
 
@@ -242,6 +245,11 @@ for i in range(ntimes):
     if not interp_z_aircft:
         out_df.loc[ob_idx['AIRCAR'], 'ZOB'] = np.nan
         out_df.loc[ob_idx['AIRCFT'], 'ZOB'] = np.nan
+
+    # Use (XDR, YDR) for ADPUPA obs rather than (XOB, YOB)
+    if use_raob_drift:
+        out_df.loc[ob_idx['ADPUPA'], 'XOB'] = out_df.loc[ob_idx['ADPUPA'], 'XDR']
+        out_df.loc[ob_idx['ADPUPA'], 'YOB'] = out_df.loc[ob_idx['ADPUPA'], 'YDR']
 
     # Add some DataFrame columns
     nrow = len(out_df)
@@ -577,6 +585,11 @@ for i in range(ntimes):
     if not interp_z_aircft:
         air_idx = np.where((out_df['subset'] == 'AIRCAR') | (out_df['subset'] == 'AIRCFT'))[0]
         out_df.loc[air_idx, 'ZOB'] = bufr_csv.df.loc[air_idx, 'ZOB']
+
+    # Reset (XOB, YOB) for ADPUPA obs if (XDR, YDR) was used for ADPUPA locations
+    if use_raob_drift:
+        out_df.loc[ob_idx['ADPUPA'], 'XOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'XOB']
+        out_df.loc[ob_idx['ADPUPA'], 'YOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'YOB']
 
     # Set certain fields all to NaN if desired
     for field in nan_fields:
