@@ -261,6 +261,7 @@ if not interp_z_aircft:
 if use_raob_drift:
     out_df.loc[ob_idx['ADPUPA'], 'XOB'] = out_df.loc[ob_idx['ADPUPA'], 'XDR']
     out_df.loc[ob_idx['ADPUPA'], 'YOB'] = out_df.loc[ob_idx['ADPUPA'], 'YDR']
+    out_df.loc[ob_idx['ADPUPA'], 'DHR'] = out_df.loc[ob_idx['ADPUPA'], 'HRDR']
 
 # Add some DataFrame columns
 nrow = len(out_df)
@@ -643,6 +644,7 @@ if not interp_z_aircft:
 if use_raob_drift:
     out_df.loc[ob_idx['ADPUPA'], 'XOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'XOB']
     out_df.loc[ob_idx['ADPUPA'], 'YOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'YOB']
+    out_df.loc[ob_idx['ADPUPA'], 'DHR'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'DHR']
 
 # Set certain fields all to NaN if desired
 for field in nan_fields:
