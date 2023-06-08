@@ -192,7 +192,7 @@ def interp_x_y_t(wrf_data, wrf_hr, var, ob_subset, ihr, twgt, threeD=False, mask
     return val
 
 
-def interp_x_y_z(wrf3d, ob_subset, wgt_name='pwgt', i0_name='pi0'):
+def interp_x_y_z(wrf3d, ob_subset, wgt_name='kwgt', i0_name='ki0'):
     """
     Wrapper function for interpolation in x, y, and p or z
 
@@ -227,7 +227,7 @@ def interp_x_y_z(wrf3d, ob_subset, wgt_name='pwgt', i0_name='pi0'):
     return val
 
 
-def interp_wrf_1d(a1d, ob_subset, i0_name='pi0', var='POB', itype='log'):
+def interp_wrf_1d(a1d, ob_subset, i0_name='ki0', var='POB', itype='log'):
     """
     Wrapper function for interpolation in one dimension
 
