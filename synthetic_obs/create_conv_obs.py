@@ -56,7 +56,7 @@ import map_proj as mp
 wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/bufr_csv/'
+bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW'] 
@@ -72,16 +72,17 @@ vinterp = [{'subset':['ADPUPA', 'AIRCAR', 'AIRCFT'], 'var':'POB', 'type':'log',
 
 # Output directory for synthetic prepbufr CSV output
 fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/conv/'
+fake_bufr_dir = './'
 
 # PrepBUFR time
-bufr_time = dt.datetime(2022, 4, 29, 19)
+bufr_time = dt.datetime(2022, 4, 30, 0)
 
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
-bufr_tag = 'sfc'
+bufr_tag = 'rap'
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 29, 17, 0)
-wrf_end = dt.datetime(2022, 4, 29, 20, 0)
+wrf_start = dt.datetime(2022, 4, 29, 21, 0)
+wrf_end = dt.datetime(2022, 4, 30, 1, 0)
 wrf_step = 15
 
 # Option to set all entries for a certain BUFR field to NaN
@@ -101,7 +102,7 @@ use_raob_drift = True
 coastline_correct = False 
 
 # Option to add ceiling observations to surface-based platforms (ADPSFC, SFCSHP, MSONET)
-add_ceiling = True
+add_ceiling = False
 ceil_field = 'HGT_P0_L215_GLC0'
 #ceil_field = 'CEIL_P0_L215_GLC0'  # Experimental ceiling diagnostic #1
 
@@ -616,12 +617,17 @@ bufr_csv.df.reset_index(drop=True, inplace=True)
 debug_df.drop(index=drop_idx, inplace=True)
 debug_df.reset_index(drop=True, inplace=True)
 
-# Compute derived quantities (TDO)
+# Compute derived quantities (TDO and Tv)
 tdo_idx = np.where(np.logical_not(np.isnan(out_df['TDO'])))[0]
 out_df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(out_df.loc[tdo_idx, 'POB'].values * units.mb,
                                                                 out_df.loc[tdo_idx, 'TOB'].values * units.K,
-                                                                out_df.loc[tdo_idx, 'QOB'].values)
-
+                                                                out_df.loc[tdo_idx, 'QOB'].values).to('degC').magnitude
+tv_idx = np.where(np.isclose(out_df['tvflg'], 0))[0]
+print('number of Tv obs = %d' % len(tv_idx))
+mix_ratio = mc.mixing_ratio_from_specific_humidity(out_df.loc[tv_idx, 'QOB'].values * units.mg / units.kg)
+out_df.loc[tv_idx, 'TOB'] = mc.virtual_temperature(out_df.loc[tv_idx, 'TOB'].values * units.K,
+                                                   mix_ratio).to('K').magnitude
+                                                    
 # Convert to proper units
 out_df['QOB'] = out_df['QOB'] * 1e6
 out_df['TOB'] = out_df['TOB'] - 273.15
