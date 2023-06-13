@@ -59,7 +59,7 @@ wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
-obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW'] 
+obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
 obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
 
 # Variable to use for vertical interpolation for obs_3d platforms and type of interpolation 
@@ -87,7 +87,8 @@ wrf_step = 15
 
 # Option to set all entries for a certain BUFR field to NaN
 nan_fields = ['MXGS', 'HOVI', 'MSST', 'DBSS', 'SST1', 'SSTQM', 'SSTOE', 'CDTP', 'GCDTT', 'CDTP_QM',
-              'HOWV', 'CEILING', 'QIFN', 'TOCC', 'HLBC']
+              'HOWV', 'CEILING', 'QIFN', 'TOCC', 'HLBC', 'VSSO', 'CLAM', 'HOCB', 'PRWE', 'TFC', 
+              'UFC', 'VFC', 'MXTM', 'MITM']
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
 # Heights reported by aircraft are calculated by integrating the hydrostatic balance eqn assuming
@@ -163,26 +164,33 @@ for s in obs:
         bufr_csv.df.reset_index(drop=True, inplace=True)
 
 # Remove obs outside of the range of wrfnat files
-hr_min = ((wrf_start - t).days * 24) + ((wrf_start - t).seconds / 3600.)
-hr_max = ((wrf_end - t).days * 24) + ((wrf_end - t).seconds / 3600.)
+hr_min = ((wrf_start - bufr_time).days * 24) + ((wrf_start - bufr_time).seconds / 3600.)
+hr_max = ((wrf_end - bufr_time).days * 24) + ((wrf_end - bufr_time).seconds / 3600.)
 bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['DHR'] < hr_min, 
                                               bufr_csv.df['DHR'] > hr_max))[0], inplace=True)
+if use_raob_drift:
+    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['HRDR'] < hr_min, 
+                                                  bufr_csv.df['HRDR'] > hr_max))[0], inplace=True)
 bufr_csv.df.reset_index(drop=True, inplace=True)
 
 # Open wrfnat files
+start_grib = dt.datetime.now()
 hr_start = math.floor(bufr_csv.df['DHR'].min()*4) / 4
 hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + (2*wrf_step_dec)
+if use_raob_drift:
+    hr_start = min([hr_start, math.floor(bufr_csv.df['HRDR'].min()*4) / 4])
+    hr_end = max([hr_end, math.ceil(bufr_csv.df['HRDR'].max()*4) / 4 + (2*wrf_step_dec)])
 print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
 print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
 wrf_ds = {}
 wrf_hr = np.arange(hr_start, hr_end, wrf_step_dec)
 for hr in wrf_hr:
-    wrf_t = t + dt.timedelta(hours=hr)
+    wrf_t = bufr_time + dt.timedelta(hours=hr)
     print(wrf_dir + wrf_t.strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'))
     wrf_ds[hr] = xr.open_dataset(wrf_dir + wrf_t.strftime('/%Y%m%d/wrfnat_%Y%m%d%H%M.grib2'), 
                                  engine='pynio')
 
-print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_loop).total_seconds())
+print('time to open GRIB files = %.2f s' % (dt.datetime.now() - start_grib).total_seconds())
     
 # Extract size of latitude and longitude grids
 shape = wrf_ds[list(wrf_ds.keys())[0]]['gridlat_0'].shape
@@ -398,7 +406,7 @@ for hr in wrf_hr:
         del wrf_data[hr][f]
 
 # Create array to save v1d arrays (vertical coordinate)
-v1d = np.zeros([nz_model, len(out_df)])
+v1d = np.zeros([model_nz, len(out_df)])
 vdone = np.zeros(len(out_df), dtype=int)
 
 # We will extract 3D fields one at a time b/c these 3D arrays are massive (~6.5 GB each), so it 
@@ -419,14 +427,14 @@ for vg, vinterp_d in enumerate(vinterp):
         # Determine indices of obs within wrf_step of this output time
         ind = np.where((out_df['DHR'] > (hr - wrf_step_dec)) & 
                        (out_df['DHR'] < (hr + wrf_step_dec)) &
-                       (out_df['vgroup'] == vg))
+                       (out_df['vgroup'] == vg))[0]
 
         # If no indices, move to next time
         if ind.size == 0:
             continue
 
         print()
-        print('3D Vertical Coordinate: %s' % f)
+        print('3D Vertical Coordinate: %s' % vinterp_d['model_field'])
         print()
 
         # Extract field from UPP
@@ -465,31 +473,9 @@ for vg, vinterp_d in enumerate(vinterp):
                 # Determine weight for temporal interpolation
                 ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
                 out_df.loc[j, 'twgt']  = twgt 
-           
-                # Determine surface height above sea level and surface pressure
-                if hr > out_df.loc[j, 'DHR']:
-                    hr1 = hr - wrf_step_dec
-                    hr2 = hr
-                else:
-                    hr1 = hr
-                    hr2 = hr + wrf_step_dec
-                sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j],
-                                        ihr, twgt)
-                sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], 
-                                        ihr, twgt) * 1e-2
-            
-                # Check whether ob from BUFR file lies underground
-                if (out_df.loc[j, 'ZOB'] < sfch) or (out_df.loc[j, 'POB'] > sfcp):
-                    drop_idx.append(j)
-                    continue
 
-                if debug > 1:
-                    time_sfc = dt.datetime.now()
-                    print('done determining twgt, sfch, and sfcp (%.6f s)' % 
-                          (time_sfc - time_jstart).total_seconds())
-           
                 v1d[:, j] = twgt * vinterp_d['conversion'] * cou.interp_x_y(wrf3d, out_df.loc[j], threeD=True)
- 
+
                 if debug > 1:
                     print('total time for v1 = %.6f s' % 
                           (dt.datetime.now() - time_jstart).total_seconds())
@@ -507,23 +493,20 @@ for vg, vinterp_d in enumerate(vinterp):
                 vdone[j] = 1
                         
                 if debug > 1:
-                    print('total time for p2 = %.6f s' % 
+                    print('total time for v2 = %.6f s' % 
                           (dt.datetime.now() - time_jstart).total_seconds())
                     entry_timesv2.append((dt.datetime.now() - time_jstart).total_seconds())
 
             if vdone[j]: 
                 # Check for extrapolation
-                if (v1d[0, j] > out_df.loc[j, vinterp_d['var']]):
+                if ((v1d[:, j].min() < out_df.loc[j, vinterp_d['var']]) and 
+                    (v1d[:, j].max() > out_df.loc[j, vinterp_d['var']])):
                     if vinterp_d['ascend']:
                         out_df.loc[j, 'ki0'] = np.where(v1d[:, j] < out_df.loc[j, vinterp_d['var']])[0][-1]
                     else:
                         out_df.loc[j, 'ki0'] = np.where(v1d[:, j] > out_df.loc[j, vinterp_d['var']])[0][-1]
                     if debug > 1:
                         print('ki0 = %d' % out_df.loc[j, 'ki0'])
-                    if out_df.loc[j, 'ki0'] >= (v1d.shape[0] - 1):
-                        # Prevent extrapolation in vertical
-                        drop_idx.append(j)
-                        continue
                     out_df.loc[j, vinterp_d['var']], out_df.loc[j, 'kwgt'] = cou.interp_wrf_1d(v1d[:, j], out_df.loc[j],
                                                                                                itype=vinterp_d['type'])
                 else:
@@ -619,7 +602,7 @@ debug_df.reset_index(drop=True, inplace=True)
 
 # Compute derived quantities (TDO and Tv)
 tdo_idx = np.where(np.logical_not(np.isnan(out_df['TDO'])))[0]
-out_df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(out_df.loc[tdo_idx, 'POB'].values * units.mb,
+out_df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(out_df.loc[tdo_idx, 'POB'].values * units.hPa,
                                                                 out_df.loc[tdo_idx, 'TOB'].values * units.K,
                                                                 out_df.loc[tdo_idx, 'QOB'].values).to('degC').magnitude
 tv_idx = np.where(np.isclose(out_df['tvflg'], 0))[0]
@@ -654,8 +637,8 @@ if use_raob_drift:
 
 # Set certain fields all to NaN if desired
 for field in nan_fields:
-    out_df.loc[field, :] = np.nan
-    bufr_csv.df.loc[field, :] = np.nan
+    out_df.loc[:, field] = np.nan
+    bufr_csv.df.loc[:, field] = np.nan
 
 # Write output DataFrame to a CSV file
 # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
@@ -671,7 +654,7 @@ if debug > 1:
                     ['2D', 'P1', 'P2', '3D']):
         if len(a) > 0:
             print('avg time per %s entries = %.6f s' % (s, np.mean(np.array(a))))
-print('total time = %s' % (dt.datetime.now() - begin).total_seconds())
+print('total time = %s s' % (dt.datetime.now() - begin).total_seconds())
 
 
 """
