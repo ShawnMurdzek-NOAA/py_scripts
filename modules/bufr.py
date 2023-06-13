@@ -255,7 +255,8 @@ def create_uncorr_obs_err(err_num, stdev):
     return error
 
 
-def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667):
+def create_corr_obs_err(ob_df, stdev, auto_dim, partition_dim=None, auto_reg_parm=0.5, 
+                        min_d=0.01667):
     """
     Create correlated observation errors using an AR1 process
 
@@ -267,6 +268,10 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667
         Observation error standard deviation (either a single value or one per entry in ob_df)
     auto_dim : string
         Dimension along which to have autocorrelation. typically 'POB' or 'DHR'
+    partition_dim : string, optional
+        Dimension used for partitioning. All entries with the same value along this dimension use 
+        the same AR1 process, and a new process is created when the value along this dimension 
+        changes
     auto_reg_parm : float, optional
         Autoregression parameter (see Notes)
     min_d : float, optional
@@ -311,25 +316,33 @@ def create_corr_obs_err(ob_df, stdev, auto_dim, auto_reg_parm=0.5, min_d=0.01667
     # Loop over each station ID, then over each sorted index
     for sid in ob_df['SID'].unique():
        single_station = ob_df.loc[ob_df['SID'] == sid].copy()
-       idx = single_station.sort_values(auto_dim, ascending=ascending).index
-       dist = np.abs(single_station.loc[idx[1:], auto_dim].values - 
-                     single_station.loc[idx[:-1], auto_dim].values)
-       dist[dist <= min_d] = min_d
-       dist = dist / min_d
-       if is_stdev_array:
-           error[idx[0]] = np.random.normal(scale=stdev[idx[0]])
-           for j1, j2, d in zip(idx[:-1], idx[1:], dist):
-               error[j2] = np.random.normal(scale=stdev[j2]) + (auto_reg_parm * error[j1] / d)
+       if partition_dim != None:
+           partitioned_obs = []
+           partition_vals = single_station[partition_dim].unique()
+           for v in partition_vals:
+               partitioned_obs.append(single_station.loc[single_station[partition_dim] == v])  
        else:
-           error[idx[0]] = np.random.normal(scale=stdev)
-           for j1, j2, d in zip(idx[:-1], idx[1:], dist):
-               error[j2] = np.random.normal(scale=stdev) + (auto_reg_parm * error[j1] / d)
+           partitioned_obs = [single_station]
+       for obs in partitioned_obs:
+           idx = obs.sort_values(auto_dim, ascending=ascending).index
+           dist = np.abs(obs.loc[idx[1:], auto_dim].values - 
+                         obs.loc[idx[:-1], auto_dim].values)
+           dist[dist <= min_d] = min_d
+           dist = dist / min_d
+           if is_stdev_array:
+               error[idx[0]] = np.random.normal(scale=stdev[idx[0]])
+               for j1, j2, d in zip(idx[:-1], idx[1:], dist):
+                  error[j2] = np.random.normal(scale=stdev[j2]) + (auto_reg_parm * error[j1] / d)
+           else:
+               error[idx[0]] = np.random.normal(scale=stdev)
+               for j1, j2, d in zip(idx[:-1], idx[1:], dist):
+                   error[j2] = np.random.normal(scale=stdev) + (auto_reg_parm * error[j1] / d)
    
     return error
 
 
 def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, min_d=0.01667,
-                verbose=True):
+                partition_dim=None, verbose=True):
     """
     Add random Gaussian errors (correlated or uncorrelated) to observations based on error standard 
     deviations in errtable
@@ -350,6 +363,12 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
         an AR1 process
     min_d : float, optional
         Minimum allowed distance between successive obs
+    partition_dim : string, optional
+        Dimension used for partitioning. All entries with the same value along this dimension use 
+        the same AR1 process, and a new process is created when the value along this dimension 
+        changes
+    verbose : boolean, optional
+        Option for verbose output 
 
     Returns
     -------

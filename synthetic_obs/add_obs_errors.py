@@ -42,6 +42,7 @@ errtable = '/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'
 # Observation types to use autocorrelated errors for
 autocor_POB_obs = [120, 220]
 autocor_DHR_obs = [130, 131, 133, 134, 135, 230, 231, 233, 234, 235]
+autocor_ZOB_partition_DHR_obs = [126, 223, 224, 227, 228, 229]
 auto_reg_parm = 0.5
 
 # Verbose output when adding obs errors?
@@ -77,7 +78,8 @@ for i, (in_name, out_name) in enumerate(zip(in_fnames, out_fnames)):
 
     remaining_obs = []
     for o in np.int32(in_csv.df['TYP'].unique()):
-        if (o not in autocor_POB_obs) and (o not in autocor_DHR_obs):
+        if ((o not in autocor_POB_obs) and (o not in autocor_DHR_obs) and 
+            (o not in autocor_ZOB_partition_DHR_obs)):
             remaining_obs.append(o)
 
     # Add random errors
@@ -85,6 +87,9 @@ for i, (in_name, out_name) in enumerate(zip(in_fnames, out_fnames)):
                               auto_reg_parm=auto_reg_parm, min_d=10., verbose=verbose)
     out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_DHR_obs, correlated='DHR', 
                               auto_reg_parm=auto_reg_parm, verbose=verbose)
+    out_df = bufr.add_obs_err(out_df, errtable, ob_typ=autocor_ZOB_partition_DHR_obs, 
+                              correlated='DHR', partition_dim='DHR',
+                              auto_reg_parm=auto_reg_parm, min_d=50., verbose=verbose)
     out_df = bufr.add_obs_err(out_df, errtable, ob_typ=remaining_obs, verbose=verbose)
 
     # Make precision match what is typically found in a prepBUFR file
