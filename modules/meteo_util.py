@@ -10,6 +10,8 @@ Date Created: 15 February 2023
 #---------------------------------------------------------------------------------------------------
 
 import numpy as np
+import metpy.calc as mc
+from metpy.units import units
 
 
 #---------------------------------------------------------------------------------------------------
@@ -70,6 +72,32 @@ def equil_mix(T, p):
     qvs = (epn * es) / (p - es)
 
     return qvs
+
+
+def T_from_Tv(Tv, spfh, epsilon=0.622):
+    """
+    Computes temperature from the virtual temperature and specific humidity
+
+    Parameters
+    ----------
+    Tv : float
+        Virtual temperature (K)
+    spfh : float
+        Specific humidity (kg/kg)
+    epsilon : float, optional
+        Ratio of dry-air gas constant to water vapor gas constant
+
+    Returns
+    -------
+    T : float
+        Sensible temperature (K)
+
+    """ 
+
+    mix = mc.mixing_ratio_from_specific_humidity(spfh * units.kg / units.kg).magnitude
+    T = Tv * epsilon * ((1. + mix) / (mix + epsilon))
+
+    return T
 
 
 """

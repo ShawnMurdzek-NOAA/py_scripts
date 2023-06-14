@@ -108,7 +108,7 @@ ceil_field = 'HGT_P0_L215_GLC0'
 #ceil_field = 'CEIL_P0_L215_GLC0'  # Experimental ceiling diagnostic #1
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
-debug = 2
+debug = 1
 
 # Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
 # Helpful for debugging, but should usually be set to False b/c it increases runtime
@@ -168,10 +168,11 @@ hr_min = ((wrf_start - bufr_time).days * 24) + ((wrf_start - bufr_time).seconds 
 hr_max = ((wrf_end - bufr_time).days * 24) + ((wrf_end - bufr_time).seconds / 3600.)
 bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['DHR'] < hr_min, 
                                               bufr_csv.df['DHR'] > hr_max))[0], inplace=True)
+bufr_csv.df.reset_index(drop=True, inplace=True)
 if use_raob_drift:
     bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['HRDR'] < hr_min, 
                                                   bufr_csv.df['HRDR'] > hr_max))[0], inplace=True)
-bufr_csv.df.reset_index(drop=True, inplace=True)
+    bufr_csv.df.reset_index(drop=True, inplace=True)
 
 # Open wrfnat files
 start_grib = dt.datetime.now()
@@ -181,7 +182,8 @@ if use_raob_drift:
     hr_start = min([hr_start, math.floor(bufr_csv.df['HRDR'].min()*4) / 4])
     hr_end = max([hr_end, math.ceil(bufr_csv.df['HRDR'].max()*4) / 4 + (2*wrf_step_dec)])
 print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
-print('min/max BUFR hours = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
+print('min/max BUFR DHR = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
+print('min/max BUFR HRDR = %.2f, %.2f' % (bufr_csv.df['HRDR'].min(), bufr_csv.df['HRDR'].max()))
 wrf_ds = {}
 wrf_hr = np.arange(hr_start, hr_end, wrf_step_dec)
 for hr in wrf_hr:
@@ -292,6 +294,8 @@ if add_ceiling:
 # Create Obs Based on 2-D Fields
 #---------------------------------------------------------------------------------------------------
 
+start2d = dt.datetime.now()
+
 # Extract 2D fields ONLY
 fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'HGT_P0_L1_GLC0', 
             'PWAT_P0_L200_GLC0', 'PRMSL_P0_L101_GLC0']
@@ -389,15 +393,23 @@ for j in ob_idx['2d']:
          HRnear = wrf_hr[np.argmin(np.abs(wrf_hr - out_df.loc[j, 'DHR']))]
          out_df.loc[j, 'ceil'] = wrf_data[HRnear][ceil_field][inear, jnear]
 
+print()
+print('Done with 2D Obs')
+print('time = %s s' % (dt.datetime.now() - start2d).total_seconds)
+print()
+
 
 #---------------------------------------------------------------------------------------------------
 # Create Obs Based on 3-D Fields
 #---------------------------------------------------------------------------------------------------
 
 print()
+print('---------------')
 print('3D Observations')
 print('---------------')
 print()
+
+start3d = dt.datetime.now()
 
 # Remove data from wrf_data that we don't need so we can free up some memory
 for hr in wrf_hr:
@@ -584,6 +596,11 @@ for o, f in zip(obs_name, wrf_name):
         # Free up memory (shouldn't have to call garbage collector after this)
         wrf3d = 0.
 
+print()
+print('Done with 3D Obs')
+print('time = %s s' % (dt.datetime.now() - start3d).total_seconds)
+print()
+
 
 #---------------------------------------------------------------------------------------------------
 # Clean Up
@@ -600,17 +617,6 @@ bufr_csv.df.reset_index(drop=True, inplace=True)
 debug_df.drop(index=drop_idx, inplace=True)
 debug_df.reset_index(drop=True, inplace=True)
 
-# Compute derived quantities (TDO and Tv)
-tdo_idx = np.where(np.logical_not(np.isnan(out_df['TDO'])))[0]
-out_df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(out_df.loc[tdo_idx, 'POB'].values * units.hPa,
-                                                                out_df.loc[tdo_idx, 'TOB'].values * units.K,
-                                                                out_df.loc[tdo_idx, 'QOB'].values).to('degC').magnitude
-tv_idx = np.where(np.isclose(out_df['tvflg'], 0))[0]
-print('number of Tv obs = %d' % len(tv_idx))
-mix_ratio = mc.mixing_ratio_from_specific_humidity(out_df.loc[tv_idx, 'QOB'].values * units.mg / units.kg)
-out_df.loc[tv_idx, 'TOB'] = mc.virtual_temperature(out_df.loc[tv_idx, 'TOB'].values * units.K,
-                                                   mix_ratio).to('K').magnitude
-                                                    
 # Convert to proper units
 out_df['QOB'] = out_df['QOB'] * 1e6
 out_df['TOB'] = out_df['TOB'] - 273.15
@@ -623,6 +629,14 @@ if interp_latlon:
     idx = np.where((out_df['subset'] == 'ADPSFC') | (out_df['subset'] == 'SFCSHP') |
                    (out_df['subset'] == 'MSONET'))[0] 
     out_df.loc[idx, 'XOB'] = out_df.loc[idx, 'XOB'] + 360.
+
+# Compute derived quantities (TDO and Tv)
+tv_idx = np.where(np.isclose(out_df['tvflg'], 0))[0]
+print('number of Tv obs = %d' % len(tv_idx))
+mix_ratio = mc.mixing_ratio_from_specific_humidity(out_df.loc[tv_idx, 'QOB'].values * units.mg / units.kg)
+out_df.loc[tv_idx, 'TOB'] = mc.virtual_temperature(out_df.loc[tv_idx, 'TOB'].values * units.degC,
+                                                   mix_ratio).to('degC').magnitude
+out_df = bufr.compute_dewpt(out_df)
 
 # If we didn't interpolate ZOB for AIRCAR and AIRCFT, copy values from original BUFR file
 if not interp_z_aircft:

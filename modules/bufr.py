@@ -131,6 +131,122 @@ class bufrCSV():
 # Additional Functions
 #---------------------------------------------------------------------------------------------------
 
+def compute_Tsens(df):
+    """
+    Compute sensible temperature from TOB
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with updated Tsens field
+
+    """
+
+    df['Tsens'] = df['TOB'].copy()
+    tv_idx = np.isclose(df['tvflg'], 0)
+    df.loc[tv_idx, 'Tsens'] = mu.T_from_Tv(df.loc[tv_idx, 'TOB'].values + 273.15, 
+                                           df.loc[tv_idx, 'QOB'].values*1e-6) - 273.15
+
+    return df
+
+
+def compute_dewpt(df):
+    """
+    Compute dewpoint from T or Tv and specific humidity
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with updated TDO field
+
+    """
+
+    # Add TDO column if it does not exist
+    if 'TDO' not in df.columns:
+        df['TDO'] = df['TOB'].copy()
+
+    # Create temporary TOB column that only includes sensible temperature
+    df = compute_Tsens(df)
+
+    # Compute TDO
+    tdo_idx = np.logical_not(np.isnan(df['TDO']))
+    df.loc[tdo_idx, 'TDO'] = mc.dewpoint_from_specific_humidity(df.loc[tdo_idx, 'POB'].values * units.hPa,
+                                                                df.loc[tdo_idx, 'Tsens'].values * units.degC,
+                                                                df.loc[tdo_idx, 'QOB'].values * units.mg / units.kg).to('degC').magnitude
+
+    # Drop temporary Tsens column
+    df.drop(labels='Tsens', axis=1, inplace=True)
+
+    return df
+
+
+def compute_RH(df):
+    """
+    Compute RH from T or Tv and specific humidity
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with RHOB field
+
+    """
+
+    # Create temporary TOB column that only includes sensible temperature
+    df = compute_Tsens(df)
+
+    # Compute RHOB. Don't use MetPy, as this can cause small differences when flipping back and 
+    # forth between RHOB and QOB
+    mix = (df['QOB'] * 1e-6) / (1. - (df['QOB'] * 1e-6))
+    df['RHOB'] = 100 * mix / mu.equil_mix(df['Tsens'] + 273.15, df['POB'] * 1e2)
+    #df.loc[rh_idx, 'RHOB'] = mc.relative_humidity_from_specific_humidity(df.loc[rh_idx, 'POB'].values * units.hPa,
+    #                                                            df.loc[rh_idx, 'Tsens'].values * units.degC,
+    #                                                            df.loc[rh_idx, 'QOB'].values * units.mg / units.kg).to('percent').magnitude
+
+    # Drop temporary TOB column
+    df.drop(labels='Tsens', axis=1, inplace=True)
+
+    return df
+
+
+def compute_wspd_wdir(df):
+    """
+    Compute wind speed (m/s) and wind direction (deg)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Pandas DataFrame with the same format as a BUFR DataFrame
+
+    Returns
+    -------
+    df : pd.DataFrame
+        DataFrame with WSPD and WDIR fields
+
+    """
+
+    df['WSPD'] = mc.wind_speed(df['UOB'].values * units.m / units.s,
+                               df['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
+    df['WDIR'] = mc.wind_direction(df['UOB'].values * units.m / units.s,
+                                   df['VOB'].values * units.m / units.s).magnitude
+
+    return df
+
+
 def plot_obs_locs(x, y, fig=None, nrows=1, ncols=1, axnum=1, proj=ccrs.PlateCarree(), 
                   borders=True, **kwargs):
     """
@@ -389,9 +505,8 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
     eprs = etable[100]['prs'].values
 
     # Convert specific humidities to relative humidities in BUFR CSV
-    out_df['QOB'] = out_df['QOB'] * 1e-6
-    mix = out_df['QOB']  / (1. - out_df['QOB'])
-    out_df['RHOB'] = 10 * (mix / mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2))  
+    out_df = compute_RH(out_df)
+    out_df['RHOB'] = 0.1 * out_df['RHOB']
 
     # Convert surface pressures from Pa to hPa in BUFR CSV
     out_df['PRSS'] = out_df['PRSS'] * 1e-2
@@ -401,8 +516,8 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
         if verbose:
             print()
             print('TYP = %d' % t)
-        for ob, err in zip(['TOB', 'RHOB', 'UOB', 'VOB', 'PRSS', 'PWO'],
-                           ['Terr', 'RHerr', 'UVerr', 'UVerr', 'PSerr', 'PWerr']):
+        for ob, err in zip(['TOB', 'RHOB', 'UOB', 'VOB', 'PRSS', 'PWO', 'PMO'],
+                           ['Terr', 'RHerr', 'UVerr', 'UVerr', 'PSerr', 'PWerr', 'PSerr']):
         
             if verbose:    
                 print(ob)
@@ -419,10 +534,10 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
             # All pressures are set to NaN for ob type 153, so don't use POB to determine oind for 
             # those obs
             if t == 153:
-                oind = np.where(out_df['TYP'] == t)[0]
+                oind = out_df['TYP'] == t
             else:
-                oind = np.where((out_df['TYP'] == t) & (out_df['POB'] <= eprs[eind[0]]) & 
-                                (out_df['POB'] >= eprs[eind[-1]]))[0]
+                oind = ((out_df['TYP'] == t) & (out_df['POB'] <= eprs[eind[0]]) & 
+                        (out_df['POB'] >= eprs[eind[-1]]))
 
             # Determine if errors vary with pressure. If so, create a function for interpolation
             # Then add observation errors
@@ -434,7 +549,7 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
 
             # Compute errors
             if correlated == None:
-                error = create_uncorr_obs_err(len(oind), stdev)
+                error = create_uncorr_obs_err(np.sum(oind), stdev)
             else:
                 error = create_corr_obs_err(out_df.loc[oind].copy(), stdev, correlated, 
                                             auto_reg_parm=auto_reg_parm, min_d=min_d)
@@ -449,38 +564,19 @@ def add_obs_err(df, errtable, ob_typ='all', correlated=None, auto_reg_parm=0.5, 
     out_df.loc[out_df['PWO'] < 0, 'PWO'] = 0.
 
     # Compute specific humidity from relative humidity
-    mix = 0.1 * out_df['RHOB'] * mu.equil_mix(out_df['TOB'] + 273.15, out_df['POB'] * 1e2)
+    out_df = compute_Tsens(out_df)
+    mix = 0.1 * out_df['RHOB'] * mu.equil_mix(out_df['Tsens'] + 273.15, out_df['POB'] * 1e2)
     out_df['QOB'] = 1e6 * (mix / (1. + mix))
     out_df.drop(labels='RHOB', axis=1, inplace=True)    
-    
+    out_df.drop(labels='Tsens', axis=1, inplace=True)    
+   
+    # Recompute dewpoint
+    out_df = compute_dewpt(out_df)
+ 
     # Convert surface pressure back to Pa
-    out_df['PRSS'] = out_df['PRSS'] * 1e-2
+    out_df['PRSS'] = out_df['PRSS'] * 1e2
     
     return out_df
-
-
-def compute_wspd_wdir(df):
-    """
-    Compute wind speed (m/s) and wind direction (deg)
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Pandas DataFrame with the same format as a BUFR DataFrame
-
-    Returns
-    -------
-    df : pd.DataFrame
-        DataFrame with WSPD and WDIR fields
-
-    """
-
-    df['WSPD'] = mc.wind_speed(df['UOB'].values * units.m / units.s,
-                               df['VOB'].values * units.m / units.s).to(units.m / units.s).magnitude
-    df['WDIR'] = mc.wind_direction(df['UOB'].values * units.m / units.s,
-                                   df['VOB'].values * units.m / units.s).magnitude
-
-    return df
 
 
 def match_bufr_prec(df, prec_csv='bufr_precision.csv'):
