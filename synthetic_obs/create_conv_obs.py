@@ -22,6 +22,7 @@ Passed Arguments:
     argv[5] = Time for first UPP file (YYYYMMDDHH)
     argv[6] = Time for last UPP file (YYYYMMDDHH)
     argv[7] = Prepbufr file tag
+    argv[8] = Prepbufr file suffix
 
 shawn.s.murdzek@noaa.gov
 Date Created: 22 November 2022
@@ -60,7 +61,8 @@ bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
-obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
+#obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
+obs_3d = ['AIRCAR', 'AIRCFT']
 
 # Variable to use for vertical interpolation for obs_3d platforms and type of interpolation 
 # ('log' or 'linear'). Conversion is a factor applied to the model field to convert to the correct
@@ -75,14 +77,17 @@ fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/c
 fake_bufr_dir = './'
 
 # PrepBUFR time
-bufr_time = dt.datetime(2022, 4, 30, 0)
+bufr_time = dt.datetime(2022, 4, 30, 18)
 
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
 bufr_tag = 'rap'
 
+# Prepbufr suffix
+bufr_suffix = ''
+
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 29, 21, 0)
-wrf_end = dt.datetime(2022, 4, 30, 1, 0)
+wrf_start = dt.datetime(2022, 4, 30, 15, 0)
+wrf_end = dt.datetime(2022, 4, 30, 19, 0)
 wrf_step = 15
 
 # Option to set all entries for a certain BUFR field to NaN
@@ -162,6 +167,7 @@ for s in obs:
     if s not in ob_platforms:
         bufr_csv.df.drop(index=np.where(bufr_csv.df['subset'] == s)[0], inplace=True)
         bufr_csv.df.reset_index(drop=True, inplace=True)
+print('BUFR ob subsets =', bufr_csv.df['subset'].unique())
 
 # Remove obs outside of the range of wrfnat files
 hr_min = ((wrf_start - bufr_time).days * 24) + ((wrf_start - bufr_time).seconds / 3600.)
@@ -170,17 +176,19 @@ bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['DHR'] < hr_min,
                                               bufr_csv.df['DHR'] > hr_max))[0], inplace=True)
 bufr_csv.df.reset_index(drop=True, inplace=True)
 if use_raob_drift:
-    bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['HRDR'] < hr_min, 
-                                                  bufr_csv.df['HRDR'] > hr_max))[0], inplace=True)
-    bufr_csv.df.reset_index(drop=True, inplace=True)
+    if not np.all(np.isnan(bufr_csv.df['HRDR'])):
+        bufr_csv.df.drop(index=np.where(np.logical_or(bufr_csv.df['HRDR'] < hr_min, 
+                                                      bufr_csv.df['HRDR'] > hr_max))[0], inplace=True)
+        bufr_csv.df.reset_index(drop=True, inplace=True)
 
 # Open wrfnat files
 start_grib = dt.datetime.now()
 hr_start = math.floor(bufr_csv.df['DHR'].min()*4) / 4
 hr_end = math.ceil(bufr_csv.df['DHR'].max()*4) / 4 + (2*wrf_step_dec)
 if use_raob_drift:
-    hr_start = min([hr_start, math.floor(bufr_csv.df['HRDR'].min()*4) / 4])
-    hr_end = max([hr_end, math.ceil(bufr_csv.df['HRDR'].max()*4) / 4 + (2*wrf_step_dec)])
+    if not np.all(np.isnan(bufr_csv.df['HRDR'])):
+        hr_start = min([hr_start, math.floor(bufr_csv.df['HRDR'].min()*4) / 4])
+        hr_end = max([hr_end, math.ceil(bufr_csv.df['HRDR'].max()*4) / 4 + (2*wrf_step_dec)])
 print('min/max WRF hours = %.2f, %.2f' % (hr_min, hr_max))
 print('min/max BUFR DHR = %.2f, %.2f' % (bufr_csv.df['DHR'].min(), bufr_csv.df['DHR'].max()))
 print('min/max BUFR HRDR = %.2f, %.2f' % (bufr_csv.df['HRDR'].min(), bufr_csv.df['HRDR'].max()))
@@ -256,7 +264,8 @@ for o in obs_3d:
 out_df['vgroup'] = np.zeros(len(out_df), dtype=int)
 for j, vinterp_d in enumerate(vinterp):
     for o in vinterp_d['subset']:
-        out_df.loc[ob_idx[o], 'vgroup'] = j
+        if o in ob_idx.keys():
+            out_df.loc[ob_idx[o], 'vgroup'] = j
 
 # Initialize variables for 3D obs as zeros
 for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
@@ -270,9 +279,10 @@ if not interp_z_aircft:
 
 # Use (XDR, YDR) for ADPUPA obs rather than (XOB, YOB)
 if use_raob_drift:
-    out_df.loc[ob_idx['ADPUPA'], 'XOB'] = out_df.loc[ob_idx['ADPUPA'], 'XDR']
-    out_df.loc[ob_idx['ADPUPA'], 'YOB'] = out_df.loc[ob_idx['ADPUPA'], 'YDR']
-    out_df.loc[ob_idx['ADPUPA'], 'DHR'] = out_df.loc[ob_idx['ADPUPA'], 'HRDR']
+    if 'ADPUPA' in ob_idx.keys():
+        out_df.loc[ob_idx['ADPUPA'], 'XOB'] = out_df.loc[ob_idx['ADPUPA'], 'XDR']
+        out_df.loc[ob_idx['ADPUPA'], 'YOB'] = out_df.loc[ob_idx['ADPUPA'], 'YDR']
+        out_df.loc[ob_idx['ADPUPA'], 'DHR'] = out_df.loc[ob_idx['ADPUPA'], 'HRDR']
 
 # Add some DataFrame columns
 nrow = len(out_df)
@@ -395,7 +405,7 @@ for j in ob_idx['2d']:
 
 print()
 print('Done with 2D Obs')
-print('time = %s s' % (dt.datetime.now() - start2d).total_seconds)
+print('time = %s s' % (dt.datetime.now() - start2d).total_seconds())
 print()
 
 
@@ -598,7 +608,7 @@ for o, f in zip(obs_name, wrf_name):
 
 print()
 print('Done with 3D Obs')
-print('time = %s s' % (dt.datetime.now() - start3d).total_seconds)
+print('time = %s s' % (dt.datetime.now() - start3d).total_seconds())
 print()
 
 
@@ -645,9 +655,10 @@ if not interp_z_aircft:
 
 # Reset (XOB, YOB) for ADPUPA obs if (XDR, YDR) was used for ADPUPA locations
 if use_raob_drift:
-    out_df.loc[ob_idx['ADPUPA'], 'XOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'XOB']
-    out_df.loc[ob_idx['ADPUPA'], 'YOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'YOB']
-    out_df.loc[ob_idx['ADPUPA'], 'DHR'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'DHR']
+    if 'ADPUPA' in ob_idx.keys():
+        out_df.loc[ob_idx['ADPUPA'], 'XOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'XOB']
+        out_df.loc[ob_idx['ADPUPA'], 'YOB'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'YOB']
+        out_df.loc[ob_idx['ADPUPA'], 'DHR'] = bufr_csv.df.loc[ob_idx['ADPUPA'], 'DHR']
 
 # Set certain fields all to NaN if desired
 for field in nan_fields:
@@ -656,8 +667,10 @@ for field in nan_fields:
 
 # Write output DataFrame to a CSV file
 # real_red.prepbufr.csv file can be used for assessing interpolation accuracy
-bufr.df_to_csv(out_df, '%s/%s.%s.fake.prepbufr.csv' % (fake_bufr_dir, bufr_time.strftime('%Y%m%d%H%M'),  bufr_tag))
-bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red.prepbufr.csv' % (fake_bufr_dir, bufr_time.strftime('%Y%m%d%H%M'), bufr_tag))
+bufr.df_to_csv(out_df, '%s/%s.%s.fake.prepbufr.csv%s' % (fake_bufr_dir, bufr_time.strftime('%Y%m%d%H%M'),  
+                                                         bufr_tag, bufr_suffix))
+bufr.df_to_csv(bufr_csv.df, '%s/%s.%s.real_red.prepbufr.csv%s' % (fake_bufr_dir, bufr_time.strftime('%Y%m%d%H%M'), 
+                                                                  bufr_tag, bufr_suffix))
 
 # Timing
 print()
