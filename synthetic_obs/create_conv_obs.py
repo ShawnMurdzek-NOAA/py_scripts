@@ -61,8 +61,7 @@ bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
-#obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
-obs_3d = ['AIRCAR', 'AIRCFT']
+obs_3d = ['ADPUPA', 'AIRCAR', 'AIRCFT', 'RASSDA', 'PROFLR', 'VADWND']
 
 # Variable to use for vertical interpolation for obs_3d platforms and type of interpolation 
 # ('log' or 'linear'). Conversion is a factor applied to the model field to convert to the correct
