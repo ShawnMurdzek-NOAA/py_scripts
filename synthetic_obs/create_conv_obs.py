@@ -92,7 +92,7 @@ wrf_step = 15
 
 # Option to set all entries for a certain BUFR field to NaN
 nan_fields = ['MXGS', 'HOVI', 'MSST', 'DBSS', 'SST1', 'SSTQM', 'SSTOE', 'CDTP', 'GCDTT', 'CDTP_QM',
-              'HOWV', 'CEILING', 'QIFN', 'TOCC', 'HLBC', 'VSSO', 'CLAM', 'HOCB', 'PRWE', 'TFC', 
+              'HOWV', 'CEILING', 'QIFN', 'TOCC', 'HLBCS', 'VSSO', 'CLAM', 'HOCB', 'PRWE', 'TFC', 
               'UFC', 'VFC', 'MXTM', 'MITM']
 
 # Option to interpolate height obs (ZOB) for AIRCAR and AIRCFT platforms
@@ -106,6 +106,9 @@ use_raob_drift = True
 
 # Option to "correct" obs that occur near coastlines
 coastline_correct = False 
+
+# Option to use virtual temperature when tvflg = 0
+use_Tv = False
 
 # Option to add ceiling observations to surface-based platforms (ADPSFC, SFCSHP, MSONET)
 add_ceiling = False
@@ -656,9 +659,12 @@ if interp_latlon:
 # Compute derived quantities (TDO and Tv)
 tv_idx = np.where(np.isclose(out_df['tvflg'], 0))[0]
 print('number of Tv obs = %d' % len(tv_idx))
-mix_ratio = mc.mixing_ratio_from_specific_humidity(out_df.loc[tv_idx, 'QOB'].values * units.mg / units.kg)
-out_df.loc[tv_idx, 'TOB'] = mc.virtual_temperature(out_df.loc[tv_idx, 'TOB'].values * units.degC,
-                                                   mix_ratio).to('degC').magnitude
+if use_Tv:
+    mix_ratio = mc.mixing_ratio_from_specific_humidity(out_df.loc[tv_idx, 'QOB'].values * units.mg / units.kg)
+    out_df.loc[tv_idx, 'TOB'] = mc.virtual_temperature(out_df.loc[tv_idx, 'TOB'].values * units.degC,
+                                                       mix_ratio).to('degC').magnitude
+else:
+    out_df.loc[tv_idx, 'tvflg'] = 1
 out_df = bufr.compute_dewpt(out_df)
 
 # If we didn't interpolate ZOB for AIRCAR and AIRCFT, copy values from original BUFR file
