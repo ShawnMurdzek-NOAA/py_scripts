@@ -57,7 +57,8 @@ import map_proj as mp
 wrf_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/'
 
 # Directory containing real prepbufr CSV output
-bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
+#bufr_dir = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/'
+bufr_dir = './'
 
 # Observation platforms to use (aka subsets, same ones used by BUFR)
 obs_2d = ['ADPSFC', 'SFCSHP', 'MSONET', 'GPSIPW']
@@ -76,17 +77,17 @@ fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/c
 fake_bufr_dir = './'
 
 # PrepBUFR time
-bufr_time = dt.datetime(2022, 4, 30, 18)
+bufr_time = dt.datetime(2022, 4, 30, 0)
 
 # Prepbufr tag ('rap', 'rap_e', or 'rap_p')
-bufr_tag = 'rap'
+bufr_tag = 'sample'
 
 # Prepbufr suffix
 bufr_suffix = ''
 
 # Start and end times for wrfnat UPP output. Step is in min
-wrf_start = dt.datetime(2022, 4, 30, 15, 0)
-wrf_end = dt.datetime(2022, 4, 30, 19, 0)
+wrf_start = dt.datetime(2022, 4, 29, 21, 0)
+wrf_end = dt.datetime(2022, 4, 30, 1, 0)
 wrf_step = 15
 
 # Option to set all entries for a certain BUFR field to NaN
@@ -260,7 +261,7 @@ for o in obs_3d:
     ob_idx['3d'] = ob_idx['3d'] + ob_idx[o]
 
 # Label each 3D ob with the appropriate group number for vertical interpolation
-out_df['vgroup'] = np.zeros(len(out_df), dtype=int)
+out_df['vgroup'] = -1 * np.ones(len(out_df), dtype=int)
 for j, vinterp_d in enumerate(vinterp):
     for o in vinterp_d['subset']:
         if o in ob_idx.keys():
@@ -273,8 +274,10 @@ for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
 
 # Set all ZOB values to NaN if we don't wish to interpolate ZOBs for AIRCAR and AIRCFT
 if not interp_z_aircft:
-    out_df.loc[ob_idx['AIRCAR'], 'ZOB'] = np.nan
-    out_df.loc[ob_idx['AIRCFT'], 'ZOB'] = np.nan
+    if 'AIRCAR' in ob_idx.keys():
+        out_df.loc[ob_idx['AIRCAR'], 'ZOB'] = np.nan
+    if 'AIRCFT' in ob_idx.keys():
+        out_df.loc[ob_idx['AIRCFT'], 'ZOB'] = np.nan
 
 # Use (XDR, YDR) for ADPUPA obs rather than (XOB, YOB)
 if use_raob_drift:
@@ -302,6 +305,13 @@ if add_ceiling:
 #---------------------------------------------------------------------------------------------------
 # Create Obs Based on 2-D Fields
 #---------------------------------------------------------------------------------------------------
+
+print()
+print('---------------')
+print('2D Observations')
+print('number of entries = %d' % len(ob_idx['2d']))
+print('---------------')
+print()
 
 start2d = dt.datetime.now()
 
@@ -402,8 +412,10 @@ for j in ob_idx['2d']:
          HRnear = wrf_hr[np.argmin(np.abs(wrf_hr - out_df.loc[j, 'DHR']))]
          out_df.loc[j, 'ceil'] = wrf_data[HRnear][ceil_field][inear, jnear]
 
+ndrop2d = len(drop_idx)
 print()
 print('Done with 2D Obs')
+print('number of dropped obs = %d' % ndrop2d)
 print('time = %s s' % (dt.datetime.now() - start2d).total_seconds())
 print()
 
@@ -415,6 +427,7 @@ print()
 print()
 print('---------------')
 print('3D Observations')
+print('number of entries = %d' % len(ob_idx['3d']))
 print('---------------')
 print()
 
@@ -607,6 +620,7 @@ for o, f in zip(obs_name, wrf_name):
 
 print()
 print('Done with 3D Obs')
+print('number of dropped obs = %d' % (len(drop_idx) - ndrop2d))
 print('time = %s s' % (dt.datetime.now() - start3d).total_seconds())
 print()
 
