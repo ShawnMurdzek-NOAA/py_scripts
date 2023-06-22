@@ -270,10 +270,14 @@ for j, vinterp_d in enumerate(vinterp):
         if o in ob_idx.keys():
             out_df.loc[ob_idx[o], 'vgroup'] = j
 
-# Initialize variables for 3D obs as zeros
-for v in ['QOB', 'TOB', 'ZOB', 'UOB', 'VOB']:
-    rows = np.intersect1d(np.array(ob_idx['3d']), np.where(np.logical_not(np.isnan(out_df[v]))))
-    out_df.loc[rows, v] = 0.
+# Initialize variables (other than vertical coordinate) for 3D obs as zeros
+all_obs = ['QOB', 'TOB', 'ZOB', 'POB', 'UOB', 'VOB']
+for i, vinterp_d in enumerate(vinterp):
+    tmp_obs = all_obs.copy()
+    tmp_obs.remove(vinterp_d['var'])
+    for v in tmp_obs:
+        rows = np.intersect1d(np.where(out_df['vgroup'] == i), np.where(np.logical_not(np.isnan(out_df[v]))))
+        out_df.loc[rows, v] = 0.
 
 # Set all ZOB values to NaN if we don't wish to interpolate ZOBs for AIRCAR and AIRCFT
 if not interp_z_aircft:
@@ -498,6 +502,7 @@ for vg, vinterp_d in enumerate(vinterp):
             # Drop row if ob used for vertical interpolation is missing
             if np.isnan(out_df.loc[j, vinterp_d['var']]):
                 drop_idx.append(j)
+                print('missing var (%s)' % vinterp_d['var']) #DEBUG
                 continue
 
             if debug > 1:
@@ -548,6 +553,8 @@ for vg, vinterp_d in enumerate(vinterp):
                                                                                                itype=vinterp_d['type'])
                 else:
                     drop_idx.append(j)
+                    print('extrapolation (min = %.1f, max = %.1f, val = %.1f, var = %s)' % 
+                          (v1d[:, j].min(), v1d[:, j].max(), out_df.loc[j, vinterp_d['var']], vinterp_d['var'])) #DEBUG
                     continue
 
                 if debug > 1:
@@ -604,10 +611,12 @@ for o, f in zip(obs_name, wrf_name):
                 if debug > 1:
                     time_before_interp = dt.datetime.now()
                 twgt =  out_df.loc[j, 'twgt'] 
+                if o == 'POB': unit_correct = 1e-2
+                else: unit_correct = 1
                 if np.isclose(out_df.loc[j, o], 0):
-                    out_df.loc[j, o] = twgt * cou.interp_x_y_z(wrf3d, out_df.loc[j])
+                    out_df.loc[j, o] = twgt * unit_correct * cou.interp_x_y_z(wrf3d, out_df.loc[j])
                 else:
-                    out_df.loc[j, o] = ((1.-twgt) * cou.interp_x_y_z(wrf3d, out_df.loc[j]) + 
+                    out_df.loc[j, o] = ((1.-twgt) * unit_correct * cou.interp_x_y_z(wrf3d, out_df.loc[j]) + 
                                         out_df.loc[j, o])
                 if debug > 1:
                     time_after_interp = dt.datetime.now()
@@ -640,13 +649,15 @@ out_df.drop(index=drop_idx, inplace=True)
 out_df.reset_index(drop=True, inplace=True)
 bufr_csv.df.drop(index=drop_idx, inplace=True)
 bufr_csv.df.reset_index(drop=True, inplace=True)
-debug_df.drop(index=drop_idx, inplace=True)
-debug_df.reset_index(drop=True, inplace=True)
+#DEBUG
+#debug_df.drop(index=drop_idx, inplace=True)
+#debug_df.reset_index(drop=True, inplace=True)
 
 # Convert to proper units
 out_df['QOB'] = out_df['QOB'] * 1e6
 out_df['TOB'] = out_df['TOB'] - 273.15
 out_df['PWO'] = (out_df['PWO'] / 997.) * 1000.
+out_df['PMO'] = out_df['PMO'] * 1e-2
 out_df['ELV'] = np.int64(out_df['ELV'])
 idx_3d = np.where((out_df['subset'] == 'AIRCAR') | (out_df['subset'] == 'AIRCFT') | 
                   (out_df['subset'] == 'ADPUPA'))[0]

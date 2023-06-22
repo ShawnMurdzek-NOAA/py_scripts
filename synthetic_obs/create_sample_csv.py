@@ -17,16 +17,27 @@ import numpy as np
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/202204291200.rap.prepbufr.csv'
-save_fname = '/scratch1/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/sample_prepbufr.csv'
+fname = '/work2/noaa/wrfruc/murdzek/real_obs/obs_rap_csv/202204300000.rap.prepbufr.csv'
+save_fname = './202204300000.sample.prepbufr.csv'
+
+lat_lim = [39, 47]
+lon_lim = [283, 287]
+dhr_lim = [-1, -0.25]
 
 
 #---------------------------------------------------------------------------------------------------
 # Create Sample PrepBUFR CSV
 #---------------------------------------------------------------------------------------------------
 
-bufr_df = bufr.bufrCSV(fname)
-bufr_df.sample(save_fname, n=20)
+bufr_csv = bufr.bufrCSV(fname)
+cond = ((bufr_csv.df['XOB'] >= lon_lim[0]) & (bufr_csv.df['XOB'] <= lon_lim[1]) &
+        (bufr_csv.df['YOB'] >= lat_lim[0]) & (bufr_csv.df['YOB'] <= lon_lim[1]) &
+        (((bufr_csv.df['DHR'] >= dhr_lim[0]) & (bufr_csv.df['DHR'] <= dhr_lim[1])) |
+         ((bufr_csv.df['HRDR'] >= dhr_lim[0]) & (bufr_csv.df['HRDR'] <= dhr_lim[1]) & 
+          ~np.isnan(bufr_csv.df['HRDR']))))
+out_df = bufr_csv.df.loc[cond]
+
+bufr.df_to_csv(out_df, save_fname)
 
 
 """
