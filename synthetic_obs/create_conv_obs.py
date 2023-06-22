@@ -7,6 +7,9 @@ GPSIPW, ADPUPA, AIRCAR, AIRCFT. Radiosonde drift is NOT accounted for in this pr
 create_adpupa_obs.py to create realistic radiosonde obs with drift included. Obs in this script
 are created used pure interpolation (linear in x, y, and t and logaritmic in p).
 
+To Do:
+1. Better handle unit conversions (e.g., the POB conversion from Pa to hPa is hard coded)
+
 Prepbufr CSV files for real observations can be created using GSI-utils/bin/prepbufr_decode_csv.x.
 To use this utility, do the following:
 
@@ -116,11 +119,18 @@ ceil_field = 'HGT_P0_L215_GLC0'
 #ceil_field = 'CEIL_P0_L215_GLC0'  # Experimental ceiling diagnostic #1
 
 # Option for debugging output (0 = none, 1 = some, 2 = a lot)
-debug = 1
+debug = 2
 
 # Option to interpolate (lat, lon) coordinates for surface obs (ADPSFC, SFCSHP, MSONET)
 # Helpful for debugging, but should usually be set to False b/c it increases runtime
 interp_latlon = False
+
+# Variables to interpolate along with their associated WRF fields
+vars_2d = {'POB':'PRES_P0_L1_GLC0',   'ZOB':'HGT_P0_L1_GLC0',    'TOB':'TMP_P0_L103_GLC0', 
+           'QOB':'SPFH_P0_L103_GLC0', 'PWO':'PWAT_P0_L200_GLC0', 'PMO':'PRMSL_P0_L101_GLC0'}
+vars_2d_3d = {'UOB':'UGRD_P0_L103_GLC0', 'VOB':'VGRD_P0_L103_GLC0'}
+vars_3d = {'POB':'PRES_P0_L105_GLC0', 'ZOB':'HGT_P0_L105_GLC0',  'TOB':'TMP_P0_L105_GLC0', 
+           'QOB':'SPFH_P0_L105_GLC0', 'UOB':'UGRD_P0_L105_GLC0', 'VOB':'VGRD_P0_L105_GLC0'}
 
 # Use passed arguments, if they exist
 if len(sys.argv) > 1:
@@ -271,9 +281,8 @@ for j, vinterp_d in enumerate(vinterp):
             out_df.loc[ob_idx[o], 'vgroup'] = j
 
 # Initialize variables (other than vertical coordinate) for 3D obs as zeros
-all_obs = ['QOB', 'TOB', 'ZOB', 'POB', 'UOB', 'VOB']
 for i, vinterp_d in enumerate(vinterp):
-    tmp_obs = all_obs.copy()
+    tmp_obs = list(vars_3d.keys())
     tmp_obs.remove(vinterp_d['var'])
     for v in tmp_obs:
         rows = np.intersect1d(np.where(out_df['vgroup'] == i), np.where(np.logical_not(np.isnan(out_df[v]))))
@@ -308,6 +317,13 @@ if add_ceiling:
     extra_col_int = extra_col_int + ['inear', 'jnear']
     out_df['ceil'] = np.zeros(nrow) * np.nan
 
+#DEBUG
+print()
+print('ZOB =')
+print(out_df.loc[:10, 'ZOB'])
+print(bufr_csv.df.loc[:10, 'ZOB'])
+print()
+
 
 #---------------------------------------------------------------------------------------------------
 # Create Obs Based on 2-D Fields
@@ -323,21 +339,20 @@ print()
 start2d = dt.datetime.now()
 
 # Extract 2D fields ONLY
-fields2D = ['PRES_P0_L1_GLC0', 'SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'HGT_P0_L1_GLC0', 
-            'PWAT_P0_L200_GLC0', 'PRMSL_P0_L101_GLC0']
+wrf_fields_2d = [vars_2d[k] for k in vars_2d.keys()]
+wrf_fields_2d_3d = [vars_2d_3d[k] for k in vars_2d_3d.keys()]
 if coastline_correct:
-    fields2D = fields2D + ['LAND_P0_L1_GLC0']
+    wrf_fields_2d = wrf_fields_2d + ['LAND_P0_L1_GLC0']
 if interp_latlon:
-    fields2D = fields2D + ['gridlat_0', 'gridlon_0']
+    wrf_fields_2d = wrf_fields_2d + ['gridlat_0', 'gridlon_0']
 if add_ceiling:
-    fields2D = fields2D + [ceil_field]
-fields2D1 = ['UGRD_P0_L103_GLC0', 'VGRD_P0_L103_GLC0']
+    wrf_fields_2d = wrf_fields_2d + [ceil_field]
 wrf_data = {}
 for hr in wrf_hr:
     wrf_data[hr] = {}
-    for f in fields2D:
+    for f in wrf_fields_2d:
         wrf_data[hr][f] = wrf_ds[hr][f][:, :].values
-    for f in fields2D1:
+    for f in wrf_fields_2d_3d:
         wrf_data[hr][f] = wrf_ds[hr][f][0, :, :].values
 
 # Loop over each 2D observation
@@ -370,9 +385,9 @@ for j in ob_idx['2d']:
         landmask = np.ones(4)
 
     # Determine surface height above sea level and surface pressure
-    sfch = cou.interp_x_y_t(wrf_data, wrf_hr, 'HGT_P0_L1_GLC0', out_df.loc[j], ihr, twgt,
+    sfch = cou.interp_x_y_t(wrf_data, wrf_hr, vars_2d['ZOB'], out_df.loc[j], ihr, twgt,
                             mask=landmask)
-    sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, 'PRES_P0_L1_GLC0', out_df.loc[j], ihr, twgt,
+    sfcp = cou.interp_x_y_t(wrf_data, wrf_hr, vars_2d['POB'], out_df.loc[j], ihr, twgt,
                             mask=landmask) * 1e-2
 
     if debug > 1:
@@ -394,9 +409,13 @@ for j in ob_idx['2d']:
                 out_df.loc[j, o] = v
 
     # Interpolate temporally
-    obs_name = ['QOB', 'TOB', 'UOB', 'VOB', 'PWO', 'PMO']
-    wrf_name = ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'UGRD_P0_L103_GLC0', 
-                'VGRD_P0_L103_GLC0', 'PWAT_P0_L200_GLC0', 'PRMSL_P0_L101_GLC0']
+    obs_name = []
+    wrf_name = []
+    for d in [vars_2d, vars_2d_3d]:
+        for o in d.keys():
+            if o not in ['ZOB', 'ELV', 'POB', 'PRSS']:
+                obs_name.append(o)
+                wrf_name.append(d[o])
     if interp_latlon:
         obs_name = obs_name + ['XOB', 'YOB']
         wrf_name = wrf_name + ['gridlon_0', 'gridlat_0']
@@ -440,12 +459,6 @@ print()
 
 start3d = dt.datetime.now()
 
-# Remove data from wrf_data that we don't need so we can free up some memory
-for hr in wrf_hr:
-    for f in ['SPFH_P0_L103_GLC0', 'TMP_P0_L103_GLC0', 'PWAT_P0_L200_GLC0', 'UGRD_P0_L103_GLC0', 
-              'VGRD_P0_L103_GLC0']:
-        del wrf_data[hr][f]
-
 # Create array to save v1d arrays (vertical coordinate)
 v1d = np.zeros([model_nz, len(out_df)])
 vdone = np.zeros(len(out_df), dtype=int)
@@ -460,6 +473,13 @@ vdone = np.zeros(len(out_df), dtype=int)
 # the dataset will have to be queried for each BUFR entry and each variable, which is time 
 # consuming. Tests comparing the use of Xarray datasets to regular Numpy arrays show that the
 # Numpy array approach is ~23x faster.
+
+#DEBUG
+print()
+print('ZOB =')
+print(out_df.loc[:10, 'ZOB'])
+print(bufr_csv.df.loc[:10, 'ZOB'])
+print()
 
 # Loop over each vertical coordinate first to get weights for vertical interpolation
 for vg, vinterp_d in enumerate(vinterp):
@@ -502,7 +522,6 @@ for vg, vinterp_d in enumerate(vinterp):
             # Drop row if ob used for vertical interpolation is missing
             if np.isnan(out_df.loc[j, vinterp_d['var']]):
                 drop_idx.append(j)
-                print('missing var (%s)' % vinterp_d['var']) #DEBUG
                 continue
 
             if debug > 1:
@@ -540,6 +559,10 @@ for vg, vinterp_d in enumerate(vinterp):
                     entry_timesv2.append((dt.datetime.now() - time_jstart).total_seconds())
 
             if vdone[j]: 
+                #DEBUG
+                print()
+                print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB'])
+                print('bufr_csv.df[ZOB] = %.1f' % bufr_csv.df.loc[j, 'ZOB'])
                 # Check for extrapolation
                 if ((v1d[:, j].min() < out_df.loc[j, vinterp_d['var']]) and 
                     (v1d[:, j].max() > out_df.loc[j, vinterp_d['var']])):
@@ -549,12 +572,18 @@ for vg, vinterp_d in enumerate(vinterp):
                         out_df.loc[j, 'ki0'] = np.where(v1d[:, j] > out_df.loc[j, vinterp_d['var']])[0][-1]
                     if debug > 1:
                         print('ki0 = %d' % out_df.loc[j, 'ki0'])
+                        print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB']) #DEBUG
+                        print('out_df[vinterp_d[var]] = %.1f' % out_df.loc[j, vinterp_d['var']]) #DEBUG
                     out_df.loc[j, vinterp_d['var']], out_df.loc[j, 'kwgt'] = cou.interp_wrf_1d(v1d[:, j], out_df.loc[j],
+                                                                                               var=vinterp_d['var'],
                                                                                                itype=vinterp_d['type'])
+                    #DEBUG
+                    print('v1d =', v1d[out_df.loc[j, 'ki0']:out_df.loc[j, 'ki0']+2, j])
+                    print('itype = %s' % vinterp_d['type'])
+                    print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB'])
+                    print('bufr_csv.df[ZOB] = %.1f' % bufr_csv.df.loc[j, 'ZOB'])
                 else:
                     drop_idx.append(j)
-                    print('extrapolation (min = %.1f, max = %.1f, val = %.1f, var = %s)' % 
-                          (v1d[:, j].min(), v1d[:, j].max(), out_df.loc[j, vinterp_d['var']], vinterp_d['var'])) #DEBUG
                     continue
 
                 if debug > 1:
@@ -565,10 +594,7 @@ for vg, vinterp_d in enumerate(vinterp):
         wrf3d = 0.
 
 # Loop over each variable
-obs_name = ['POB', 'TOB', 'QOB', 'ZOB', 'UOB', 'VOB']
-wrf_name = ['PRES_P0_L105_GLC0', 'TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 
-            'HGT_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_P0_L105_GLC0']
-for o, f in zip(obs_name, wrf_name):
+for o in vars_3d:
 
     # Loop over each WRF time
     for hr in wrf_hr: 
@@ -589,9 +615,9 @@ for o, f in zip(obs_name, wrf_name):
         # Extract field from UPP
         if debug > 0:
             time_3d = dt.datetime.now()
-        wrf3d = wrf_ds[hr][f][:, :, :].values
+        wrf3d = wrf_ds[hr][vars_3d[o]][:, :, :].values
         if debug > 0:
-            print('time to extract %s = %.6f s' % (f, (dt.datetime.now() - time_3d).total_seconds()))
+            print('time to extract %s = %.6f s' % (vars_3d[o], (dt.datetime.now() - time_3d).total_seconds()))
             for l in os.popen('free -t -m -h').readlines():
                 print(l)
             print()
@@ -649,9 +675,8 @@ out_df.drop(index=drop_idx, inplace=True)
 out_df.reset_index(drop=True, inplace=True)
 bufr_csv.df.drop(index=drop_idx, inplace=True)
 bufr_csv.df.reset_index(drop=True, inplace=True)
-#DEBUG
-#debug_df.drop(index=drop_idx, inplace=True)
-#debug_df.reset_index(drop=True, inplace=True)
+debug_df.drop(index=drop_idx, inplace=True)
+debug_df.reset_index(drop=True, inplace=True)
 
 # Convert to proper units
 out_df['QOB'] = out_df['QOB'] * 1e6
