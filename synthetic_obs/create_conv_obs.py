@@ -76,7 +76,7 @@ vinterp = [{'subset':['ADPUPA', 'AIRCAR', 'AIRCFT'], 'var':'POB', 'type':'log',
             'model_field':'HGT_P0_L105_GLC0', 'conversion':1, 'ascend':True}]
 
 # Output directory for synthetic prepbufr CSV output
-fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/conv/'
+#fake_bufr_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/sfc_stat_obs_csv/conv/'
 fake_bufr_dir = './'
 
 # PrepBUFR time
@@ -317,13 +317,6 @@ if add_ceiling:
     extra_col_int = extra_col_int + ['inear', 'jnear']
     out_df['ceil'] = np.zeros(nrow) * np.nan
 
-#DEBUG
-print()
-print('ZOB =')
-print(out_df.loc[:10, 'ZOB'])
-print(bufr_csv.df.loc[:10, 'ZOB'])
-print()
-
 
 #---------------------------------------------------------------------------------------------------
 # Create Obs Based on 2-D Fields
@@ -474,13 +467,6 @@ vdone = np.zeros(len(out_df), dtype=int)
 # consuming. Tests comparing the use of Xarray datasets to regular Numpy arrays show that the
 # Numpy array approach is ~23x faster.
 
-#DEBUG
-print()
-print('ZOB =')
-print(out_df.loc[:10, 'ZOB'])
-print(bufr_csv.df.loc[:10, 'ZOB'])
-print()
-
 # Loop over each vertical coordinate first to get weights for vertical interpolation
 for vg, vinterp_d in enumerate(vinterp):
     for hr in wrf_hr: 
@@ -559,10 +545,6 @@ for vg, vinterp_d in enumerate(vinterp):
                     entry_timesv2.append((dt.datetime.now() - time_jstart).total_seconds())
 
             if vdone[j]: 
-                #DEBUG
-                print()
-                print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB'])
-                print('bufr_csv.df[ZOB] = %.1f' % bufr_csv.df.loc[j, 'ZOB'])
                 # Check for extrapolation
                 if ((v1d[:, j].min() < out_df.loc[j, vinterp_d['var']]) and 
                     (v1d[:, j].max() > out_df.loc[j, vinterp_d['var']])):
@@ -572,16 +554,9 @@ for vg, vinterp_d in enumerate(vinterp):
                         out_df.loc[j, 'ki0'] = np.where(v1d[:, j] > out_df.loc[j, vinterp_d['var']])[0][-1]
                     if debug > 1:
                         print('ki0 = %d' % out_df.loc[j, 'ki0'])
-                        print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB']) #DEBUG
-                        print('out_df[vinterp_d[var]] = %.1f' % out_df.loc[j, vinterp_d['var']]) #DEBUG
                     out_df.loc[j, vinterp_d['var']], out_df.loc[j, 'kwgt'] = cou.interp_wrf_1d(v1d[:, j], out_df.loc[j],
                                                                                                var=vinterp_d['var'],
                                                                                                itype=vinterp_d['type'])
-                    #DEBUG
-                    print('v1d =', v1d[out_df.loc[j, 'ki0']:out_df.loc[j, 'ki0']+2, j])
-                    print('itype = %s' % vinterp_d['type'])
-                    print('out_df[ZOB] = %.1f' % out_df.loc[j, 'ZOB'])
-                    print('bufr_csv.df[ZOB] = %.1f' % bufr_csv.df.loc[j, 'ZOB'])
                 else:
                     drop_idx.append(j)
                     continue
