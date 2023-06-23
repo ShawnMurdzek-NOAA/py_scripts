@@ -280,13 +280,14 @@ for j, vinterp_d in enumerate(vinterp):
         if o in ob_idx.keys():
             out_df.loc[ob_idx[o], 'vgroup'] = j
 
-# Initialize variables (other than vertical coordinate) for 3D obs as zeros
+# Initialize variables (other than vertical coordinate) for 3D obs as 1e9 (note that this is 
+# different from NaN, which is used for missing values)
 for i, vinterp_d in enumerate(vinterp):
     tmp_obs = list(vars_3d.keys())
     tmp_obs.remove(vinterp_d['var'])
     for v in tmp_obs:
         rows = np.intersect1d(np.where(out_df['vgroup'] == i), np.where(np.logical_not(np.isnan(out_df[v]))))
-        out_df.loc[rows, v] = 0.
+        out_df.loc[rows, v] = 1e9
 
 # Set all ZOB values to NaN if we don't wish to interpolate ZOBs for AIRCAR and AIRCFT
 if not interp_z_aircft:
@@ -453,7 +454,7 @@ print()
 start3d = dt.datetime.now()
 
 # Create array to save v1d arrays (vertical coordinate)
-v1d = np.zeros([model_nz, len(out_df)])
+v1d = np.ones([model_nz, len(out_df)]) * 1e9
 vdone = np.zeros(len(out_df), dtype=int)
 
 # We will extract 3D fields one at a time b/c these 3D arrays are massive (~6.5 GB each), so it 
@@ -515,7 +516,7 @@ for vg, vinterp_d in enumerate(vinterp):
                 print()
 
             # First half of vertical coordinate calculation
-            if np.isclose(v1d[0, j], 0.):         
+            if np.isclose(v1d[0, j], 1e9):         
 
                 # Determine weight for temporal interpolation
                 ihr, twgt = cou.determine_twgt(wrf_hr, out_df.loc[j, 'DHR'])
@@ -584,7 +585,7 @@ for o in vars_3d:
             continue
 
         print()
-        print('3D Interp: %s' % f)
+        print('3D Interp: %s' % vars_3d[o])
         print()
 
         # Extract field from UPP
@@ -614,7 +615,7 @@ for o in vars_3d:
                 twgt =  out_df.loc[j, 'twgt'] 
                 if o == 'POB': unit_correct = 1e-2
                 else: unit_correct = 1
-                if np.isclose(out_df.loc[j, o], 0):
+                if np.isclose(out_df.loc[j, o], 1e9):
                     out_df.loc[j, o] = twgt * unit_correct * cou.interp_x_y_z(wrf3d, out_df.loc[j])
                 else:
                     out_df.loc[j, o] = ((1.-twgt) * unit_correct * cou.interp_x_y_z(wrf3d, out_df.loc[j]) + 
