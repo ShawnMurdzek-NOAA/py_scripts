@@ -1,18 +1,17 @@
 #!/bin/sh
 
 #SBATCH -A wrfruc
-#SBATCH -t 03:00:00
+#SBATCH -t 08:00:00
 #SBATCH --nodes=1 --ntasks=1
-#SBATCH --mem=25GB
+#SBATCH --mem=30GB
 #SBATCH --partition=orion
 
 date
 . ~/.bashrc
-pygraf
-#adb_graphics
+my_py
 
-python create_adpupa_obs.py
-#python create_conv_obs.py
+which python
+python create_conv_obs.py
 
 report-mem
 date

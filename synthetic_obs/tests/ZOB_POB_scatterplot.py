@@ -23,10 +23,10 @@ import bufr
 #---------------------------------------------------------------------------------------------------
 
 # BUFR CSV file name
-fname = '/mnt/lfs4/BMC/wrfruc/murdzek/sample_real_obs/obs_rap/202204291200.rap.prepbufr.csv'
+fname = '/work2/noaa/wrfruc/murdzek/src/GSI-utils/bin/prepbufr.csv'
 
 # Observation subsets to plot. Each will get its own subplot
-subsets = ['AIRCAR', 'AIRCFT', 'ADPUPA']
+subsets = ['AIRCAR', 'AIRCFT', 'ADPUPA', 'VADWND', 'RASSDA', 'PROFLR']
 
 # Variables to plot in the scatterplot
 var1 = 'ZOB'
@@ -69,6 +69,7 @@ for i, s in enumerate(subsets):
         ax.set_ylim([1100, 100])
 
 plt.savefig(out_fname)
+plt.show()
 plt.close()
 
 
