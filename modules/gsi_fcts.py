@@ -147,6 +147,41 @@ def read_diag(fnames):
     return diag_out
 
 
+def gsi_flags_table(diag_df, field='Prep_Use_Flag'):
+    """
+    Returns a DataFrame detailing the number of obs that have a certain flag (e.g., Prep_Use_Flag)
+
+    Parameters
+    ----------
+    diag_df : pd.DataFrame
+        GSI diag DataFrame (created by read_diag)
+    field : string, optional
+        Field with the GSI flags
+
+    Returns
+    -------
+    flag_df : pd.DataFrame
+        DataFrame with the number of obs that have a certain flag
+
+    """
+    
+    tmp_dict = {'Observation_Class':[], 'Observation_Type':[], field:[], 'Ob_Count':[], 
+                'n_used_in_anl':[]}
+    for typ in diag_df['Observation_Type'].unique():
+        typ_df = diag_df.loc[diag_df['Observation_Type'] == typ]
+        for flag in typ_df[field].unique():
+            tmp_dict['Observation_Class'].append(typ_df['Observation_Class'].values[0])
+            tmp_dict['Observation_Type'].append(typ)
+            tmp_dict[field].append(flag)
+            tmp_dict['Ob_Count'].append(np.sum(typ_df[field] == flag))
+            tmp_dict['n_used_in_anl'].append(np.sum(typ_df.loc[typ_df[field] == flag]['Analysis_Use_Flag'] == 1))
+
+    flag_df = pd.DataFrame(tmp_dict)
+    flag_df.sort_values('Observation_Type', inplace=True)
+
+    return flag_df
+
+
 """
-End gsi.py
+End gsi_fcts.py
 """
