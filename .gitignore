@@ -20,3 +20,6 @@ core*
 
 # Ignore database files from Rocoto
 *.db
+
+# Pycache
+./modules/__pycache__
