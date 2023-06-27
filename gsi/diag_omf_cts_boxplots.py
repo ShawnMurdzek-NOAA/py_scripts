@@ -24,11 +24,11 @@ import pyDA_utils.gsi_fcts as gsi
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can 1 or 2 datasets. Key is the name of the dataset
-omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s_spinup/diag_conv_ps_ges.%s.nc4'
-oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s_spinup/diag_conv_ps_anl.%s.nc4'
-omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s_spinup/diag_conv_ps_ges.%s.nc4'
-oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s_spinup/diag_conv_ps_anl.%s.nc4'
-dates = [dt.datetime(2022, 2, 1, 3) + dt.timedelta(hours=i) for i in range(2)]
+omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
+oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
+omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
+oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(4)]
 
 omb_fnames = {}
 oma_fnames = {}
@@ -38,7 +38,7 @@ omb_fnames['OSSE'] = [omb_tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H'), d
 oma_fnames['OSSE'] = [oma_tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
 
 # Variable to plot (only necessary for the uv diag files)
-omf_var = 'v'
+omf_var = 'u'
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
 data_subset = 'assim'
