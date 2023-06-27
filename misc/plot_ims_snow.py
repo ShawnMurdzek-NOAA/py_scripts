@@ -14,7 +14,8 @@ import xarray as xr
 import datetime as dt
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
-import plot_model_data as pmd
+
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------

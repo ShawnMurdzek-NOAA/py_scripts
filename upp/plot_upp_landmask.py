@@ -16,7 +16,7 @@ import matplotlib.cm as mcm
 import xarray as xr
 import cartopy.feature as cfeature
 
-import plot_model_data as pmd
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------

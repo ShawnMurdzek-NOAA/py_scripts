@@ -10,10 +10,11 @@ Date Created: 8 February 2023
 #---------------------------------------------------------------------------------------------------
 
 import xarray as xr
-import plot_model_data as pmd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.cm as mcm
+
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------

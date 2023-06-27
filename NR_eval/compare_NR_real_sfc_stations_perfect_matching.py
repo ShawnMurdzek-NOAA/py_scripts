@@ -16,7 +16,6 @@ Date Created: 11 April 2023
 #---------------------------------------------------------------------------------------------------
 
 import numpy as np
-import bufr
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime as dt
@@ -24,6 +23,8 @@ import metpy.constants as const
 import metpy.calc as mc
 from metpy.units import units
 import scipy.stats as ss
+
+import pyDA_utils.bufr as bufr
 
 
 #---------------------------------------------------------------------------------------------------

@@ -24,7 +24,8 @@ import xarray as xr
 import numpy as np
 import scipy.interpolate as si
 import datetime as dt
-import map_proj as mp
+
+import pyDA_utils.map_proj as mp
 
 
 #---------------------------------------------------------------------------------------------------

@@ -16,7 +16,7 @@ import matplotlib.cm as mcm
 from matplotlib.backends.backend_pdf import PdfPages
 import xarray as xr
 
-import plot_model_data as pmd
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------

@@ -10,10 +10,11 @@ Date Created: 19 May 2023
 #---------------------------------------------------------------------------------------------------
 
 import xarray as xr
-import gsi_fcts as gsi
 import pandas as pd
 import numpy as np
 import glob
+
+import pyDA_utils.gsi_fcts as gsi
 
 
 #---------------------------------------------------------------------------------------------------

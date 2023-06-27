@@ -12,8 +12,9 @@ Date Created: 18 May 2023
 import xarray as xr
 import numpy as np
 import pandas as pd
-import gsi_fcts as gsi
 import datetime as dt
+
+import pyDA_utils.gsi_fcts as gsi
 
 
 #---------------------------------------------------------------------------------------------------

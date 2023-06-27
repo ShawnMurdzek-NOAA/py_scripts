@@ -13,13 +13,13 @@ Date Created: 11 April 2023
 #---------------------------------------------------------------------------------------------------
 
 import glob
-import bufr
 import pandas as pd
 import numpy as np
 import datetime as dt
-
 import metpy.calc as mc
 from metpy.units import units
+
+import pyDA_utils.bufr as bufr
 
 
 #---------------------------------------------------------------------------------------------------

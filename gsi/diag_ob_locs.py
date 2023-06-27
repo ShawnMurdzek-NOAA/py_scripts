@@ -14,10 +14,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
-import gsi_fcts as gsi
-
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+
+import pyDA_utils.gsi_fcts as gsi
 
 
 #---------------------------------------------------------------------------------------------------

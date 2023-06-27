@@ -17,7 +17,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 import xarray as xr
 import cartopy.feature as cfeature
 
-import plot_model_data as pmd
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------

@@ -12,11 +12,12 @@ Date Created: 8 December 2022
 #---------------------------------------------------------------------------------------------------
 
 import matplotlib.pyplot as plt
-import plot_model_data as pmd
 import numpy as np
 import os
 import datetime as dt
 import netCDF4 as nc
+
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------
