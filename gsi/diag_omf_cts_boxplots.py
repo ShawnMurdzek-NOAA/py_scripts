@@ -24,11 +24,11 @@ import pyDA_utils.gsi_fcts as gsi
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can 1 or 2 datasets. Key is the name of the dataset
-omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
-oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
-omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
-oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(4)]
+omb_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_ps_ges.%s.nc4'
+oma_tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_ps_anl.%s.nc4'
+omb_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_ps_ges.%s.nc4'
+oma_tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_ps_anl.%s.nc4'
+dates = [dt.datetime(2022, 2, 1, 10) + dt.timedelta(hours=i) for i in range(1)]
 
 omb_fnames = {}
 oma_fnames = {}
@@ -41,7 +41,11 @@ oma_fnames['OSSE'] = [oma_tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H'), d
 omf_var = 'u'
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
-data_subset = 'assim'
+data_subset = 'all'
+
+# GSD sfcobs uselist file. Used to add the provider string for mesonet obs. Set to None to not 
+# use this feature
+sfcobs_uselist = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/stmp/2022020103/anal_conv_gsi_spinup/gsd_sfcobs_uselist.txt'
 
 # Output directory and string to add to output file names
 out_dir = './'
@@ -64,8 +68,8 @@ omf_df = {}
 for key in data_names:
     print('Dataset = %s' % key)
     omf_df[key] = {}
-    omf_df[key]['omb'] = gsi.read_diag(omb_fnames[key])
-    omf_df[key]['oma'] = gsi.read_diag(oma_fnames[key])
+    omf_df[key]['omb'] = gsi.read_diag(omb_fnames[key], mesonet_uselist=sfcobs_uselist)
+    omf_df[key]['oma'] = gsi.read_diag(oma_fnames[key], mesonet_uselist=sfcobs_uselist)
 omf_dates = np.unique(omf_df[data_names[0]]['omb']['date_time'])
 
 # Create list of ob types
