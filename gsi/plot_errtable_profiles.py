@@ -14,6 +14,7 @@ shawn.s.murdzek@noaa.gov
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
+import matplotlib.cm as cm
 
 import pyDA_utils.gsi_fcts as gsi
 
@@ -22,17 +23,20 @@ import pyDA_utils.gsi_fcts as gsi
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-etable_std_fnames = ['/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs',
-                     '/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable.tmp',
-                     '/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_72hr.tmp']
-etable_mean_fnames = ['/work2/noaa/wrfruc/murdzek/real_obs/errtable_mean.rrfs',
-                      '/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean.tmp',
-                      '/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean_72hr.tmp']
-etable_labels = ['original', '7 days', '3 days']
-etable_colors = ['k', 'b', 'r']
-etable_linestyles = ['-', '-', '--']
+etable_std_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'] + 
+                     ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_%dday.tmp' % i for i in range(1, 7)] +
+                     ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable.tmp'])
+etable_mean_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'] + 
+                      ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean_%dday.tmp' % i for i in range(1, 7)] +
+                      ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean.tmp'])
+etable_labels = ['original'] + ['%d day' % i for i in range(1, 8)]
+etable_colors = ['k'] + [cm.plasma(i / (len(etable_std_fnames) - 1)) for i in range(1, 8)]
+etable_linestyles = ['--'] + ['-'] * (len(etable_std_fnames) - 1)
 
 out_fname = './errtable_profiles.pdf'
+
+# Select observation types to save as PNGs
+ob_pngs = [120, 133, 180, 187, 188, 220, 233, 280, 287, 288]
 
 
 #---------------------------------------------------------------------------------------------------
@@ -71,16 +75,22 @@ for typ in err_df['std'][etable_labels[0]].keys():
         for label, c, ls in zip(etable_labels, etable_colors, etable_linestyles):
             for stat in ['std']:
                 ax.plot(err_df[stat][label][typ][e], err_df[stat][label][typ]['prs'], c=c, ls=ls,
-                        label=label)
+                        label=label, lw=2)
         ax.legend()
         ax.grid()
         ax.set_yscale('log')
-        ax.set_ylim([1100, 10])
+        if typ in (list(range(180, 200)) + list(range(280, 300))):
+            ax.set_ylim([1100, 650])
+        else:
+            ax.set_ylim([1100, 10])
         ax.set_xlabel(e, size=14)
         ax.set_xlim(left=0)
     plt.suptitle('Type = %d' % typ, size=20)
     for j in range(2):
         axes[j, 0].set_ylabel('pressure (mb)', size=14)        
+
+    if typ in ob_pngs:
+        plt.savefig('ob%d_errtable_profiles.png' % typ)
 
     pdf.savefig(fig)
     plt.close(fig)
