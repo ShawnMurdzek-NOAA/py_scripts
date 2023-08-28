@@ -99,7 +99,6 @@ print()
 print('---------------')
 print('Making plots...')
 pdf = PdfPages(out_fname)
-ob_types = [120] # SSM DEBUG
 for typ in ob_types:
 
     print(typ)
@@ -108,8 +107,7 @@ for typ in ob_types:
         ncols = 4
         fig, axes = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8), sharey=True)
         plt.subplots_adjust(left=0.07, bottom=0.08, right=0.98, top=0.92)
-        #gsi_vars = ['t', 'q', 'pw', 'ps']
-        gsi_vars = ['t'] # SSM DEBUG
+        gsi_vars = ['t', 'q', 'pw', 'ps']
         err_vars = ['Terr', 'RHerr', 'PWerr', 'PSerr']
     elif typ > 200:
         ncols = 2
