@@ -25,8 +25,8 @@ import pyDA_utils.gsi_fcts as gsi
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can have 1 or 2 datasets. Key is the name of the dataset
 tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
+tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_perfect/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(24)]
 
 path_tmpl = {}
 path_tmpl['real'] = [tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
