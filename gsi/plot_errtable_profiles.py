@@ -23,12 +23,10 @@ import pyDA_utils.gsi_fcts as gsi
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-etable_std_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'] + 
-                     ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_%dday.tmp' % i for i in range(1, 7)] +
-                     ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable.tmp'])
-etable_mean_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtable.rrfs'] + 
-                      ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean_%dday.tmp' % i for i in range(1, 7)] +
-                      ['/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_mean.tmp'])
+etable_std_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtables/errtable.rrfs'] + 
+                     ['/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter/errtable.1st_iter.%dday' % i for i in range(1, 8)])
+etable_mean_fname = []
+
 etable_labels = ['original'] + ['%d day' % i for i in range(1, 8)]
 etable_colors = ['k'] + [cm.plasma(i / (len(etable_std_fnames) - 1)) for i in range(1, 8)]
 etable_linestyles = ['--'] + ['-'] * (len(etable_std_fnames) - 1)

@@ -27,24 +27,21 @@ import pyDA_utils.gsi_fcts as gsi
 # GSI diag files
 tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
 tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_perfect/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(24)]
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
 gsi_inputs = {'real': {'dirs':[tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates],
                        'c':'b'},
               'OSSE': {'dirs':[tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates],
                        'c':'r'}}
 
 # Error tables (for variances, not means)
-etable_inputs = {'1 day (new)': {'fname':'/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_1day.tmp',
-                                 'c':'c',
-                                 'ls':':'},
-                 '1 day (old)': {'fname':'/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/utils/errtable_1day.tmp.OLD',
-                                 'c':'k',
-                                 'ls':'--'}}
+etable_inputs = {'7 day': {'fname':'/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter/errtable.1st_iter.7day',
+                           'c':'c',
+                           'ls':':'}}
 
 # Option to plot the difference in the O-B variances for the first two GSI diag files
 plot_diff = True
 
-out_fname = './omb_errtable_profiles_TEST.pdf'
+out_fname = './omb_errtable_profiles_1st_iter_7day.pdf'
 
 # Select observation types to save as PNGs
 ob_pngs = []
@@ -156,11 +153,11 @@ for typ in ob_types:
 
             if plot_diff:
                 if key == list(omb_df.keys())[0]:
-                    diff = omb_var['all']
+                    diff = omb_var['qc<3']
                 elif key == list(omb_df.keys())[1]:
-                    diff = diff - omb_var['all']
+                    diff = diff - omb_var['qc<3']
                     ax_omb.plot(diff, prs_ctr[:-1], c='gray', ls='--', 
-                                label='diff (all)')
+                                label='diff (qc<3)')
 
             for label, ls in zip(['all', 'assim', 'qc<3'], ['-', '--', ':']):
                 for ax, data in zip([ax_omb, ax_cts], [omb_var[label], omb_cts[label]]):
