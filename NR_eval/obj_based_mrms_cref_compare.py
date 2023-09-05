@@ -51,7 +51,7 @@ eval_times = ['0000', '0600', '1200', '1800']
 domain = 'all'
 
 # Reflectivity contour used to define objects (dBZ)
-ref_thres = 25
+ref_thres = 30
 
 # Minimum reflectivity object size (number of 1 X 1 km^2 gridboxes)
 min_size = 9
@@ -71,6 +71,8 @@ out_file = './NR_cref_obj_%sdbz_%sminsize_%s_winter.png' % (ref_thres, min_size,
 #---------------------------------------------------------------------------------------------------
 # Extract Data and Create Objects
 #---------------------------------------------------------------------------------------------------
+
+start_time = dt.datetime.now()
 
 # Define necessary variables for each input field
 if model == 'NR':
@@ -181,12 +183,25 @@ for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
 
         hhmm = t.strftime('%H%M')
         MRMS_data = MRMS_mask * ds[MRMS_var].values
-        MRMS_data_labeled, nlabels = sn.label(MRMS_data >= ref_thres)
-        for label in range(1, nlabels):
-            size = np.sum(MRMS_data_labeled == label)
-            if size >= min_size:
-                MRMS_obj[hhmm]['size'][i].append(size)
-                MRMS_obj[hhmm]['max_dbz'][i].append(np.amax(MRMS_data * (MRMS_data_labeled == label)))
+        MRMS_data_bool = (MRMS_data >= ref_thres)
+        MRMS_data_labeled, nlabels = sn.label(MRMS_data_bool)
+
+        MRMS_obj_labels_all = np.unique(MRMS_data_labeled)[1:]
+        MRMS_obj_size_all = sn.sum_labels(MRMS_data_bool, MRMS_data_labeled, 
+                                          MRMS_obj_labels_all)
+        MRMS_obj_mask = (MRMS_obj_size_all >= min_size)
+        MRMS_obj_labels = MRMS_obj_labels_all[MRMS_obj_mask]
+        MRMS_obj_size = MRMS_obj_size_all[MRMS_obj_mask]
+        MRMS_obj_max_dbz = sn.maximum(MRMS_data, MRMS_data_labeled, MRMS_obj_labels)
+        MRMS_obj[hhmm]['size'][i] = MRMS_obj[hhmm]['size'][i] + list(MRMS_obj_size)
+        MRMS_obj[hhmm]['max_dbz'][i] = MRMS_obj[hhmm]['max_dbz'][i] + list(MRMS_obj_max_dbz)
+        
+        # OLD CODE. Was used instead of the code block above.
+        #for label in range(1, nlabels):
+        #    size = np.sum(MRMS_data_labeled == label)
+        #    if size >= min_size:
+        #        MRMS_obj[hhmm]['size'][i].append(size)
+        #        MRMS_obj[hhmm]['max_dbz'][i].append(np.amax(MRMS_data * (MRMS_data_labeled == label)))
 
 
 #---------------------------------------------------------------------------------------------------
@@ -250,6 +265,8 @@ plt.suptitle('Reflectivity Objects ($Z_{thres}$ = %.1f dBZ, min size = %d gridbo
              (ref_thres, min_size), size=18)
 plt.savefig(out_file)
 plt.close()
+
+print('elapsed time = %.2f min' % ((dt.datetime.now() - start_time).total_seconds() / 60))
 
 
 """
