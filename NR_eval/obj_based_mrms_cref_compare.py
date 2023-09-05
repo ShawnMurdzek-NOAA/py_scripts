@@ -26,11 +26,13 @@ import glob
 model = 'NR'
 
 # Dates to use
-eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
+#eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
+eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(9)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':
-    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
+    #NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
+    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
 elif model == 'HRRR':
     NR_path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
 
@@ -38,7 +40,7 @@ elif model == 'HRRR':
 MRMS_path = '/work2/noaa/wrfruc/murdzek/real_obs/mrms'
 
 # MRMS years to use
-MRMS_years = np.arange(2016, 2024)
+MRMS_years = np.arange(2015, 2024)
 
 # Option to use days from MRMS before and after eval_dates. Offsets here are days relative to the 
 # first date in eval_dates
@@ -65,7 +67,7 @@ elif model == 'HRRR':
 MRMS_mask_file = './MRMS_mask.npy'
 
 # Output file
-out_file = './NR_cref_obj_%sdbz_%sminsize_%s_winter.png' % (ref_thres, min_size, domain)
+out_file = './NR_cref_obj_%sdbz_%sminsize_%s_spring.png' % (ref_thres, min_size, domain)
 
 
 #---------------------------------------------------------------------------------------------------
@@ -231,7 +233,7 @@ for i, t in enumerate(eval_times):
     # Second and third subplots: Histograms
     for j, (var, xlabel, bins, xscale) in enumerate(zip(['size', 'max_dbz'], 
                                                         ['object size (gridboxes)', 'max reflectivity (dBZ)'],
-                                                        [np.linspace(4, 5000, 200), np.arange(25, 85, 5)],
+                                                        [np.linspace(min_size, 1000, 200), np.arange(ref_thres, 85, 5)],
                                                         ['log', 'linear'])):
         ax = axes[j+1, i]
         bin_ctrs = 0.5 * (bins[1:] + bins[:-1])
