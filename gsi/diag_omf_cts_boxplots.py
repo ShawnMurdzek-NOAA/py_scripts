@@ -23,14 +23,18 @@ import pyDA_utils.gsi_fcts as gsi
 #---------------------------------------------------------------------------------------------------
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
-# Can have 1 or 2 datasets. Key is the name of the dataset
+# Can have any number of datasets. Key is the name of the dataset
 tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
 tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_perfect/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(24)]
+tmpl_osse2 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_tuning/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+tmpl_osse3 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_whitenoise/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(2*24)]
 
 path_tmpl = {}
 path_tmpl['real'] = [tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-path_tmpl['OSSE'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+path_tmpl['perfect'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+path_tmpl['corr_errors'] = [tmpl_osse2 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+path_tmpl['uncorr_errors'] = [tmpl_osse3 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
 
 # Variables to plot
 omf_vars = ['t', 'q', 'u', 'v', 'pw', 'ps']
@@ -45,7 +49,7 @@ sfcobs_uselist = None
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = ''
+out_str = 'all'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -109,13 +113,13 @@ for var in omf_vars:
     # Plot data 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(12, 9), sharey=True)
     ylocs = np.arange(len(ob_typ))
-    bar_hgt = 0.38
-    if len(data_names) == 1:
-        offsets = [0]
-        colors = ['b']
-    elif len(data_names) == 2:
-        offsets = [bar_hgt / 2, -bar_hgt / 2]
-        colors = ['b', 'r']
+    nsims = len(data_names)
+    bar_hgt = 0.8 / nsims
+    colors = ['b', 'r', 'c', 'g']
+    if (nsims % 2) == 0:
+        offsets = bar_hgt * np.arange(-(nsims-1), nsims, 2)  / 2.
+    else:
+        offsets = bar_hgt * np.arange(-int(nsims / 2), int(nsims / 2) + 0.5)
     for key, off, c in zip(data_names, offsets, colors):
         for j, (n_name, xlabel) in enumerate(zip(['n_obs', 'n_assim'], ['# obs', '# assimilated'])):
             ax = axes[j]
