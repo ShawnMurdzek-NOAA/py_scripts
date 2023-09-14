@@ -28,13 +28,13 @@ tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter/NCO_dirs/
 tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_perfect/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
 tmpl_osse2 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_tuning/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
 tmpl_osse3 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_whitenoise/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(2*24)]
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(4*24)]
 
 path_tmpl = {}
 path_tmpl['real'] = [tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
 path_tmpl['perfect'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
 path_tmpl['corr_errors'] = [tmpl_osse2 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-path_tmpl['uncorr_errors'] = [tmpl_osse3 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+#path_tmpl['uncorr_errors'] = [tmpl_osse3 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
 
 # Variables to plot
 omf_vars = ['t', 'q', 'u', 'v', 'pw', 'ps']
@@ -47,9 +47,17 @@ data_subset = 'assim'
 #sfcobs_uselist = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter_DEBUG/NCO_dirs/stmp/2022020103/anal_conv_gsi_spinup/gsd_sfcobs_uselist.txt'
 sfcobs_uselist = None
 
+# Option to group observation classes into larger subsets
+use_subsets = False
+ob_subsets = {'raob':[120, 122, 132, 220, 221, 222],
+              'aircft':[130, 131, 133, 134, 135, 230, 231, 232, 233, 234, 235],
+              'sfc':[180, 181, 182, 183, 187, 188, 192, 193, 194, 195, 280, 281, 282, 284, 287, 
+                     288, 292, 293, 294, 295],
+              'gps':[153]}
+
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'all'
+out_str = ''
 
 
 #---------------------------------------------------------------------------------------------------
@@ -83,24 +91,40 @@ for var in omf_vars:
                               for path, d in zip(path_tmpl[key], dates)]
             omf_df[key][key2] = gsi.read_diag(tmp_fnames, mesonet_uselist=sfcobs_uselist)
     omf_dates = np.unique(omf_df[data_names[0]]['omb']['date_time'])
-
+    
     # Create list of ob types
     ob_typ = np.unique(omf_df[data_names[0]]['omb']['Observation_Type'].values)
     if len(data_names) > 1:
         for key in data_names[1:]:
             ob_typ = np.unique(np.concatenate([ob_typ, omf_df[key]['omb']['Observation_Type'].values]))
+    ob_groups = ob_typ    
+
+    # Create column for ob subsets
+    if use_subsets:
+        for key in data_names:
+            for omf in ['oma', 'omb']:
+                subset = np.array(['a'*50] * len(omf_df[key][omf]))
+                for s in ob_subsets.keys():
+                    for typ in ob_subsets[s]:
+                        subset[omf_df[key][omf]['Observation_Type'] == typ] = s
+                omf_df[key][omf]['subset'] = subset
+        ob_groups = list(ob_subsets.keys())
 
     # Determine ob counts and O-B and O-A distributions
     plot_data = {}
     for key in data_names:
         plot_data[key] = {}
-        plot_data[key]['n_obs'] = np.zeros(len(ob_typ))
-        plot_data[key]['n_assim'] = np.zeros(len(ob_typ))
+        plot_data[key]['n_obs'] = np.zeros(len(ob_groups))
+        plot_data[key]['n_assim'] = np.zeros(len(ob_groups))
         plot_data[key]['omb'] = []
         plot_data[key]['oma'] = []
-        for j, t in enumerate(ob_typ):
-            omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['Observation_Type'] == t]
-            oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['Observation_Type'] == t]
+        for j, g in enumerate(ob_groups):
+            if use_subsets:
+                omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['subset'] == g]
+                oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['subset'] == g]
+            else:
+                omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['Observation_Type'] == g]
+                oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['Observation_Type'] == g]
             plot_data[key]['n_obs'][j] = len(oma_subset)
             plot_data[key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
             if data_subset == 'all':
@@ -112,10 +136,10 @@ for var in omf_vars:
 
     # Plot data 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(12, 9), sharey=True)
-    ylocs = np.arange(len(ob_typ))
+    ylocs = np.arange(len(ob_groups))
     nsims = len(data_names)
     bar_hgt = 0.8 / nsims
-    colors = ['b', 'r', 'c', 'g']
+    colors = ['b', 'r', 'c', 'g', 'goldenrod', 'purple']
     if (nsims % 2) == 0:
         offsets = bar_hgt * np.arange(-(nsims-1), nsims, 2)  / 2.
     else:
@@ -136,7 +160,7 @@ for var in omf_vars:
     axes[0].set_ylabel('observation type', size=14)
     axes[0].legend(fontsize=12)
     plt.sca(axes[0])
-    plt.yticks(ticks=ylocs, labels=ob_typ)
+    plt.yticks(ticks=ylocs, labels=ob_groups)
 
     for i in range(4):
         axes[i].grid(axis='x')
