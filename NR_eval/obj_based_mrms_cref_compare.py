@@ -16,6 +16,7 @@ import scipy.ndimage as sn
 import matplotlib.pyplot as plt
 import sys
 import glob
+import pickle
 
 
 #---------------------------------------------------------------------------------------------------
@@ -66,6 +67,12 @@ elif model == 'HRRR':
     NR_mask_file = './HRRR_mask.npy'
 MRMS_mask_file = './MRMS_mask.npy'
 
+# Option to save/use output from a pickle file
+# If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
+# is not found, that file will be written to.
+use_pickle = True
+pickle_fname = './NR_cref_obj_%sdbz_%sminsize_%s_spring.pkl' % (ref_thres, min_size, domain)
+
 # Output file
 out_file = './NR_cref_obj_%sdbz_%sminsize_%s_spring.png' % (ref_thres, min_size, domain)
 
@@ -76,134 +83,153 @@ out_file = './NR_cref_obj_%sdbz_%sminsize_%s_spring.png' % (ref_thres, min_size,
 
 start_time = dt.datetime.now()
 
-# Define necessary variables for each input field
-if model == 'NR':
-    NR_var = 'REFC_P0_L200_GLC0'
-elif model == 'HRRR':
-    NR_var = 'REFC_P0_L10_GLC0'
-MRMS_var = 'MergedReflectivityQCComposite_P0_L102_GLL0'
-MRMS_fname = 'MRMS_MergedReflectivityQCComposite'
-MRMS_no_coverage = -999.
-
-# Add 0 to MRMS_offset if empty
-if len(MRMS_offset) == 0:
-    MRMS_offset = [0]
-
-# Spatial domain limits
-if domain == 'all':
-    lat_lim = [5, 70]
-    lon_lim = [-150, -40]
-elif domain == 'easternUS':
-    lat_lim = [5, 70]
-    lon_lim = [-100, -40]
-
-# Load NR and MRMS masks
-if NR_mask_file != None:
-    NR_mask_external = np.load(NR_mask_file)
-else:
-    NR_mask_external = 1
-if MRMS_mask_file != None:
-    MRMS_mask_external = np.load(MRMS_mask_file)
-else:
-    MRMS_mask_external = 1
-
-# Initialize dictionaries
-NR_obj = {}
-MRMS_obj = {}
-nMRMS = len(MRMS_years) * len(MRMS_offset)
-for t in eval_times:
-    NR_obj[t] = {}
-    MRMS_obj[t] = {}
-    for key in ['size', 'max_dbz']:
-        NR_obj[t][key] = []
-        MRMS_obj[t][key] = []
-        for k in range(nMRMS):
-            MRMS_obj[t][key].append([])
-
-# Extract NR data
-NR_mask = np.array([[np.nan]])
-full_times = []
-for d in eval_dates:
-    d_str = d.strftime('%Y%m%d')
+# Try to read from pickle file
+if use_pickle:
     try:
-        ds = xr.open_dataset('%s/%s/cref_%s.nc' % (NR_path, d_str, d_str))
+        with open(pickle_fname, 'rb') as handle:
+            all_obj = pickle.load(handle)
+        NR_obj = all_obj['NR_obj']
+        MRMS_obj = all_obj['MRMS_obj']
+        nMRMS = all_obj['nMRMS']
     except FileNotFoundError:
-        continue
+        pickle_avail = False
+else:
+    pickle_avail = False
 
-    # Create mask based on desired domain
-    if np.isnan(NR_mask[0, 0]):
-        NR_lat = ds['gridlat_0'].values
-        NR_lon = ds['gridlon_0'].values
-        NR_mask = NR_mask_external * ((NR_lat >= lat_lim[0]) * (NR_lat <= lat_lim[1]) *
-                                      (NR_lon >= lon_lim[0]) * (NR_lon <= lon_lim[1]))
+if not pickle_avail:
 
-    # Unfortunately, the numpy datetime objects in ds and the datetime datetime objects in 
-    # eval_times cannot be easily compared, so we'll convert both of them to pd.Timestamp objects
-    ds_timestamps = np.empty(ds['time'].size, dtype=object)
-    for j, t in enumerate(ds['time'].values):
-        ds_timestamps[j] = pd.Timestamp(t)
+    # Define necessary variables for each input field
+    if model == 'NR':
+        NR_var = 'REFC_P0_L200_GLC0'
+    elif model == 'HRRR':
+        NR_var = 'REFC_P0_L10_GLC0'
+    MRMS_var = 'MergedReflectivityQCComposite_P0_L102_GLL0'
+    MRMS_fname = 'MRMS_MergedReflectivityQCComposite'
+    MRMS_no_coverage = -999.
 
-    print('NR extracting data for %s' % d_str)
+    # Add 0 to MRMS_offset if empty
+    if len(MRMS_offset) == 0:
+        MRMS_offset = [0]
+
+    # Spatial domain limits
+    if domain == 'all':
+        lat_lim = [5, 70]
+        lon_lim = [-150, -40]
+    elif domain == 'easternUS':
+        lat_lim = [5, 70]
+        lon_lim = [-100, -40]
+
+    # Load NR and MRMS masks
+    if NR_mask_file != None:
+        NR_mask_external = np.load(NR_mask_file)
+    else:
+        NR_mask_external = 1
+    if MRMS_mask_file != None:
+        MRMS_mask_external = np.load(MRMS_mask_file)
+    else:
+        MRMS_mask_external = 1
+
+    # Initialize dictionaries
+    NR_obj = {}
+    MRMS_obj = {}
+    nMRMS = len(MRMS_years) * len(MRMS_offset)
     for t in eval_times:
-        full_t = dt.datetime.strptime(d_str + t, '%Y%m%d%H%M')
+        NR_obj[t] = {}
+        MRMS_obj[t] = {}
+        for key in ['size', 'max_dbz']:
+            NR_obj[t][key] = []
+            MRMS_obj[t][key] = []
+            for k in range(nMRMS):
+                MRMS_obj[t][key].append([])
+
+    # Extract NR data
+    NR_mask = np.array([[np.nan]])
+    full_times = []
+    for d in eval_dates:
+        d_str = d.strftime('%Y%m%d')
         try:
-            time_idx = np.where(ds_timestamps == pd.Timestamp(full_t))[0][0]
-        except IndexError:
+            ds = xr.open_dataset('%s/%s/cref_%s.nc' % (NR_path, d_str, d_str))
+        except FileNotFoundError:
             continue
-        full_times.append(full_t)
-        NR_data = NR_mask * ds[NR_var][time_idx, :, :].values
-        NR_data_labeled, nlabels = sn.label(NR_data >= ref_thres)
-        for label in range(1, nlabels):
-            size = np.sum(NR_data_labeled == label)
-            if size >= min_size:
-                NR_obj[t]['size'].append(size)
-                NR_obj[t]['max_dbz'].append(np.amax(NR_data * (NR_data_labeled == label)))
 
-# Extract MRMS data
-MRMS_mask = np.array([[np.nan]])
-MRMS_years_all, MRMS_offset_all = np.meshgrid(MRMS_years, MRMS_offset)
-MRMS_years_all = MRMS_years_all.ravel()
-MRMS_offset_all = MRMS_offset_all.ravel()
-for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
-    print()
-    print('extracting MRMS data for year = %d, offset = %d' % (y, o))
+        # Create mask based on desired domain
+        if np.isnan(NR_mask[0, 0]):
+            NR_lat = ds['gridlat_0'].values
+            NR_lon = ds['gridlon_0'].values
+            NR_mask = NR_mask_external * ((NR_lat >= lat_lim[0]) * (NR_lat <= lat_lim[1]) *
+                                          (NR_lon >= lon_lim[0]) * (NR_lon <= lon_lim[1]))
+
+        # Unfortunately, the numpy datetime objects in ds and the datetime datetime objects in 
+        # eval_times cannot be easily compared, so we'll convert both of them to pd.Timestamp objects
+        ds_timestamps = np.empty(ds['time'].size, dtype=object)
+        for j, t in enumerate(ds['time'].values):
+            ds_timestamps[j] = pd.Timestamp(t)
+
+        print('NR extracting data for %s' % d_str)
+        for t in eval_times:
+            full_t = dt.datetime.strptime(d_str + t, '%Y%m%d%H%M')
+            try:
+                time_idx = np.where(ds_timestamps == pd.Timestamp(full_t))[0][0]
+            except IndexError:
+                continue
+            full_times.append(full_t)
+            NR_data = NR_mask * ds[NR_var][time_idx, :, :].values
+            NR_data_labeled, nlabels = sn.label(NR_data >= ref_thres)
+            for label in range(1, nlabels):
+                size = np.sum(NR_data_labeled == label)
+                if size >= min_size:
+                    NR_obj[t]['size'].append(size)
+                    NR_obj[t]['max_dbz'].append(np.amax(NR_data * (NR_data_labeled == label)))
+
+    # Extract MRMS data
+    MRMS_mask = np.array([[np.nan]])
+    MRMS_years_all, MRMS_offset_all = np.meshgrid(MRMS_years, MRMS_offset)
+    MRMS_years_all = MRMS_years_all.ravel()
+    MRMS_offset_all = MRMS_offset_all.ravel()
+    for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
+        print()
+        print('extracting MRMS data for year = %d, offset = %d' % (y, o))
  
-    for t in full_times:
-        MRMS_time = t + dt.timedelta(days=float(o))
-        print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
-        fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), MRMS_fname))
-        if len(fname_list) == 0:
-            print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
-            continue
-        ds = xr.open_dataset(fname_list[0], engine='pynio')
+        for t in full_times:
+            MRMS_time = t + dt.timedelta(days=float(o))
+            print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
+            fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), MRMS_fname))
+            if len(fname_list) == 0:
+                print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
+                continue
+            ds = xr.open_dataset(fname_list[0], engine='pynio')
 
-        # Create mask for MRMS data
-        if np.isnan(MRMS_mask[0, 0]):
-            MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
-            MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) *
-                                              (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
+            # Create mask for MRMS data
+            if np.isnan(MRMS_mask[0, 0]):
+                MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
+                MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) *
+                                                  (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
 
-        hhmm = t.strftime('%H%M')
-        MRMS_data = MRMS_mask * ds[MRMS_var].values
-        MRMS_data_bool = (MRMS_data >= ref_thres)
-        MRMS_data_labeled, nlabels = sn.label(MRMS_data_bool)
+            hhmm = t.strftime('%H%M')
+            MRMS_data = MRMS_mask * ds[MRMS_var].values
+            MRMS_data_bool = (MRMS_data >= ref_thres)
+            MRMS_data_labeled, nlabels = sn.label(MRMS_data_bool)
 
-        MRMS_obj_labels_all = np.unique(MRMS_data_labeled)[1:]
-        MRMS_obj_size_all = sn.sum_labels(MRMS_data_bool, MRMS_data_labeled, 
-                                          MRMS_obj_labels_all)
-        MRMS_obj_mask = (MRMS_obj_size_all >= min_size)
-        MRMS_obj_labels = MRMS_obj_labels_all[MRMS_obj_mask]
-        MRMS_obj_size = MRMS_obj_size_all[MRMS_obj_mask]
-        MRMS_obj_max_dbz = sn.maximum(MRMS_data, MRMS_data_labeled, MRMS_obj_labels)
-        MRMS_obj[hhmm]['size'][i] = MRMS_obj[hhmm]['size'][i] + list(MRMS_obj_size)
-        MRMS_obj[hhmm]['max_dbz'][i] = MRMS_obj[hhmm]['max_dbz'][i] + list(MRMS_obj_max_dbz)
-        
-        # OLD CODE. Was used instead of the code block above.
-        #for label in range(1, nlabels):
-        #    size = np.sum(MRMS_data_labeled == label)
-        #    if size >= min_size:
-        #        MRMS_obj[hhmm]['size'][i].append(size)
-        #        MRMS_obj[hhmm]['max_dbz'][i].append(np.amax(MRMS_data * (MRMS_data_labeled == label)))
+            MRMS_obj_labels_all = np.unique(MRMS_data_labeled)[1:]
+            MRMS_obj_size_all = sn.sum_labels(MRMS_data_bool, MRMS_data_labeled, 
+                                              MRMS_obj_labels_all)
+            MRMS_obj_mask = (MRMS_obj_size_all >= min_size)
+            MRMS_obj_labels = MRMS_obj_labels_all[MRMS_obj_mask]
+            MRMS_obj_size = MRMS_obj_size_all[MRMS_obj_mask]
+            MRMS_obj_max_dbz = sn.maximum(MRMS_data, MRMS_data_labeled, MRMS_obj_labels)
+            MRMS_obj[hhmm]['size'][i] = MRMS_obj[hhmm]['size'][i] + list(MRMS_obj_size)
+            MRMS_obj[hhmm]['max_dbz'][i] = MRMS_obj[hhmm]['max_dbz'][i] + list(MRMS_obj_max_dbz)
+ 
+    # Save output to pickle file for use later
+    if use_pickle:
+        all_obj = {}
+        all_obj['NR_obj'] = NR_obj
+        all_obj['MRMS_obj'] = MRMS_obj
+        all_obj['nMRMS'] = nMRMS
+        all_obj['ref_thres'] = ref_thres
+        all_obj['min_size'] = min_size
+        with open(pickle_fname, 'wb') as handle:
+            pickle.dump(all_obj, handle)
 
 
 #---------------------------------------------------------------------------------------------------
