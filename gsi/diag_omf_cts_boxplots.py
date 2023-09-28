@@ -24,20 +24,16 @@ import pyDA_utils.gsi_fcts as gsi
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can have any number of datasets. Key is the name of the dataset
-tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_perfect/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-tmpl_osse2 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_tuning/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-tmpl_osse3 = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_1st_iter_whitenoise/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(4*24)]
+tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/old_runs/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/old_runs/winter_1st_iter_tuning_v2/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(24)]
 
 path_tmpl = {}
 path_tmpl['real'] = [tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-path_tmpl['perfect'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-path_tmpl['corr_errors'] = [tmpl_osse2 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-#path_tmpl['uncorr_errors'] = [tmpl_osse3 % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+path_tmpl['osse'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
 
 # Variables to plot
-omf_vars = ['t', 'q', 'u', 'v', 'pw', 'ps']
+omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
 data_subset = 'assim'
@@ -55,9 +51,15 @@ ob_subsets = {'raob':[120, 122, 132, 220, 221, 222],
                      288, 292, 293, 294, 295],
               'gps':[153]}
 
+# Option to perform an F test to see whether the O-B variances are significantly different
+# This test assumes that the O-B distributions are Gaussian!
+ftest = True
+sim1 = 'real'
+sim2 = 'osse'
+
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = ''
+out_str = 'TEST'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -182,6 +184,16 @@ for var in omf_vars:
         print()
         print('Prep_Use_Flag counts for %s:' % key)
         print(gsi.gsi_flags_table(omf_df[key]['oma'], field='Prep_Use_Flag'))
+
+    # Perform F test (except for u and v):
+    if (var not in ['u', 'v']) and ftest:
+        print()
+        print('F test for differences in variances')
+        if data_subset == 'all':
+            print(gsi.test_var_f_stat(omf_df[sim1]['omb'], omf_df[sim2]['omb']))
+        if data_subset == 'assim':
+            print(gsi.test_var_f_stat(omf_df[sim1]['omb'].loc[omf_df[sim1]['omb']['Analysis_Use_Flag'] == 1], 
+                                      omf_df[sim2]['omb'].loc[omf_df[sim2]['omb']['Analysis_Use_Flag'] == 1]))
 
 
 """
