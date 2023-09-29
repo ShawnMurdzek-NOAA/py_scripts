@@ -1,6 +1,10 @@
 """
 Frequency Histograms Comparing the Nature Run to Observed MRMS Output
 
+This script uses "extracted" netCDF files created by extract_wrfnat_fields.py
+
+6-hr precip amounts are computed by ../misc/compute_precip6hr.py
+
 shawn.s.murdzek@noaa.gov
 Date Created: 8 March 2023
 """
@@ -16,6 +20,7 @@ import pandas as pd
 import xarray as xr
 import matplotlib.pyplot as plt
 import sys
+import pickle
 
 
 #---------------------------------------------------------------------------------------------------
@@ -31,7 +36,7 @@ eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':
-    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
+    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
 elif model == 'HRRR':
     NR_path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
 
@@ -48,7 +53,7 @@ MRMS_offset = [-7, 0, 7]
 # Times to evaluate (strings, HHMM)
 eval_times = ['0000', '0600', '1200', '1800']
 
-# Field to evaluate (options: 'cref', 'precip1hr')
+# Field to evaluate (options: 'cref', 'precip1hr', 'precip6hr')
 #field = 'precip1hr'
 field = sys.argv[2]
 
@@ -68,6 +73,12 @@ MRMS_mask_file = './MRMS_mask.npy'
 #zoom = 0
 zoom = bool(int(sys.argv[4]))
 
+# Option to save/use output from a pickle file
+# If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
+# is not found, that file will be written to.
+use_pickle = True
+pickle_fname = './%s_%s_%s_spring.pkl' % (model, field, domain)
+
 # Output file
 #out_file = './NR_precip1hr_eval_all.png'
 out_file = sys.argv[5]
@@ -81,146 +92,192 @@ out_file = sys.argv[5]
 def precip_kgpm2_to_mm(x):
     return x * 1e3 / 997.
 
-# Define necessary variables for each input field
-if field == 'cref':
-    if model == 'NR':
-        NR_var = 'REFC_P0_L200_GLC0'
-    elif model == 'HRRR':
-        NR_var = 'REFC_P0_L10_GLC0'
-    NR_transform = None
-    MRMS_var = ['MergedReflectivityQCComposite_P0_L102_GLL0']
-    MRMS_fname = ['MRMS_MergedReflectivityQCComposite']
-    MRMS_no_coverage = -999.
-    if zoom:
-        bins = np.arange(30, 76, 5)
-    else:
-        bins = np.arange(5, 76, 5)
-    xlabel = 'composite reflectivity (dBZ)'
-    yscale = 'linear'
-elif field == 'precip1hr':
-    NR_var = 'APCP_P8_L1_GLC0_acc'
-    NR_transform = precip_kgpm2_to_mm
-    MRMS_var = ['VAR_209_6_37_P0_L102_GLL0', 'GaugeCorrQPE01H_P0_L102_GLL0']
-    MRMS_fname = ['MRMS_MultiSensor_QPE_01H_Pass2', 'MRMS_GaugeCorr_QPE_01H']
-    MRMS_no_coverage = -3.
-    if zoom:
-        bins = np.arange(0.5, 15, 0.5)
-    else:
-        bins = np.arange(1, 150, 5)
-    xlabel = '1-hr total precip (mm)'
-    yscale = 'log'
+start_time = dt.datetime.now()
 
-# Add 0 to MRMS_offset if empty
-if len(MRMS_offset) == 0:
-    MRMS_offset = [0]
-
-# Spatial domain limits
-if domain == 'all':
-    lat_lim = [5, 70]
-    lon_lim = [-150, -40]
-elif domain == 'easternUS':
-    lat_lim = [5, 70]
-    lon_lim = [-100, -40]
-
-# Load NR and MRMS masks
-if NR_mask_file != None:
-    NR_mask_external = np.load(NR_mask_file)
-else:
-    NR_mask_external = 1
-if MRMS_mask_file != None:
-    MRMS_mask_external = np.load(MRMS_mask_file)
-else:
-    MRMS_mask_external = 1
-
-# Initialize dictionaries
-NR_counts = {}
-NR_total_counts = {}
-NR_total_pts = {}
-for t in eval_times:
-    NR_total_counts[t] = np.zeros(bins.size-1)
-    NR_total_pts[t] = 0
-
-MRMS_total_counts = {}
-MRMS_total_pts = {}
-MRMS_freq = {}
-n_MRMS = len(MRMS_years) * len(MRMS_offset)
-MRMS_years_all, MRMS_offset_all = np.meshgrid(MRMS_years, MRMS_offset)
-MRMS_years_all = MRMS_years_all.ravel()
-MRMS_offset_all = MRMS_offset_all.ravel()
-for t in eval_times:
-    MRMS_total_counts[t] = np.zeros([bins.size-1, n_MRMS])
-    MRMS_freq[t] = np.zeros([bins.size-1, n_MRMS])
-    MRMS_total_pts[t] = np.zeros(n_MRMS)
-
-# Extract NR data
-NR_mask = np.array([[np.nan]])
-for d in eval_dates:
-    d_str = d.strftime('%Y%m%d')
+# Try to read from pickle file
+if use_pickle:
     try:
-        ds = xr.open_dataset('%s/%s/%s_%s.nc' % (NR_path, d_str, field, d_str))
+        with open(pickle_fname, 'rb') as handle:
+            all_data = pickle.load(handle)
+        NR_total_counts = all_data['NR_total_counts']
+        NR_total_pts = all_data['NR_total_pts']
+        MRMS_freq = all_data['MRMS_freq']
+        yscale = all_data['yscale']
+        xlabel = all_data['xlabel']
     except FileNotFoundError:
-        continue
+        pickle_avail = False
+else:
+    pickle_avail = False
 
-    # Create mask based on desired domain
-    if np.isnan(NR_mask[0, 0]):
-        NR_lat = ds['gridlat_0'].values
-        NR_lon = ds['gridlon_0'].values
-        NR_mask = NR_mask_external * ((NR_lat >= lat_lim[0]) * (NR_lat <= lat_lim[1]) * 
-                                      (NR_lon >= lon_lim[0]) * (NR_lon <= lon_lim[1]))
+if not pickle_avail:
 
-    # Unfortunately, the numpy datetime objects in ds and the datetime datetime objects in 
-    # eval_times cannot be easily compared, so we'll convert both of them to pd.Timestamp objects
-    ds_timestamps = np.empty(ds['time'].size, dtype=object)
-    for j, t in enumerate(ds['time'].values):
-        ds_timestamps[j] = pd.Timestamp(t)
+    # Define necessary variables for each input field
+    if field == 'cref':
+        if model == 'NR':
+            NR_var = 'REFC_P0_L200_GLC0'
+        elif model == 'HRRR':
+            NR_var = 'REFC_P0_L10_GLC0'
+        NR_transform = None
+        MRMS_var = ['MergedReflectivityQCComposite_P0_L102_GLL0']
+        MRMS_fname = ['MRMS_MergedReflectivityQCComposite']
+        MRMS_no_coverage = -999.
+        if zoom:
+            bins = np.arange(30, 76, 5)
+        else:
+            bins = np.arange(5, 76, 5)
+        xlabel = 'composite reflectivity (dBZ)'
+        yscale = 'linear'
+    elif field == 'precip1hr':
+        NR_var = 'APCP_P8_L1_GLC0_acc'
+        NR_transform = precip_kgpm2_to_mm
+        MRMS_var = ['VAR_209_6_37_P0_L102_GLL0', 'GaugeCorrQPE01H_P0_L102_GLL0']
+        MRMS_fname = ['MRMS_MultiSensor_QPE_01H_Pass2', 'MRMS_GaugeCorr_QPE_01H']
+        MRMS_no_coverage = -3.
+        if zoom:
+            bins = np.arange(0.5, 15, 0.5)
+        else:
+            bins = np.arange(1, 150, 5)
+        xlabel = '1-hr total precip (mm)'
+        yscale = 'log'
+    elif field == 'precip6hr':
+        NR_var = 'APCP_P8_L1_GLC0_acc'
+        NR_transform = precip_kgpm2_to_mm
+        MRMS_var = ['VAR_209_6_39_P0_L102_GLL0', 'GaugeCorrQPE06H_P0_L102_GLL0']
+        MRMS_fname = ['MRMS_MultiSensor_QPE_06H_Pass2', 'MRMS_GaugeCorr_QPE_06H']
+        MRMS_no_coverage = -3.
+        if zoom:
+            bins = np.arange(0.5, 15, 0.5)
+        else:
+            bins = np.arange(1, 200, 5)
+        xlabel = '6-hr total precip (mm)'
+        yscale = 'log'
 
-    print('NR extracting data for %s' % d_str)
+    # Add 0 to MRMS_offset if empty
+    if len(MRMS_offset) == 0:
+        MRMS_offset = [0]
+
+    # Spatial domain limits
+    if domain == 'all':
+        lat_lim = [5, 70]
+        lon_lim = [-150, -40]
+    elif domain == 'easternUS':
+        lat_lim = [5, 70]
+        lon_lim = [-100, -40]
+
+    # Load NR and MRMS masks
+    if NR_mask_file != None:
+        NR_mask_external = np.load(NR_mask_file)
+    else:
+        NR_mask_external = 1
+    if MRMS_mask_file != None:
+        MRMS_mask_external = np.load(MRMS_mask_file)
+    else:
+        MRMS_mask_external = 1
+
+    # Initialize dictionaries
+    NR_counts = {}
+    NR_total_counts = {}
+    NR_total_pts = {}
     for t in eval_times:
-        full_time = dt.datetime.strptime(d_str + t, '%Y%m%d%H%M')
+        NR_total_counts[t] = np.zeros(bins.size-1)
+        NR_total_pts[t] = 0
+
+    MRMS_total_counts = {}
+    MRMS_total_pts = {}
+    MRMS_freq = {}
+    n_MRMS = len(MRMS_years) * len(MRMS_offset)
+    MRMS_years_all, MRMS_offset_all = np.meshgrid(MRMS_years, MRMS_offset)
+    MRMS_years_all = MRMS_years_all.ravel()
+    MRMS_offset_all = MRMS_offset_all.ravel()
+    for t in eval_times:
+        MRMS_total_counts[t] = np.zeros([bins.size-1, n_MRMS])
+        MRMS_freq[t] = np.zeros([bins.size-1, n_MRMS])
+        MRMS_total_pts[t] = np.zeros(n_MRMS)
+
+    # Extract NR data
+    NR_mask = np.array([[np.nan]])
+    for d in eval_dates:
+        d_str = d.strftime('%Y%m%d')
         try:
-            time_idx = np.where(ds_timestamps == pd.Timestamp(full_time))[0][0]
-        except IndexError:
+            ds = xr.open_dataset('%s/%s/%s_%s.nc' % (NR_path, d_str, field, d_str))
+        except FileNotFoundError:
             continue
-        if NR_transform != None:
-            NR_data = NR_mask * NR_transform(ds[NR_var][time_idx, :, :].values)
-        else:    
-            NR_data = NR_mask * ds[NR_var][time_idx, :, :].values
-        NR_counts[full_time] = np.histogram(NR_data, bins=bins)[0]
-        NR_total_counts[t] = NR_total_counts[t] + NR_counts[full_time]
-        NR_total_pts[t] = NR_total_pts[t] + np.sum(NR_mask)
 
-# Extract MRMS data
-MRMS_mask = np.array([[np.nan]])
-for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
-    print()
-    print('extracting MRMS data for year = %d, offset = %d' % (y, o))
-    for t in NR_counts.keys():
-        MRMS_time = t + dt.timedelta(days=float(o))
-        print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
-        for n, f in enumerate(MRMS_fname):
-            fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), f))
-            if len(fname_list) > 0:
-                break
-        if len(fname_list) == 0:
-            print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
-            continue
-        ds = xr.open_dataset(fname_list[0], engine='pynio')
+        # Create mask based on desired domain
+        if np.isnan(NR_mask[0, 0]):
+            NR_lat = ds['gridlat_0'].values
+            NR_lon = ds['gridlon_0'].values
+            NR_mask = NR_mask_external * ((NR_lat >= lat_lim[0]) * (NR_lat <= lat_lim[1]) * 
+                                          (NR_lon >= lon_lim[0]) * (NR_lon <= lon_lim[1]))
 
-        # Create mask for MRMS data
-        if np.isnan(MRMS_mask[0, 0]):
-            MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
-            MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) * 
-                                              (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
+        # Unfortunately, the numpy datetime objects in ds and the datetime datetime objects in 
+        # eval_times cannot be easily compared, so we'll convert both of them to pd.Timestamp objects
+        ds_timestamps = np.empty(ds['time'].size, dtype=object)
+        for j, t in enumerate(ds['time'].values):
+            ds_timestamps[j] = pd.Timestamp(t)
 
-        hhmm = t.strftime('%H%M')
-        MRMS_total_counts[hhmm][:, i] = (np.histogram(MRMS_mask * ds[MRMS_var[n]].values, bins=bins)[0] + 
-                                         MRMS_total_counts[hhmm][:, i])
-        MRMS_total_pts[hhmm][i] = MRMS_total_pts[hhmm][i] + np.sum(np.logical_or(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
+        print('NR extracting data for %s' % d_str)
+        for t in eval_times:
+            full_time = dt.datetime.strptime(d_str + t, '%Y%m%d%H%M')
+            try:
+                time_idx = np.where(ds_timestamps == pd.Timestamp(full_time))[0][0]
+            except IndexError:
+                continue
+            if NR_transform != None:
+                NR_data = NR_mask * NR_transform(ds[NR_var][time_idx, :, :].values)
+            else:    
+                NR_data = NR_mask * ds[NR_var][time_idx, :, :].values
+            NR_counts[full_time] = np.histogram(NR_data, bins=bins)[0]
+            NR_total_counts[t] = NR_total_counts[t] + NR_counts[full_time]
+            NR_total_pts[t] = NR_total_pts[t] + np.sum(NR_mask)
 
-    for hhmm in eval_times:
-        MRMS_freq[hhmm][:, i] = MRMS_total_counts[hhmm][:, i] / MRMS_total_pts[hhmm][i]
-   
+    # Extract MRMS data
+    MRMS_mask = np.array([[np.nan]])
+    for i, (y, o) in enumerate(zip(MRMS_years_all, MRMS_offset_all)):
+        print()
+        print('extracting MRMS data for year = %d, offset = %d' % (y, o))
+        for t in NR_counts.keys():
+            MRMS_time = t + dt.timedelta(days=float(o))
+            print('extracting MRMS data for %s' % MRMS_time.strftime('%m %d %H:%M'))
+            for n, f in enumerate(MRMS_fname):
+                fname_list = glob.glob('%s/%d/%d%s*%s*' % (MRMS_path, y, y, MRMS_time.strftime('%m%d-%H%M'), f))
+                if len(fname_list) > 0:
+                    break
+            if len(fname_list) == 0:
+                print('MRMS data for %d-%s is missing!' % (y, MRMS_time.strftime('%m-%d %H:%M')))
+                continue
+            ds = xr.open_dataset(fname_list[0], engine='pynio')
+ 
+            # Create mask for MRMS data
+            if np.isnan(MRMS_mask[0, 0]):
+                MRMS_lon, MRMS_lat = np.meshgrid(ds['lon_0'].values - 360., ds['lat_0'].values)
+                MRMS_mask = MRMS_mask_external * ((MRMS_lat >= lat_lim[0]) * (MRMS_lat <= lat_lim[1]) * 
+                                                  (MRMS_lon >= lon_lim[0]) * (MRMS_lon <= lon_lim[1]))
+
+            hhmm = t.strftime('%H%M')
+            MRMS_total_counts[hhmm][:, i] = (np.histogram(MRMS_mask * ds[MRMS_var[n]].values, bins=bins)[0] + 
+                                             MRMS_total_counts[hhmm][:, i])
+            MRMS_total_pts[hhmm][i] = MRMS_total_pts[hhmm][i] + np.sum(np.logical_or(MRMS_mask, ds[MRMS_var[n]].values > MRMS_no_coverage))
+
+        for hhmm in eval_times:
+            MRMS_freq[hhmm][:, i] = MRMS_total_counts[hhmm][:, i] / MRMS_total_pts[hhmm][i]
+
+    # Save output to pickle file for use later
+    if use_pickle:
+        all_data = {}
+        all_data['NR_total_counts'] = NR_total_counts
+        all_data['NR_total_pts'] = NR_total_pts
+        all_data['MRMS_freq'] = MRMS_freq
+        all_data['yscale'] = yscale
+        all_data['xlabel'] = xlabel
+        with open(pickle_fname, 'wb') as handle:
+            pickle.dump(all_data, handle)
+
+
+#---------------------------------------------------------------------------------------------------   
 # Plot results
+#---------------------------------------------------------------------------------------------------
+
 nrows = int(np.floor(np.sqrt(len(eval_times))))
 ncols = int(np.ceil(len(eval_times) / nrows))
 figsize = (3 + 2*ncols, 3 + 2*nrows) 
@@ -253,6 +310,8 @@ for i in range(nrows):
 plt.suptitle('%s Frequencies (black) and MRMS Frequencies (red)\n7-Day Composites' % model, size=16)
 plt.savefig(out_file)
 plt.close()
+
+print('elapsed time = %.2f min' % ((dt.datetime.now() - start_time).total_seconds() / 60))
 
 
 """
