@@ -27,7 +27,7 @@ import pyDA_utils.bufr as bufr
 #---------------------------------------------------------------------------------------------------
 
 # Surface station files (from IEM)
-sfc_station_files = glob.glob('/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter/*2022*.txt')
+sfc_station_files = glob.glob('/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/*/*2022*.txt')
 
 # Output directory and file suffix
 out_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/bufr_csv'
@@ -56,24 +56,31 @@ for c in ss_cols:
 # Convert surface station DataFrame to correct format for prepBUFR CSVs
 ss_df['POB'] = mc.altimeter_to_station_pressure(np.float64(ss_df['alti'].values) * units.inHg, 
                                                 ss_df['elevation'].values * units.m).to('mbar').magnitude
+ss_df['PMO'] = ss_df['mslp']
 ss_df['TOB'] = (np.float64(ss_df['tmpf'].values) * units.degF).to('degC').magnitude
 ss_df['QOB'] = mc.specific_humidity_from_dewpoint(ss_df['POB'].values * units.mbar,
                                                   np.float64(ss_df['dwpf'].values) * units.degF).magnitude * 1e6
+ss_df['TDO'] = (np.float64(ss_df['dwpf'].values) * units.degF).to('degC').magnitude
 wnd_tmp = mc.wind_components(np.float64(ss_df['sknt'].values) * units.kt, 
                              np.float64(ss_df['drct'].values) * units.deg)
 ss_df['UOB'] = wnd_tmp[0].to(units.m / units.s).magnitude
 ss_df['VOB'] = wnd_tmp[1].to(units.m / units.s).magnitude
+ss_df['HOVI'] = (np.float64(ss_df['vsby'].values) * units.miles).to('m').magnitude
 ss_df['XOB'] = ss_df['lon'] + 360.
 ss_df['YOB'] = ss_df['lat']
 ss_df['ELV'] = ss_df['elevation']
 ss_df['SID'] = ss_df['station']
 
 bufr_fixed_cols = {'nmsg':1, 'subset':'ADPSFC', 'ntb':2, 'TYP':300, 'T29':512, 'CAT':0, 'PQM':2, 
-                   'QQM':2, 'TQM':2, 'WQM':2}
+                   'QQM':2, 'TQM':2, 'WQM':2, 'PMQ':2, 'tvflg':1, 'vtcd':0}
 for c in bufr_fixed_cols.keys():
     ss_df[c] = [bufr_fixed_cols[c]] * len(ss_df)
-bufr_nan_cols = ['SAID', 'ZOB', 'PWO', 'PRSS', 'ZQM', 'NUL', 'PWQ', 'POE', 'QOE', 'TOE', 'NUL.1', 
-                 'WOE', 'NUL.2', 'PWE']
+bufr_nan_cols = ['SAID','ZOB','PWO', 'MXGS', 'PRSS','PMO','ZQM', 
+                 'NUL', 'PWQ', 'POE',   'QOE',    'TOE', 'NUL.1',    'WOE',    'NUL.2', 'PWE',
+                 'XDR', 'YDR',   'HRDR',     'MSST',  'DBSS',   'SST1','SSTQM',  'SSTOE',  'TFC', 'UFC',
+                 'VFC', 'VSSO',  'CLAM',     'HOCB',  'CDTP',   'TOCC','GCDTT',  'CDTP_QM','MXTM','MITM', 
+                 'POAF','IALR',  'PRWE',     'PRVSTG','SPRVSTG','HOWV','CEILING','QIFN',   'HBLCS','TSB', 
+                 'ACID']
 for c in bufr_nan_cols:
     ss_df[c] = [np.nan] * len(ss_df)
 
@@ -88,10 +95,14 @@ if fake_dhr0:
         fake_df[v] = 300.    
                  
 # Split up surface station DataFrame into hourly prepBUFR files
-bufr_col_order = ['nmsg', 'subset', 'cycletime', 'ntb', 'SID', 'XOB', 'YOB', 'DHR', 'TYP', 'ELV', 
-                  'SAID', 'T29',    'POB',       'QOB', 'TOB', 'ZOB', 'UOB', 'VOB', 'PWO', 'CAT',
-                  'PRSS', 'PQM',    'QQM',       'TQM', 'ZQM', 'WQM', 'NUL', 'PWQ', 'POE', 'QOE',
-                  'TOE',  'NUL',    'WOE',       'NUL', 'PWE']
+bufr_col_order = ['nmsg','subset','cycletime','ntb',   'SID',    'XOB', 'YOB',    'DHR',    'TYP', 'ELV', 
+                  'SAID','T29',   'POB',      'QOB',   'TOB',    'ZOB', 'UOB',    'VOB',    'PWO', 'MXGS',
+                  'HOVI','CAT',   'PRSS',     'TDO',   'PMO',    'PQM', 'QQM',    'TQM',    'ZQM', 'WQM', 
+                  'NUL', 'PWQ',   'PMQ',      'POE',   'QOE',    'TOE', 'NUL',    'WOE',    'NUL', 'PWE',
+                  'XDR', 'YDR',   'HRDR',     'MSST',  'DBSS',   'SST1','SSTQM',  'SSTOE',  'TFC', 'UFC',
+                  'VFC', 'VSSO',  'CLAM',     'HOCB',  'CDTP',   'TOCC','GCDTT',  'CDTP_QM','MXTM','MITM', 
+                  'POAF','IALR',  'PRWE',     'PRVSTG','SPRVSTG','HOWV','CEILING','QIFN',   'HBLCS','TSB', 
+                  'ACID','tvflg', 'vtcd']
 ss_df['time'] = pd.to_datetime(ss_df['valid'])
 bufr_times = np.unique(ss_df['time'].dt.strftime('%Y%m%d%H').values)
 for t in bufr_times:
