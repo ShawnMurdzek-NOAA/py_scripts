@@ -23,6 +23,7 @@ import metpy.constants as const
 import metpy.calc as mc
 from metpy.units import units
 import scipy.stats as ss
+import pickle
 
 import pyDA_utils.bufr as bufr
 
@@ -33,7 +34,10 @@ import pyDA_utils.bufr as bufr
 
 # Parameters for real obs
 real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter'
-station_ids = ['ABR', 'ALB', 'BHM', 'CRP', 'DTW', 'GJT', 'MIA', 'OAK', 'SLE', 'TUS']
+with open('station_list.txt', 'r') as fptr:
+    station_ids = fptr.readlines()
+    for i in range(len(station_ids)):
+        station_ids[i] = station_ids[i].strip()
 years = np.arange(1993, 2023)
 #startdate = '04290000'
 #enddate = '05070000'
@@ -42,7 +46,7 @@ enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
-fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/sfc_stat_obs_csv/perfect'
+fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/obs/eval_sfc_station/perfect_conv/'
 #analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
@@ -55,8 +59,14 @@ ceil_plot = 'hgt'
 
 # Type of z-score to use for z-score plots ('regular' or 'modified')
 # Also select cutoff value that denotes outliers
-zscore = 'modified'
-zcutoff = 3
+zscore = 'regular'
+zcutoff = 2
+
+# Option to save/use output from a pickle file
+# If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
+# is not found, that file will be written to.
+use_pickle = True
+pickle_fname = './sfc_station_compare_winter.pkl'
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -66,159 +76,195 @@ out_fname = '%s_sfc_station_compare_perfect.png'
 # Compare NR to Surface Station Obs
 #---------------------------------------------------------------------------------------------------
 
-# Variables to extract
-real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
-fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB', 'WSPD', 'WDIR']
-fake_varnames_noplot = ['ELV', 'ceil']
+# Try to read from pickle file
+if use_pickle:
+    try:
+        with open(pickle_fname, 'rb') as handle:
+            all_data = pickle.load(handle)
+        fake_stations = all_data['fake_stations']
+        fake_stations_z = all_data['fake_stations_z']
+        real_stations = all_data['real_stations']
+        all_zscores = all_data['all_zscores']
+        analysis_times = all_data['analysis_times']
+    except FileNotFoundError:
+        pickle_avail = False
+else:
+    pickle_avail = False
 
-# Extract some values that will be used a lot
-ndays = len(analysis_days)
-ntimes = len(analysis_times)
-analysis_year = analysis_days[0].year
-min_hr = -max_time_allowed / 3600.
-max_hr = max_time_allowed / 3600.
+if not pickle_avail:
 
-# Extract real surface station obs first
-real_stations = {}
-for ID in station_ids:
-    print('Extracting real obs at %s' % ID)
-    real_stations[ID] = {}
-    for v in real_varnames:
-        real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
-    real_stations[ID]['ceil'] = np.ones([len(years), ntimes * ndays]) * np.nan
-    real_stations[ID]['n_skyl'] = np.zeros(len(years))
-    real_stations[ID]['frac_ceil'] = np.zeros(len(years))
-    for j, yr in enumerate(years):
-        tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
-                             skiprows=5)
+    # Variables to extract
+    real_varnames = ['lon', 'lat', 'tmpf', 'dwpf', 'drct', 'sknt', 'alti', 'vsby', 'elevation']
+    fake_varnames = ['TOB', 'QOB', 'POB', 'UOB', 'VOB', 'WSPD', 'WDIR']
+    fake_varnames_noplot = ['ELV', 'ceil']
 
-        # Only retain times with thermodynamic and kinematic obs (this eliminates special obs for 
-        # gusts, etc.)
-        ss_df = tmp_df.loc[(tmp_df['tmpf'] != 'M') & (tmp_df['drct'] != 'M')].copy()
-        ss_df.reset_index(inplace=True, drop=True)
+    # Extract some values that will be used a lot
+    ndays = len(analysis_days)
+    ntimes = len(analysis_times)
+    analysis_year = analysis_days[0].year
+    min_hr = -max_time_allowed / 3600.
+    max_hr = max_time_allowed / 3600.
 
-        station_times = [dt.datetime.strptime(s, '%Y-%m-%d %H:%M').replace(year=analysis_year) 
-                         for s in ss_df['valid'].values]
-        station_times_tot = np.array([(s - dt.datetime(analysis_year, 1, 1)).total_seconds() 
-                                      for s in station_times])
+    # Extract real surface station obs first
+    real_stations = {}
+    for ID in station_ids:
+        print('Extracting real obs at %s' % ID)
+        real_stations[ID] = {}
+        for v in real_varnames:
+            real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
+        real_stations[ID]['ceil'] = np.ones([len(years), ntimes * ndays]) * np.nan
+        real_stations[ID]['n_skyl'] = np.zeros(len(years)) * np.nan
+        real_stations[ID]['frac_ceil'] = np.zeros(len(years)) * np.nan
+        for j, yr in enumerate(years):
+            tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
+                                 skiprows=5)
 
-        # Temporary variables for determining fraction of time with a ceiling
-        ceil_obs = 0
-        tot_obs = 0
-
-        for k, d in enumerate(analysis_days):
-            for l, time in enumerate(analysis_times):
-                diff = np.abs(station_times_tot - ((d + time) - dt.datetime(analysis_year, 1, 1)).total_seconds())
-                idx = np.argmin(diff)
-                for v in real_varnames:
-                    if (diff.min() > max_time_allowed) or (ss_df.loc[idx, v] == 'M'):
-                        real_stations[ID][v][(j*ndays) + k, l] = np.nan
-                    else:
-                        real_stations[ID][v][(j*ndays) + k, l] = ss_df.loc[idx, v]
-
-                # Determine if there is a ceiling
-                skyc = ss_df.loc[idx, ['skyc%d' % n for n in range(1, 5)]].values
-                skyl = ss_df.loc[idx, ['skyl%d' % n for n in range(1, 5)]].values
-                skyl[skyl == 'M'] = np.nan
-                skyl = np.float64(skyl)
-                ceil_idx = np.where((skyc == 'OVC') | (skyc == 'BKN'))[0]
-                if len(ceil_idx) > 0:
-                    ceil_obs = ceil_obs + 1
-                    if not np.all(np.isnan(skyl[ceil_idx])):
-                        real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
-                        real_stations[ID]['ceil'][j, (k*ntimes) + l] = np.nanmin(skyl[ceil_idx])
-                if not np.all(skyc == 'M'):
-                    tot_obs = tot_obs + 1
-                    if len(ceil_idx) == 0:
-                        real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
-
-        real_stations[ID]['frac_ceil'][j] = ceil_obs / tot_obs
-
-# Convert real obs to same units/variables as fake obs
-# Note that the surface stations report the altimeter setting rather than station-level pressure.
-# The difference between these two is discussed here: https://www.weather.gov/bou/pressure_definitions
-for ID in station_ids:
-    real_stations[ID]['POB'] = mc.altimeter_to_station_pressure(real_stations[ID]['alti'] * units.inHg, 
-                                                                real_stations[ID]['elevation'] * units.m).to('mbar').magnitude
-    real_stations[ID]['TOB'] = (real_stations[ID]['tmpf'] * units.degF).to('degC').magnitude       
-    real_stations[ID]['QOB'] = mc.specific_humidity_from_dewpoint(real_stations[ID]['POB'] * units.mbar,
-                                                                  real_stations[ID]['dwpf'] * units.degF).magnitude * 1e6
-    wnd_tmp = mc.wind_components(real_stations[ID]['sknt'] * units.kt, real_stations[ID]['drct'] * units.deg)
-    real_stations[ID]['UOB'] = wnd_tmp[0].to(units.m / units.s).magnitude
-    real_stations[ID]['VOB'] = wnd_tmp[1].to(units.m / units.s).magnitude
-    real_stations[ID]['WSPD'] = (real_stations[ID]['sknt'] * units.kt).to(units.m / units.s).magnitude
-    real_stations[ID]['WDIR'] = real_stations[ID]['drct']
-    real_stations[ID]['lon'] = real_stations[ID]['lon'] + 360.
-    real_stations[ID]['ceil'] = (real_stations[ID]['ceil'] * units.ft).to(units.km).magnitude    
-
-# Extract fake observations
-print()
-fake_stations = {}
-for ID in station_ids:
-    fake_stations[ID] = {}
-    for v in fake_varnames + fake_varnames_noplot:
-        fake_stations[ID][v] = np.ones([ndays, ntimes]) * np.nan
-for i, d in enumerate(analysis_days):
-    for j, t in enumerate(analysis_times):
-        time = d + t
-        print(time.strftime('%Y%m%d %H:%M'))
-        try:
-            full_bufr_csv = bufr.bufrCSV('%s/%s.sfc.fake.prepbufr.csv' % 
-                                         (fake_obs_dir, time.strftime('%Y%m%d%H%M')), use_all_col=True)
-            full_bufr_csv.df = bufr.compute_wspd_wdir(full_bufr_csv.df)
-        except FileNotFoundError:
-            print('file not found, continuing to next time')
-            continue
-        
-        # Remove rows that do not have thermodynamic AND kinematic data
-        bufr_csv_no_nan = full_bufr_csv.df.loc[np.logical_not(np.isnan(full_bufr_csv.df['TOB']) |
-                                                              np.isnan(full_bufr_csv.df['UOB']))].copy()
-
-        for ID in station_ids:
-            red_csv = bufr_csv_no_nan.loc[bufr_csv_no_nan['SID'] == ID].copy()
-            if len(red_csv) == 0:
-                # No obs, switching to next station
-                print('no simulated obs for %s' % ID)
+            if len(tmp_df) == 0:
+                print('No data for %s %d (all data will be NaN)' % (ID, yr))
                 continue
-            red_csv.reset_index(inplace=True, drop=True)
-            idx = np.argmin(np.abs(red_csv['DHR']))
-            if (3600*np.abs(red_csv['DHR'].loc[idx])) < max_time_allowed:
-                for v in fake_varnames + fake_varnames_noplot:
-                    fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
-# Convert ceiling from gpm to km and compute binary ceiling
-for ID in station_ids:
-    fake_stations[ID]['ceil'] = (mc.geopotential_to_height(fake_stations[ID]['ceil'] * units.m * const.g).to('km').magnitude -
-                                 mc.geopotential_to_height(fake_stations[ID]['ELV'] * units.m * const.g).to('km').magnitude)
-    fake_stations[ID]['bin_ceil'] = np.float64(~np.isnan(fake_stations[ID]['ceil']))
-    fake_stations[ID]['bin_ceil'][np.isnan(fake_stations[ID]['TOB'])] = np.nan
-    fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
-                                      np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
+            # Only retain times with thermodynamic and kinematic obs (this eliminates special obs for 
+            # gusts, etc.)
+            ss_df = tmp_df.loc[(tmp_df['tmpf'] != 'M') & (tmp_df['drct'] != 'M')].copy()
+            ss_df.reset_index(inplace=True, drop=True)
 
-# Compute z-scores for fake stations
-# For modified z-scores explanation, see here: 
-# https://medium.com/analytics-vidhya/anomaly-detection-by-modified-z-score-f8ad6be62bac
-fake_stations_z = {}
-all_zscores = {}
-for v in fake_varnames:
-    all_zscores[v] = np.zeros([ndays*len(station_ids), ntimes])
-for i, ID in enumerate(station_ids):
-    fake_stations_z[ID] = {}
+            station_times = [dt.datetime.strptime(s, '%Y-%m-%d %H:%M').replace(year=analysis_year) 
+                             for s in ss_df['valid'].values]
+            station_times_tot = np.array([(s - dt.datetime(analysis_year, 1, 1)).total_seconds() 
+                                          for s in station_times])
+
+            # Temporary variables for determining fraction of time with a ceiling
+            ceil_obs = 0
+            tot_obs = 0
+
+            for k, d in enumerate(analysis_days):
+                for l, time in enumerate(analysis_times):
+                    diff = np.abs(station_times_tot - ((d + time) - dt.datetime(analysis_year, 1, 1)).total_seconds())
+                    idx = np.argmin(diff)
+                    for v in real_varnames:
+                        if (diff.min() > max_time_allowed) or (ss_df.loc[idx, v] == 'M'):
+                            real_stations[ID][v][(j*ndays) + k, l] = np.nan
+                        else:
+                            real_stations[ID][v][(j*ndays) + k, l] = ss_df.loc[idx, v]
+
+                    # Determine if there is a ceiling
+                    skyc = ss_df.loc[idx, ['skyc%d' % n for n in range(1, 5)]].values
+                    skyl = ss_df.loc[idx, ['skyl%d' % n for n in range(1, 5)]].values
+                    skyl[skyl == 'M'] = np.nan
+                    skyl = np.float64(skyl)
+                    ceil_idx = np.where((skyc == 'OVC') | (skyc == 'BKN'))[0]
+                    if len(ceil_idx) > 0:
+                        ceil_obs = ceil_obs + 1
+                        if not np.all(np.isnan(skyl[ceil_idx])):
+                            real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
+                            real_stations[ID]['ceil'][j, (k*ntimes) + l] = np.nanmin(skyl[ceil_idx])
+                    if not np.all(skyc == 'M'):
+                        tot_obs = tot_obs + 1
+                        if len(ceil_idx) == 0:
+                            real_stations[ID]['n_skyl'][j] = real_stations[ID]['n_skyl'][j] + 1
+
+            if tot_obs > 0:
+                real_stations[ID]['frac_ceil'][j] = ceil_obs / tot_obs
+
+    # Convert real obs to same units/variables as fake obs
+    # Note that the surface stations report the altimeter setting rather than station-level pressure.
+    # The difference between these two is discussed here: https://www.weather.gov/bou/pressure_definitions
+    for ID in station_ids:
+        real_stations[ID]['POB'] = mc.altimeter_to_station_pressure(real_stations[ID]['alti'] * units.inHg, 
+                                                                    real_stations[ID]['elevation'] * units.m).to('mbar').magnitude
+        real_stations[ID]['TOB'] = (real_stations[ID]['tmpf'] * units.degF).to('degC').magnitude       
+        real_stations[ID]['QOB'] = mc.specific_humidity_from_dewpoint(real_stations[ID]['POB'] * units.mbar,
+                                                                      real_stations[ID]['dwpf'] * units.degF).magnitude * 1e6
+        wnd_tmp = mc.wind_components(real_stations[ID]['sknt'] * units.kt, real_stations[ID]['drct'] * units.deg)
+        real_stations[ID]['UOB'] = wnd_tmp[0].to(units.m / units.s).magnitude
+        real_stations[ID]['VOB'] = wnd_tmp[1].to(units.m / units.s).magnitude
+        real_stations[ID]['WSPD'] = (real_stations[ID]['sknt'] * units.kt).to(units.m / units.s).magnitude
+        real_stations[ID]['WDIR'] = real_stations[ID]['drct']
+        real_stations[ID]['lon'] = real_stations[ID]['lon'] + 360.
+        real_stations[ID]['ceil'] = (real_stations[ID]['ceil'] * units.ft).to(units.km).magnitude    
+
+    # Extract fake observations
+    print()
+    fake_stations = {}
+    for ID in station_ids:
+        fake_stations[ID] = {}
+        for v in fake_varnames + fake_varnames_noplot:
+            fake_stations[ID][v] = np.ones([ndays, ntimes]) * np.nan
+    for i, d in enumerate(analysis_days):
+        for j, t in enumerate(analysis_times):
+            time = d + t
+            print(time.strftime('%Y%m%d %H:%M'))
+            try:
+                full_bufr_csv = bufr.bufrCSV('%s/%s.sfc.fake.prepbufr.csv' % 
+                                             (fake_obs_dir, time.strftime('%Y%m%d%H%M')))
+                full_bufr_csv.df = bufr.compute_wspd_wdir(full_bufr_csv.df)
+            except FileNotFoundError:
+                print('file not found, continuing to next time')
+                continue
+        
+            # Remove rows that do not have thermodynamic AND kinematic data
+            bufr_csv_no_nan = full_bufr_csv.df.loc[np.logical_not(np.isnan(full_bufr_csv.df['TOB']) |
+                                                                  np.isnan(full_bufr_csv.df['UOB']))].copy()
+
+            for ID in station_ids:
+                red_csv = bufr_csv_no_nan.loc[bufr_csv_no_nan['SID'] == "'%s'" % ID].copy()
+                if len(red_csv) == 0:
+                    # No obs, switching to next station
+                    print('no simulated obs for %s' % ID)
+                    continue
+                red_csv.reset_index(inplace=True, drop=True)
+                idx = np.argmin(np.abs(red_csv['DHR']))
+                if (3600*np.abs(red_csv['DHR'].loc[idx])) < max_time_allowed:
+                    for v in fake_varnames + fake_varnames_noplot:
+                        fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
+
+    # Convert ceiling from gpm to km and compute binary ceiling
+    for ID in station_ids:
+        fake_stations[ID]['ceil'] = (mc.geopotential_to_height(fake_stations[ID]['ceil'] * units.m * const.g).to('km').magnitude -
+                                     mc.geopotential_to_height(fake_stations[ID]['ELV'] * units.m * const.g).to('km').magnitude)
+        fake_stations[ID]['bin_ceil'] = np.float64(~np.isnan(fake_stations[ID]['ceil']))
+        fake_stations[ID]['bin_ceil'][np.isnan(fake_stations[ID]['TOB'])] = np.nan
+        fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
+                                          np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
+
+    # Compute z-scores for fake stations
+    # For modified z-scores explanation, see here: 
+    # https://medium.com/analytics-vidhya/anomaly-detection-by-modified-z-score-f8ad6be62bac
+    fake_stations_z = {}
+    all_zscores = {}
     for v in fake_varnames:
-        fake_stations_z[ID][v] = np.zeros([ndays, ntimes])
-        for k in range(ndays):
-            if zscore == 'regular':
-                ctr = np.nanmean(real_stations[ID][v][k::ndays, :], axis=0)
-                spd = np.nanstd(real_stations[ID][v][k::ndays, :], axis=0)
-            elif zscore == 'modified':
-                ctr = np.nanmedian(real_stations[ID][v][k::ndays, :], axis=0)
-                spd = 1.4826 * ss.median_abs_deviation(real_stations[ID][v][k::ndays, :], axis=0, 
-                                                       nan_policy='omit')
-            spd[np.isclose(spd, 0)] = np.nan
-            fake_stations_z[ID][v][k, :] = (fake_stations[ID][v][k, :] - ctr) / spd
-            all_zscores[v][i*ndays+k, :] = fake_stations_z[ID][v][k, :]
+        all_zscores[v] = np.zeros([ndays*len(station_ids), ntimes])
+    for i, ID in enumerate(station_ids):
+        fake_stations_z[ID] = {}
+        for v in fake_varnames:
+            fake_stations_z[ID][v] = np.zeros([ndays, ntimes])
+            for k in range(ndays):
+                if zscore == 'regular':
+                    ctr = np.nanmean(real_stations[ID][v][k::ndays, :], axis=0)
+                    spd = np.nanstd(real_stations[ID][v][k::ndays, :], axis=0)
+                elif zscore == 'modified':
+                    ctr = np.nanmedian(real_stations[ID][v][k::ndays, :], axis=0)
+                    spd = 1.4826 * ss.median_abs_deviation(real_stations[ID][v][k::ndays, :], axis=0, 
+                                                           nan_policy='omit')
+                spd[np.isclose(spd, 0)] = np.nan
+                fake_stations_z[ID][v][k, :] = (fake_stations[ID][v][k, :] - ctr) / spd
+                all_zscores[v][i*ndays+k, :] = fake_stations_z[ID][v][k, :]
 
+    # Save output to pickle file for use later
+    if use_pickle:
+        all_data = {}
+        all_data['fake_stations'] = fake_stations
+        all_data['fake_stations_z'] = fake_stations_z
+        all_data['real_stations'] = real_stations
+        all_data['all_zscores'] = all_zscores
+        all_data['analysis_times'] = analysis_times
+        with open(pickle_fname, 'wb') as handle:
+            pickle.dump(all_data, handle)
+
+#---------------------------------------------------------------------------------------------------
 # Plot results
+#---------------------------------------------------------------------------------------------------
+
 ncols = 4
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
 fig_ztot, axes_ztot = plt.subplots(nrows=2, ncols=ncols, figsize=(12, 8))
