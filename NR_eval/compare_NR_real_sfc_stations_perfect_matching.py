@@ -33,22 +33,22 @@ import pyDA_utils.bufr as bufr
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter'
+real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
 with open('station_list.txt', 'r') as fptr:
     station_ids = fptr.readlines()
     for i in range(len(station_ids)):
         station_ids[i] = station_ids[i].strip()
 years = np.arange(1993, 2023)
-#startdate = '04290000'
-#enddate = '05070000'
-startdate = '02010000'
-enddate = '02080000'
+startdate = '04290000'
+enddate = '05070000'
+#startdate = '02010000'
+#enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
-fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/obs/eval_sfc_station/perfect_conv/'
-#analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
-analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
+fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/obs/eval_sfc_station/perfect_csv/'
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+#analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -58,15 +58,22 @@ max_time_allowed = 450.
 ceil_plot = 'hgt'
 
 # Type of z-score to use for z-score plots ('regular' or 'modified')
-# Also select cutoff value that denotes outliers
+# Also select cutoff value that denotes outliers and minimum number of climo data points required to
+# compute the z-score
 zscore = 'regular'
 zcutoff = 2
+zscore_min_pts = 24
+
+# Option to adjust the fake obs pressure and/or temperature based on elevation differences between
+# the real and fake surface stations
+elv_adjust_prs = True
+elv_adjust_T = True
 
 # Option to save/use output from a pickle file
 # If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
 # is not found, that file will be written to.
 use_pickle = True
-pickle_fname = './sfc_station_compare_winter.pkl'
+pickle_fname = './sfc_station_compare_spring.pkl'
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -86,6 +93,7 @@ if use_pickle:
         real_stations = all_data['real_stations']
         all_zscores = all_data['all_zscores']
         analysis_times = all_data['analysis_times']
+        pickle_avail = True
     except FileNotFoundError:
         pickle_avail = False
 else:
@@ -218,6 +226,25 @@ if not pickle_avail:
                     for v in fake_varnames + fake_varnames_noplot:
                         fake_stations[ID][v][i, j] = red_csv.loc[idx, v]
 
+    # Perform pressure and temperature adjustment
+    print()
+    g = 9.81
+    Rd = 287.04
+    lr = 0.0065  # Based on US Standard Atmosphere, see Part 4, Table I from https://ntrs.nasa.gov/citations/19770009539
+    for ID in station_ids:
+        elv_diff = (np.unique(real_stations[ID]['elevation'][~np.isnan(real_stations[ID]['elevation'])])[0] -
+                    np.unique(fake_stations[ID]['ELV'][~np.isnan(fake_stations[ID]['ELV'])])[0]) 
+        print('%s, elev diff = %.1f' % (ID, elv_diff))
+        if elv_adjust_prs:
+            # Use hydrostatic balance for the adjustment
+            fake_stations[ID]['POB_original'] = fake_stations[ID]['POB'].copy()
+            fake_stations[ID]['POB'] = (fake_stations[ID]['POB'] * 
+                                        np.exp(-g * elv_diff / (Rd * (fake_stations[ID]['TOB'] + 273.15))))
+        if elv_adjust_T:
+            # Adjust based on a specified lapse rate
+            fake_stations[ID]['TOB_original'] = fake_stations[ID]['TOB'].copy()
+            fake_stations[ID]['TOB'] = fake_stations[ID]['TOB'] - (lr * elv_diff)
+            
     # Convert ceiling from gpm to km and compute binary ceiling
     for ID in station_ids:
         fake_stations[ID]['ceil'] = (mc.geopotential_to_height(fake_stations[ID]['ceil'] * units.m * const.g).to('km').magnitude -
@@ -246,6 +273,10 @@ if not pickle_avail:
                     ctr = np.nanmedian(real_stations[ID][v][k::ndays, :], axis=0)
                     spd = 1.4826 * ss.median_abs_deviation(real_stations[ID][v][k::ndays, :], axis=0, 
                                                            nan_policy='omit')
+
+                # Set Z-score to NaN if the spread is close to 0 or if the number of climo data 
+                # points < zscore_min_pts
+                spd[np.sum(~np.isnan(real_stations[ID][v][k::ndays, :]), axis=0) < zscore_min_pts] = np.nan
                 spd[np.isclose(spd, 0)] = np.nan
                 fake_stations_z[ID][v][k, :] = (fake_stations[ID][v][k, :] - ctr) / spd
                 all_zscores[v][i*ndays+k, :] = fake_stations_z[ID][v][k, :]
@@ -258,8 +289,11 @@ if not pickle_avail:
         all_data['real_stations'] = real_stations
         all_data['all_zscores'] = all_zscores
         all_data['analysis_times'] = analysis_times
+        all_data['elv_adjust_prs'] = elv_adjust_prs
+        all_data['elv_adjust_T'] = elv_adjust_T
         with open(pickle_fname, 'wb') as handle:
             pickle.dump(all_data, handle)
+
 
 #---------------------------------------------------------------------------------------------------
 # Plot results

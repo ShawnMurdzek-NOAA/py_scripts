@@ -24,7 +24,7 @@ import pickle
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
+real_obs_dir = './spring/'
 with open('station_list.txt', 'r') as fptr:
     station_ids = fptr.readlines()
     for i in range(len(station_ids)):
@@ -62,6 +62,7 @@ max_hr = max_time_allowed / 3600.
 # Loop over each station
 real_varnames = ['tmpf', 'dwpf', 'drct', 'sknt', 'alti']
 for ID in station_ids:
+    print()
     print('Extracting real obs at %s' % ID)
     n_nan = {}
     for v in real_varnames:
