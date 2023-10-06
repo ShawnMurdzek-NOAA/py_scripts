@@ -33,22 +33,22 @@ import pyDA_utils.bufr as bufr
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
+real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter'
 with open('station_list.txt', 'r') as fptr:
     station_ids = fptr.readlines()
     for i in range(len(station_ids)):
         station_ids[i] = station_ids[i].strip()
 years = np.arange(1993, 2023)
-startdate = '04290000'
-enddate = '05070000'
-#startdate = '02010000'
-#enddate = '02080000'
+#startdate = '04290000'
+#enddate = '05070000'
+startdate = '02010000'
+enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
-fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/obs/eval_sfc_station/perfect_csv/'
-analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
-#analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
+fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/obs/eval_sfc_station/perfect_csv/'
+#analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -69,11 +69,18 @@ zscore_min_pts = 24
 elv_adjust_prs = True
 elv_adjust_T = True
 
+# Option to create null distribution for bootstrap significance testing
+create_bootstrap_null = True
+
+# Option to save the rank of the NR compared to the observations (this can be used to create a rank
+# histogram
+save_rank = True
+
 # Option to save/use output from a pickle file
 # If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
 # is not found, that file will be written to.
 use_pickle = True
-pickle_fname = './sfc_station_compare_spring.pkl'
+pickle_fname = './sfc_station_compare_winter.pkl'
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -257,18 +264,42 @@ if not pickle_avail:
     # Compute z-scores for fake stations
     # For modified z-scores explanation, see here: 
     # https://medium.com/analytics-vidhya/anomaly-detection-by-modified-z-score-f8ad6be62bac
+    print()
+    print('computing standardized anomalies...')
     fake_stations_z = {}
     all_zscores = {}
+    if create_bootstrap_null:
+        bootstrap_null = {}
+        fake_stations_z_pct = {}
+        all_z_pct = {}
     for v in fake_varnames:
         all_zscores[v] = np.zeros([ndays*len(station_ids), ntimes])
+        if create_bootstrap_null:
+            all_z_pct[v] = np.zeros([ndays*len(station_ids), ntimes])
     for i, ID in enumerate(station_ids):
         fake_stations_z[ID] = {}
+        if create_bootstrap_null:
+            bootstrap_null[ID] = {}
+            fake_stations_z_pct[ID] = {}
         for v in fake_varnames:
             fake_stations_z[ID][v] = np.zeros([ndays, ntimes])
+            if create_bootstrap_null:
+                bootstrap_null[ID][v] = np.zeros([ndays, ntimes, len(years)])
+                fake_stations_z_pct[ID][v] = np.zeros([ndays, ntimes])
             for k in range(ndays):
                 if zscore == 'regular':
                     ctr = np.nanmean(real_stations[ID][v][k::ndays, :], axis=0)
                     spd = np.nanstd(real_stations[ID][v][k::ndays, :], axis=0)
+                    if create_bootstrap_null:
+                        for l in range(len(years)):
+                            sample_real = real_stations[ID][v][k::ndays, :].copy()
+                            sample_fake = sample_real[l, :]
+                            sample_real[l, :] = fake_stations[ID][v][k, :]
+                            sample_ctr = np.nanmean(sample_real, axis=0)
+                            sample_spd = np.nanstd(sample_real, axis=0)
+                            sample_spd[np.sum(~np.isnan(sample_real), axis=0) < zscore_min_pts] = np.nan
+                            sample_spd[np.isclose(sample_spd, 0)] = np.nan
+                            bootstrap_null[ID][v][k, :, l] = (sample_fake - sample_ctr) / sample_spd
                 elif zscore == 'modified':
                     ctr = np.nanmedian(real_stations[ID][v][k::ndays, :], axis=0)
                     spd = 1.4826 * ss.median_abs_deviation(real_stations[ID][v][k::ndays, :], axis=0, 
@@ -280,6 +311,38 @@ if not pickle_avail:
                 spd[np.isclose(spd, 0)] = np.nan
                 fake_stations_z[ID][v][k, :] = (fake_stations[ID][v][k, :] - ctr) / spd
                 all_zscores[v][i*ndays+k, :] = fake_stations_z[ID][v][k, :]
+                if create_bootstrap_null:
+                    for l in range(ntimes):
+                        npts = np.sum(~np.isnan(bootstrap_null[ID][v][k, l, :]))
+                        if npts > 0:
+                            fake_stations_z_pct[ID][v][k, l] = (np.sum(bootstrap_null[ID][v][k, l, :] < 
+                                                                       fake_stations_z[ID][v][k, l]) / npts)
+                        else:
+                            fake_stations_z_pct[ID][v][k, l] = np.nan
+                    all_z_pct[v][i*ndays+k, :] = fake_stations_z_pct[ID][v][k, :]
+
+    # Compute rank of the NR compared to the obs (note that these ranks are fractions b/c not all
+    # distributions have the same number of values)
+    if save_rank:
+        fake_station_rank = {}
+        all_rank = {}
+        for v in fake_varnames:
+            all_rank[v] = np.zeros([ndays*len(station_ids), ntimes])
+        for i, ID in enumerate(station_ids):
+            fake_station_rank[ID] = {}
+            for v in fake_varnames:
+                fake_station_rank[ID][v] = np.zeros([ndays, ntimes])
+                for k in range(ndays):
+                    for l in range(ntimes):
+                        if (np.isnan(fake_stations[ID][v][k, l]) or 
+                            (np.sum(~np.isnan(real_stations[ID][v][k::ndays, l])) < zscore_min_pts)):
+                            fake_station_rank[ID][v][k, l] = np.nan
+                            continue
+                        combined_array = np.array([fake_stations[ID][v][k, l]] +
+                                                  list(real_stations[ID][v][k::ndays, l]))
+                        combined_array = combined_array[~np.isnan(combined_array)]
+                        fake_station_rank[ID][v][k, l] = np.where(np.argsort(combined_array) == 0)[0][0] / (combined_array.size - 1)
+                    all_rank[v][i*ndays+k, :] = fake_station_rank[ID][v][k, :]
 
     # Save output to pickle file for use later
     if use_pickle:
@@ -291,6 +354,13 @@ if not pickle_avail:
         all_data['analysis_times'] = analysis_times
         all_data['elv_adjust_prs'] = elv_adjust_prs
         all_data['elv_adjust_T'] = elv_adjust_T
+        if create_bootstrap_null:
+            all_data['bootstrap_null'] = bootstrap_null
+            all_data['fake_stations_z_pct'] = fake_stations_z_pct
+            all_data['all_z_pct'] = all_z_pct
+        if save_rank:
+            all_data['fake_station_rank'] = fake_station_rank
+            all_data['all_rank'] = all_rank
         with open(pickle_fname, 'wb') as handle:
             pickle.dump(all_data, handle)
 
@@ -298,6 +368,9 @@ if not pickle_avail:
 #---------------------------------------------------------------------------------------------------
 # Plot results
 #---------------------------------------------------------------------------------------------------
+
+print()
+print('creating plots...')
 
 ncols = 4
 plot_hr = np.array([t.total_seconds() / 3600. for t in analysis_times])
