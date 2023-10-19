@@ -14,6 +14,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
+import pickle
 
 import pyDA_utils.gsi_fcts as gsi
 
@@ -24,13 +25,19 @@ import pyDA_utils.gsi_fcts as gsi
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can have any number of datasets. Key is the name of the dataset
-tmpl_real = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/old_runs/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-tmpl_osse = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/old_runs/winter_1st_iter_tuning_v2/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(24)]
+tmpl_real_winter = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter_updated/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+tmpl_real_spring = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/spring/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+tmpl_osse_winter = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_updated/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+tmpl_osse_spring = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/spring/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
+dates_winter = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
+dates_spring = [dt.datetime(2022, 4, 29, 21) + dt.timedelta(hours=i) for i in range(159)]
 
 path_tmpl = {}
-path_tmpl['real'] = [tmpl_real % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
-path_tmpl['osse'] = [tmpl_osse % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates]
+path_tmpl['real'] = ([tmpl_real_winter % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_winter] +
+                     [tmpl_real_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring])
+path_tmpl['OSSE'] = ([tmpl_osse_winter % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_winter] +
+                     [tmpl_osse_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring])
+dates = dates_winter + dates_spring
 
 # Variables to plot
 omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
@@ -44,7 +51,7 @@ data_subset = 'assim'
 sfcobs_uselist = None
 
 # Option to group observation classes into larger subsets
-use_subsets = False
+use_subsets = True
 ob_subsets = {'raob':[120, 122, 132, 220, 221, 222],
               'aircft':[130, 131, 133, 134, 135, 230, 231, 232, 233, 234, 235],
               'sfc':[180, 181, 182, 183, 187, 188, 192, 193, 194, 195, 280, 281, 282, 284, 287, 
@@ -53,19 +60,24 @@ ob_subsets = {'raob':[120, 122, 132, 220, 221, 222],
 
 # Option to perform an F test to see whether the O-B variances are significantly different
 # This test assumes that the O-B distributions are Gaussian!
-ftest = True
+ftest = False
 sim1 = 'real'
 sim2 = 'osse'
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'TEST'
+out_str = 'paper'
+
+# Option to save output to a pickle file
+save_pickle = True
+pickle_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
 
 
 #---------------------------------------------------------------------------------------------------
 # Compute Statistics
 #---------------------------------------------------------------------------------------------------
 
+# Create a separate figure for each variable
 for var in omf_vars:
 
     print()
@@ -111,15 +123,15 @@ for var in omf_vars:
                         subset[omf_df[key][omf]['Observation_Type'] == typ] = s
                 omf_df[key][omf]['subset'] = subset
         ob_groups = list(ob_subsets.keys())
-
+ 
     # Determine ob counts and O-B and O-A distributions
-    plot_data = {}
+    plot_data[var] = {}
     for key in data_names:
-        plot_data[key] = {}
-        plot_data[key]['n_obs'] = np.zeros(len(ob_groups))
-        plot_data[key]['n_assim'] = np.zeros(len(ob_groups))
-        plot_data[key]['omb'] = []
-        plot_data[key]['oma'] = []
+        plot_data[var][key] = {}
+        plot_data[var][key]['n_obs'] = np.zeros(len(ob_groups))
+        plot_data[var][key]['n_assim'] = np.zeros(len(ob_groups))
+        plot_data[var][key]['omb'] = []
+        plot_data[var][key]['oma'] = []
         for j, g in enumerate(ob_groups):
             if use_subsets:
                 omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['subset'] == g]
@@ -127,14 +139,14 @@ for var in omf_vars:
             else:
                 omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['Observation_Type'] == g]
                 oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['Observation_Type'] == g]
-            plot_data[key]['n_obs'][j] = len(oma_subset)
-            plot_data[key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
+            plot_data[var][key]['n_obs'][j] = len(oma_subset)
+            plot_data[var][key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
             if data_subset == 'all':
-                plot_data[key]['omb'].append(omb_subset[vname].values)
-                plot_data[key]['oma'].append(oma_subset[vname].values)
+                plot_data[var][key]['omb'].append(omb_subset[vname].values)
+                plot_data[var][key]['oma'].append(oma_subset[vname].values)
             elif data_subset == 'assim':
-                plot_data[key]['omb'].append(omb_subset[vname].loc[omb_subset['Analysis_Use_Flag'] == 1].values)
-                plot_data[key]['oma'].append(oma_subset[vname].loc[oma_subset['Analysis_Use_Flag'] == 1].values)
+                plot_data[var][key]['omb'].append(omb_subset[vname].loc[omb_subset['Analysis_Use_Flag'] == 1].values)
+                plot_data[var][key]['oma'].append(oma_subset[vname].loc[oma_subset['Analysis_Use_Flag'] == 1].values)
 
     # Plot data 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(12, 9), sharey=True)
@@ -149,13 +161,13 @@ for var in omf_vars:
     for key, off, c in zip(data_names, offsets, colors):
         for j, (n_name, xlabel) in enumerate(zip(['n_obs', 'n_assim'], ['# obs', '# assimilated'])):
             ax = axes[j]
-            ax.barh(ylocs+off, plot_data[key][n_name], height=bar_hgt, label=key, color=c)
+            ax.barh(ylocs+off, plot_data[var][key][n_name], height=bar_hgt, label=key, color=c)
             ax.set_xlabel(xlabel, size=14)
             ax.set_xscale('log')
             ax.set_xlim(left=1)
         for j, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
             ax = axes[j+2]
-            ax.boxplot(plot_data[key][omf], positions=(ylocs+off), widths=bar_hgt, vert=False, patch_artist=True,
+            ax.boxplot(plot_data[var][key][omf], positions=(ylocs+off), widths=bar_hgt, vert=False, patch_artist=True,
                        boxprops={'facecolor':c}, showfliers=False)
             ax.set_xlabel(xlabel, size=14)
 
@@ -194,6 +206,14 @@ for var in omf_vars:
         if data_subset == 'assim':
             print(gsi.test_var_f_stat(omf_df[sim1]['omb'].loc[omf_df[sim1]['omb']['Analysis_Use_Flag'] == 1], 
                                       omf_df[sim2]['omb'].loc[omf_df[sim2]['omb']['Analysis_Use_Flag'] == 1]))
+
+# Save output to pickle file for use later
+if use_pickle and (not pickle_avail):
+    all_data = {}
+    all_data['plot_data'] = plot_data
+    all_data['omf_df'] = omf_df
+    with open(pickle_fname, 'wb') as handle:
+        pickle.dump(all_data, handle)
 
 
 """
