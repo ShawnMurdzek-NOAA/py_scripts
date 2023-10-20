@@ -15,6 +15,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import datetime as dt
 import pickle
+import copy
 
 import pyDA_utils.gsi_fcts as gsi
 
@@ -33,11 +34,9 @@ dates_winter = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in rang
 dates_spring = [dt.datetime(2022, 4, 29, 21) + dt.timedelta(hours=i) for i in range(159)]
 
 path_tmpl = {}
-path_tmpl['real'] = ([tmpl_real_winter % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_winter] +
-                     [tmpl_real_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring])
-path_tmpl['OSSE'] = ([tmpl_osse_winter % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_winter] +
-                     [tmpl_osse_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring])
-dates = dates_winter + dates_spring
+path_tmpl['real'] = [tmpl_real_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring]
+path_tmpl['OSSE'] = [tmpl_osse_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring]
+dates = dates_spring
 
 # Variables to plot
 omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
@@ -66,11 +65,11 @@ sim2 = 'osse'
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'paper'
+out_str = 'spring'
 
-# Option to save output to a pickle file
-save_pickle = True
-pickle_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
+# Option to save some output statistics to a pickle file
+save_output = True
+output_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
 
 
 #---------------------------------------------------------------------------------------------------
@@ -78,6 +77,7 @@ pickle_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
 #---------------------------------------------------------------------------------------------------
 
 # Create a separate figure for each variable
+output_stats = {}
 for var in omf_vars:
 
     print()
@@ -125,13 +125,13 @@ for var in omf_vars:
         ob_groups = list(ob_subsets.keys())
  
     # Determine ob counts and O-B and O-A distributions
-    plot_data[var] = {}
+    plot_data = {}
     for key in data_names:
-        plot_data[var][key] = {}
-        plot_data[var][key]['n_obs'] = np.zeros(len(ob_groups))
-        plot_data[var][key]['n_assim'] = np.zeros(len(ob_groups))
-        plot_data[var][key]['omb'] = []
-        plot_data[var][key]['oma'] = []
+        plot_data[key] = {}
+        plot_data[key]['n_obs'] = np.zeros(len(ob_groups))
+        plot_data[key]['n_assim'] = np.zeros(len(ob_groups))
+        plot_data[key]['omb'] = []
+        plot_data[key]['oma'] = []
         for j, g in enumerate(ob_groups):
             if use_subsets:
                 omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['subset'] == g]
@@ -139,14 +139,14 @@ for var in omf_vars:
             else:
                 omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['Observation_Type'] == g]
                 oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['Observation_Type'] == g]
-            plot_data[var][key]['n_obs'][j] = len(oma_subset)
-            plot_data[var][key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
+            plot_data[key]['n_obs'][j] = len(oma_subset)
+            plot_data[key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
             if data_subset == 'all':
-                plot_data[var][key]['omb'].append(omb_subset[vname].values)
-                plot_data[var][key]['oma'].append(oma_subset[vname].values)
+                plot_data[key]['omb'].append(omb_subset[vname].values)
+                plot_data[key]['oma'].append(oma_subset[vname].values)
             elif data_subset == 'assim':
-                plot_data[var][key]['omb'].append(omb_subset[vname].loc[omb_subset['Analysis_Use_Flag'] == 1].values)
-                plot_data[var][key]['oma'].append(oma_subset[vname].loc[oma_subset['Analysis_Use_Flag'] == 1].values)
+                plot_data[key]['omb'].append(omb_subset[vname].loc[omb_subset['Analysis_Use_Flag'] == 1].values)
+                plot_data[key]['oma'].append(oma_subset[vname].loc[oma_subset['Analysis_Use_Flag'] == 1].values)
 
     # Plot data 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(12, 9), sharey=True)
@@ -161,13 +161,13 @@ for var in omf_vars:
     for key, off, c in zip(data_names, offsets, colors):
         for j, (n_name, xlabel) in enumerate(zip(['n_obs', 'n_assim'], ['# obs', '# assimilated'])):
             ax = axes[j]
-            ax.barh(ylocs+off, plot_data[var][key][n_name], height=bar_hgt, label=key, color=c)
+            ax.barh(ylocs+off, plot_data[key][n_name], height=bar_hgt, label=key, color=c)
             ax.set_xlabel(xlabel, size=14)
             ax.set_xscale('log')
             ax.set_xlim(left=1)
         for j, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
             ax = axes[j+2]
-            ax.boxplot(plot_data[var][key][omf], positions=(ylocs+off), widths=bar_hgt, vert=False, patch_artist=True,
+            ax.boxplot(plot_data[key][omf], positions=(ylocs+off), widths=bar_hgt, vert=False, patch_artist=True,
                        boxprops={'facecolor':c}, showfliers=False)
             ax.set_xlabel(xlabel, size=14)
 
@@ -206,13 +206,31 @@ for var in omf_vars:
         if data_subset == 'assim':
             print(gsi.test_var_f_stat(omf_df[sim1]['omb'].loc[omf_df[sim1]['omb']['Analysis_Use_Flag'] == 1], 
                                       omf_df[sim2]['omb'].loc[omf_df[sim2]['omb']['Analysis_Use_Flag'] == 1]))
+    
+    # Save some output
+    if save_output:
+        output_stats[var] = {}
+        for key in data_names:
+            output_stats[var][key] = {}
+            for k, ob in enumerate(ob_groups):
+                output_stats[var][key][ob] = {'n_obs': plot_data[key]['n_obs'][k],
+                                              'n_assim': plot_data[key]['n_assim'][k]}
+                if output_stats[var][key][ob]['n_assim'] > 0:
+                    for omf in ['omb', 'oma']:
+                        output_stats[var][key][ob]['%s_mean' % omf] = np.mean(plot_data[key][omf][k])
+                        for pct in [0, 5, 25, 50, 75, 95, 100]:
+                            output_stats[var][key][ob]['%s_p%d' % (omf, pct)] = np.percentile(plot_data[key][omf][k], pct)
+                        iqr = output_stats[var][key][ob]['%s_p75' % omf] - output_stats[var][key][ob]['%s_p25' % omf]
+                        ind_low = plot_data[key][omf][k] > (output_stats[var][key][ob]['%s_p25' % omf] - 1.5*iqr)
+                        ind_high = plot_data[key][omf][k] < (output_stats[var][key][ob]['%s_p75' % omf] + 1.5*iqr)
+                        output_stats[var][key][ob]['%s_whislo' % omf] = np.amin(plot_data[key][omf][k][ind_low])
+                        output_stats[var][key][ob]['%s_whishi' % omf] = np.amax(plot_data[key][omf][k][ind_high])
 
-# Save output to pickle file for use later
-if use_pickle and (not pickle_avail):
+# Save output to a CSV file for later use
+if save_output:
     all_data = {}
-    all_data['plot_data'] = plot_data
-    all_data['omf_df'] = omf_df
-    with open(pickle_fname, 'wb') as handle:
+    all_data['output_stats'] = output_stats
+    with open(output_fname, 'wb') as handle:
         pickle.dump(all_data, handle)
 
 
