@@ -33,22 +33,22 @@ import pyDA_utils.bufr as bufr
 #---------------------------------------------------------------------------------------------------
 
 # Parameters for real obs
-real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/winter'
+real_obs_dir = '/work2/noaa/wrfruc/murdzek/real_obs/sfc_stations/spring'
 with open('station_list.txt', 'r') as fptr:
     station_ids = fptr.readlines()
     for i in range(len(station_ids)):
         station_ids[i] = station_ids[i].strip()
 years = np.arange(1993, 2023)
-#startdate = '04290000'
-#enddate = '05070000'
-startdate = '02010000'
-enddate = '02080000'
+startdate = '04290000'
+enddate = '05070000'
+#startdate = '02010000'
+#enddate = '02080000'
 
 # Parameters for fake obs
 # analysis_times are dt.timedelta objects relative to 0000
-fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_winter/obs/eval_sfc_station/perfect_csv/'
-#analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
-analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
+fake_obs_dir = '/work2/noaa/wrfruc/murdzek/nature_run_spring/obs/eval_sfc_station/perfect_csv/'
+analysis_days = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
+#analysis_days = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(7)]
 analysis_times = [dt.timedelta(hours=i) for i in range(24)]
 
 # Maximum time allowed between analysis_times and either the real or fake ob (sec)
@@ -70,17 +70,20 @@ elv_adjust_prs = True
 elv_adjust_T = True
 
 # Option to create null distribution for bootstrap significance testing
-create_bootstrap_null = True
+create_bootstrap_null = False
 
 # Option to save the rank of the NR compared to the observations (this can be used to create a rank
 # histogram
 save_rank = True
 
+# Ceiling thresholds used for evaluations (only applies if save_rank = True). In km.
+ceil_thres = [0.1524, 0.3048, 0.9144]
+
 # Option to save/use output from a pickle file
 # If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
 # is not found, that file will be written to.
 use_pickle = True
-pickle_fname = './sfc_station_compare_winter.pkl'
+pickle_fname = './sfc_station_compare_spring.pkl'
 
 # Output file name (include %s placeholder for station ID)
 out_fname = '%s_sfc_station_compare_perfect.png'
@@ -128,8 +131,9 @@ if not pickle_avail:
         for v in real_varnames:
             real_stations[ID][v] = np.ones([len(years) * ndays, ntimes]) * np.nan
         real_stations[ID]['ceil'] = np.ones([len(years), ntimes * ndays]) * np.nan
-        real_stations[ID]['n_skyl'] = np.zeros(len(years)) * np.nan
+        real_stations[ID]['n_skyl'] = np.zeros(len(years))
         real_stations[ID]['frac_ceil'] = np.zeros(len(years)) * np.nan
+        real_stations[ID]['frac_ceil_thres'] = np.zeros([len(ceil_thres), len(years)]) * np.nan
         for j, yr in enumerate(years):
             tmp_df = pd.read_csv('%s/%s_%d%s_%d%s.txt' % (real_obs_dir, ID, yr, startdate, yr, enddate), 
                                  skiprows=5)
@@ -180,6 +184,8 @@ if not pickle_avail:
 
             if tot_obs > 0:
                 real_stations[ID]['frac_ceil'][j] = ceil_obs / tot_obs
+                for l, thres in enumerate(ceil_thres):
+                    real_stations[ID]['frac_ceil_thres'][l, j] = np.sum(real_stations[ID]['ceil'][j, :] <= thres) / tot_obs
 
     # Convert real obs to same units/variables as fake obs
     # Note that the surface stations report the altimeter setting rather than station-level pressure.
@@ -258,8 +264,11 @@ if not pickle_avail:
                                      mc.geopotential_to_height(fake_stations[ID]['ELV'] * units.m * const.g).to('km').magnitude)
         fake_stations[ID]['bin_ceil'] = np.float64(~np.isnan(fake_stations[ID]['ceil']))
         fake_stations[ID]['bin_ceil'][np.isnan(fake_stations[ID]['TOB'])] = np.nan
-        fake_stations[ID]['frac_ceil'] = (np.nansum(fake_stations[ID]['bin_ceil']) / 
-                                          np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil'])))
+        tot_obs = np.count_nonzero(~np.isnan(fake_stations[ID]['bin_ceil']))
+        fake_stations[ID]['frac_ceil'] = np.nansum(fake_stations[ID]['bin_ceil']) / tot_obs
+        fake_stations[ID]['frac_ceil_thres'] = np.zeros(len(ceil_thres))
+        for l, thres in enumerate(ceil_thres):
+            fake_stations[ID]['frac_ceil_thres'][l] = np.sum(fake_stations[ID]['ceil'] <= thres) / tot_obs
 
     # Compute z-scores for fake stations
     # For modified z-scores explanation, see here: 
@@ -325,7 +334,7 @@ if not pickle_avail:
     # distributions have the same number of values)
     if save_rank:
         fake_station_rank = {}
-        all_rank = {}
+        all_rank = {'ceil':np.zeros([len(station_ids), len(ceil_thres)])}
         for v in fake_varnames:
             all_rank[v] = np.zeros([ndays*len(station_ids), ntimes])
         for i, ID in enumerate(station_ids):
@@ -343,6 +352,14 @@ if not pickle_avail:
                         combined_array = combined_array[~np.isnan(combined_array)]
                         fake_station_rank[ID][v][k, l] = np.where(np.argsort(combined_array) == 0)[0][0] / (combined_array.size - 1)
                     all_rank[v][i*ndays+k, :] = fake_station_rank[ID][v][k, :]
+            # Ceiling obs
+            fake_station_rank[ID]['ceil'] = np.zeros(len(ceil_thres))
+            for j in range(len(ceil_thres)):
+                combined_array = np.array([fake_stations[ID]['frac_ceil_thres'][j]] +
+                                           list(real_stations[ID]['frac_ceil_thres'][j, :]))
+                combined_array = combined_array[~np.isnan(combined_array)]
+                fake_station_rank[ID]['ceil'][j] = np.where(np.argsort(combined_array) == 0)[0][0] / (combined_array.size - 1)
+            all_rank['ceil'][i, :] = fake_station_rank[ID]['ceil']
 
     # Save output to pickle file for use later
     if use_pickle:
@@ -354,6 +371,7 @@ if not pickle_avail:
         all_data['analysis_times'] = analysis_times
         all_data['elv_adjust_prs'] = elv_adjust_prs
         all_data['elv_adjust_T'] = elv_adjust_T
+        all_data['ceil_thres'] = ceil_thres
         if create_bootstrap_null:
             all_data['bootstrap_null'] = bootstrap_null
             all_data['fake_stations_z_pct'] = fake_stations_z_pct
