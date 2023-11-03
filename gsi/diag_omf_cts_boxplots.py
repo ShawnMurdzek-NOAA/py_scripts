@@ -32,6 +32,7 @@ tmpl_osse_winter = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/winter_updated
 tmpl_osse_spring = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data/spring/NCO_dirs/ptmp/prod/rrfs.%s/%s/'
 dates_winter = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
 dates_spring = [dt.datetime(2022, 4, 29, 21) + dt.timedelta(hours=i) for i in range(159)]
+dates_spring = [dates_spring[0]]
 
 path_tmpl = {}
 path_tmpl['real'] = [tmpl_real_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring]
@@ -40,9 +41,10 @@ dates = dates_spring
 
 # Variables to plot
 omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
+omf_vars = ['t']
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
-data_subset = 'assim'
+data_subset = 'all'
 
 # GSD sfcobs uselist file. Used to add the provider string for mesonet obs. Set to None to not 
 # use this feature (Note: Using this feature causes the program to run much slower!)
@@ -50,7 +52,7 @@ data_subset = 'assim'
 sfcobs_uselist = None
 
 # Option to group observation classes into larger subsets
-use_subsets = True
+use_subsets = False
 ob_subsets = {'raob':[120, 122, 132, 220, 221, 222],
               'aircft':[130, 131, 133, 134, 135, 230, 231, 232, 233, 234, 235],
               'sfc':[180, 181, 182, 183, 187, 188, 192, 193, 194, 195, 280, 281, 282, 284, 287, 
@@ -63,12 +65,16 @@ ftest = False
 sim1 = 'real'
 sim2 = 'osse'
 
+# Option to plot histograms of O-Bs for both assimilated and non-assimilated data
+plot_hist = True
+hist_ob_typ = 188
+
 # Output directory and string to add to output file names
 out_dir = './'
 out_str = 'spring'
 
 # Option to save some output statistics to a pickle file
-save_output = True
+save_output = False
 output_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
 
 
@@ -190,6 +196,39 @@ for var in omf_vars:
     plt.savefig('%s/omf_diag_%s_%s_%s_%d_%d.png' % 
                 (out_dir, out_str, var, data_subset, np.amin(omf_dates), np.amax(omf_dates)))
     plt.close() 
+
+    # Plot histogram of O-Bs for a single ob type
+    if plot_hist:
+        fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
+        omb_str = 'Obs_Minus_Forecast_adjusted'        
+
+        # Determine bins
+        hist_df = {}
+        for k, key in enumerate(data_names):
+            hist_df[key] = omf_df[key]['omb'].loc[(omf_df[key]['omb']['Observation_Type'] == hist_ob_typ) &
+                                                  (omf_df[key]['omb']['Prep_Use_Flag'] < 1)].copy()
+            if k == 0:
+                min_bin = np.percentile(hist_df[key][omb_str], 0.1)     
+                max_bin = np.percentile(hist_df[key][omb_str], 99.9)
+            else:
+                min_bin = min(min_bin, np.percentile(hist_df[key][omb_str], 0.1))       
+                max_bin = max(max_bin, np.percentile(hist_df[key][omb_str], 99.9))       
+        bins = np.linspace(min_bin, max_bin, 51)
+
+        for key, c in zip(data_names, colors):
+            for flag, label, ls in zip([1, -1], ['assim', 'rej/mon'], ['-', '--']):
+                hvals = np.histogram(hist_df[key].loc[hist_df[key]['Analysis_Use_Flag'] == flag][omb_str],
+                                     bins=bins, density=False)[0]
+                ax.plot(0.5*(bins[1:] + bins[:-1]), hvals, c=c, ls=ls, label='%s %s' % (key, label))
+        
+        ax.grid()
+        ax.legend()
+        ax.set_xlabel('O$-$B', size=16)
+        ax.set_ylabel('counts', size=16)
+        plt.suptitle('Type = %d, Var = %s' % (hist_ob_typ, var), size=20)
+        plt.savefig('%s/omb_hist_%d_%s_%s_%s_%d_%d.png' % 
+                    (out_dir, hist_ob_typ, out_str, var, data_subset, np.amin(omf_dates), np.amax(omf_dates)))
+        plt.close() 
 
     # Print Prep_Use_Flags
     for key in data_names:
