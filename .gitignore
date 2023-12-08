@@ -22,7 +22,10 @@ core*
 *.db
 
 # Pycache
-./modules/__pycache__
+modules/
 
 # Ignore pickle files
 *.pkl
+
+# Jupyter notebook logs
+.ipynb_checkpoints/
