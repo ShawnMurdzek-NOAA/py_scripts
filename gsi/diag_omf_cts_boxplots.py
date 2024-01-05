@@ -39,8 +39,16 @@ path_tmpl = {}
 path_tmpl['OSSE'] = [tmpl_osse_spring % (d.strftime('%Y%m%d'), d.strftime('%H')) for d in dates_spring]
 dates = dates_spring
 
+dates = [dt.datetime(2022, 2, 1, 2) + dt.timedelta(hours=i) for i in range(10)]
+tmpl_hrrr = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_OSSE/syn_data/winter/run/%s/gsiprd/'
+path_tmpl = {}
+path_tmpl['HRRR-like'] = [tmpl_hrrr % d.strftime('%Y%m%d%H') for d in dates]
+
 # Variables to plot
 omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
+
+# Diag type ('netcdf' or 'text')
+diag_type = 'text'
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
 data_subset = 'assim'
@@ -66,7 +74,7 @@ sim2 = 'osse'
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'UAS'
+out_str = 'HRRR_test'
 
 # Option to save some output statistics to a pickle file
 save_output = False
@@ -76,6 +84,12 @@ output_fname = '%s/omf_diag_%s_%s.pkl' % (out_dir, out_str, data_subset)
 #---------------------------------------------------------------------------------------------------
 # Compute Statistics
 #---------------------------------------------------------------------------------------------------
+
+# Analysis use flag field
+if diag_type == 'netcdf':
+    use_flag = 'Analysis_Use_Flag'
+elif diag_type == 'text':
+    use_flag = 'Use_Flag'
 
 # Create a separate figure for each variable
 output_stats = {}
@@ -91,6 +105,8 @@ for var in omf_vars:
         vname = '%s_Obs_Minus_Forecast_adjusted' % var
     else:
         vname = 'Obs_Minus_Forecast_adjusted'
+    if diag_type == 'text':
+        vname = vname[:-9]
 
     # Extract data
     omf_df = {}
@@ -98,13 +114,24 @@ for var in omf_vars:
         print('Dataset = %s' % key)
         omf_df[key] = {}
         for key2, label in zip(['omb', 'oma'], ['ges', 'anl']):
-            if (var == 'u' or var == 'v'):
-                tmp_fnames = ['%s/diag_conv_uv_%s.%s.nc4' % (path, label, d.strftime('%Y%m%d%H')) 
-                              for path, d in zip(path_tmpl[key], dates)]
-            else:
-                tmp_fnames = ['%s/diag_conv_%s_%s.%s.nc4' % (path, var, label, d.strftime('%Y%m%d%H')) 
-                              for path, d in zip(path_tmpl[key], dates)]
-            omf_df[key][key2] = gsi.read_diag(tmp_fnames, mesonet_uselist=sfcobs_uselist)
+            if diag_type == 'netcdf':
+                if (var == 'u' or var == 'v'):
+                    tmp_fnames = ['%s/diag_conv_uv_%s.%s.nc4' % (path, label, d.strftime('%Y%m%d%H')) 
+                                  for path, d in zip(path_tmpl[key], dates)]
+                else:
+                    tmp_fnames = ['%s/diag_conv_%s_%s.%s.nc4' % (path, var, label, d.strftime('%Y%m%d%H')) 
+                                  for path, d in zip(path_tmpl[key], dates)]
+            elif diag_type == 'text':
+                tmp_fnames = ['%s/diag_results.conv_%s' % (path, label) for path in path_tmpl[key]]
+            omf_df[key][key2] = gsi.read_diag(tmp_fnames, mesonet_uselist=sfcobs_uselist, 
+                                              ftype=diag_type,
+                                              date_time=[int(d.strftime('%Y%m%d%H')) for d in dates])
+            # Only retain a specific var for text diag files
+            if diag_type == 'text':
+                if (var == 'u' or var == 'v'):
+                    omf_df[key][key2] = omf_df[key][key2].loc[omf_df[key][key2]['Observation_Class'] == 'uv'].copy()
+                else:
+                    omf_df[key][key2] = omf_df[key][key2].loc[omf_df[key][key2]['Observation_Class'] == var].copy()
     omf_dates = np.unique(omf_df[data_names[0]]['omb']['date_time'])
     
     # Create list of ob types
@@ -141,13 +168,13 @@ for var in omf_vars:
                 omb_subset = omf_df[key]['omb'].loc[omf_df[key]['omb']['Observation_Type'] == g]
                 oma_subset = omf_df[key]['oma'].loc[omf_df[key]['oma']['Observation_Type'] == g]
             plot_data[key]['n_obs'][j] = len(oma_subset)
-            plot_data[key]['n_assim'][j] = np.sum(oma_subset['Analysis_Use_Flag'] == 1)
+            plot_data[key]['n_assim'][j] = np.sum(oma_subset[use_flag] == 1)
             if data_subset == 'all':
                 plot_data[key]['omb'].append(omb_subset[vname].values)
                 plot_data[key]['oma'].append(oma_subset[vname].values)
             elif data_subset == 'assim':
-                plot_data[key]['omb'].append(omb_subset[vname].loc[omb_subset['Analysis_Use_Flag'] == 1].values)
-                plot_data[key]['oma'].append(oma_subset[vname].loc[oma_subset['Analysis_Use_Flag'] == 1].values)
+                plot_data[key]['omb'].append(omb_subset[vname].loc[omb_subset[use_flag] == 1].values)
+                plot_data[key]['oma'].append(oma_subset[vname].loc[oma_subset[use_flag] == 1].values)
 
     # Plot data 
     fig, axes = plt.subplots(nrows=1, ncols=4, figsize=(12, 9), sharey=True)
@@ -193,10 +220,11 @@ for var in omf_vars:
     plt.close() 
 
     # Print Prep_Use_Flags
-    for key in data_names:
-        print()
-        print('Prep_Use_Flag counts for %s:' % key)
-        print(gsi.gsi_flags_table(omf_df[key]['oma'], field='Prep_Use_Flag'))
+    if diag_type == 'netcdf':
+        for key in data_names:
+            print()
+            print('Prep_Use_Flag counts for %s:' % key)
+            print(gsi.gsi_flags_table(omf_df[key]['oma'], field='Prep_Use_Flag'))
 
     # Perform F test (except for u and v):
     if (var not in ['u', 'v']) and ftest:
@@ -205,8 +233,8 @@ for var in omf_vars:
         if data_subset == 'all':
             print(gsi.test_var_f_stat(omf_df[sim1]['omb'], omf_df[sim2]['omb']))
         if data_subset == 'assim':
-            print(gsi.test_var_f_stat(omf_df[sim1]['omb'].loc[omf_df[sim1]['omb']['Analysis_Use_Flag'] == 1], 
-                                      omf_df[sim2]['omb'].loc[omf_df[sim2]['omb']['Analysis_Use_Flag'] == 1]))
+            print(gsi.test_var_f_stat(omf_df[sim1]['omb'].loc[omf_df[sim1]['omb'][use_flag] == 1], 
+                                      omf_df[sim2]['omb'].loc[omf_df[sim2]['omb'][use_flag] == 1]))
     
     # Save some output
     if save_output:
