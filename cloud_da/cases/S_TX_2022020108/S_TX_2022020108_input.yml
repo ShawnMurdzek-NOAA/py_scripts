@@ -29,6 +29,7 @@ save_tag: 'S_TX_2022020108'
 out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_TX_2022020108' 
 
 # "Target" (lat, lon) coordinate for BEC spatial plots
+do_bec: True
 bec_lat: 28.4369
 bec_lon: -99.2350
 bec_klvl: 0
