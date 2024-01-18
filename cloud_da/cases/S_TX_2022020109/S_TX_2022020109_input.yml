@@ -25,8 +25,8 @@ state_vars:
   - 'TCDC_P0_L105_GLC0'
 
 # Tag to add to output files and output file directory
-save_tag: 'S_TX_2022020108'
-out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_TX_2022020108' 
+save_tag: 'S_TX_2022020109'
+out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_TX_2022020109' 
 
 # "Target" (lat, lon) coordinate for BEC spatial plots
 do_bec: True
