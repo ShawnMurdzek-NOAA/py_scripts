@@ -5,6 +5,8 @@
 str_format: '/mnt/lfs4/BMC/wrfruc/murdzek/RRFS_Ens_Cloud_DA/Feb2022_retro/Ens_GDAS_SDLVDL_noGF_cloud1/v0.6.2/prod/rrfs_conus_3km_ensda.20220201/12/mem{num:04d}/rrfs.t12z.{lev}.f001.conus_3km.grib2'
 prslev_vars:
   - 'HGT_P0_L215_GLC0'
+  - 'CEIL_P0_L215_GLC0'
+  - 'CEIL_P0_L2_GLC0'
 nmem: 30
 
 # BUFR parameters
@@ -27,6 +29,9 @@ state_vars:
 # Tag to add to output files and output file directory
 save_tag: 'Dakotas_2022020113'
 out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/Dakotas_2022020113' 
+
+# Size of markers for spatial rank plot
+msize: 350
 
 # "Target" (lat, lon) coordinate for BEC spatial plots
 do_bec: True
