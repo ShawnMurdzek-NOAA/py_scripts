@@ -1,6 +1,10 @@
 """
 Plot Ob Locations for all Types for a Single Variable
 
+Optional Passed Arguments:
+    argv[1] : Date and time (YYYYMMDDHH)
+    argv[2] : Layer option ('all', 'upper_trop', 'near_sfc', 'pbl')
+
 shawn.s.murdzek@noaa.gov
 Date Created: 18 May 2023
 """
@@ -21,6 +25,7 @@ from metpy.units import units
 import metpy.constants as const
 import scipy.interpolate as si
 import datetime as dt
+import sys
 
 import pyDA_utils.gsi_fcts as gsi
 
@@ -31,7 +36,7 @@ import pyDA_utils.gsi_fcts as gsi
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
 # Can 1 or 2 datasets. Key is the name of the dataset
-tmpl = '/mnt/lfs4/BMC/wrfruc/murdzek/tmp_diags/202403250000/diag_conv_uv_ges.%s.nc4'
+tmpl = '/mnt/lfs4/BMC/wrfruc/murdzek/tmp_diags/diag_conv_uv_ges.%s.nc4'
 dates = [dt.datetime(2024, 3, 25, 0)]
 
 fnames = {}
@@ -44,7 +49,7 @@ diag_var = 'u'
 data_subset = 'all'
 
 # Filter observations based on another field (e.g., pressure, height)
-use_filter = True
+use_filter = False
 filter_field = 'Height_AGL'
 filter_min = 400
 filter_max = 600
@@ -52,11 +57,31 @@ filter_max = 600
 # Option to convert 'Height' from MSL to AGL. This requires a RRFS input file to extract the surface
 # terrain height. Resulting field is 'Height_AGL'
 convert_msl_to_agl = True
-rrfs_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/tmp_diags/202403241200/rrfs.t12z.natlev.f000.conus_3km.grib2'
+rrfs_fname = '/mnt/lfs4/BMC/wrfruc/murdzek/tmp_diags/rrfs.t12z.natlev.f000.conus_3km.grib2'
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'z500m_agl'
+out_str = ''
+
+# Use passed command-line arguments
+if len(sys.argv) > 1:
+    dates = [dt.datetime.strptime(sys.argv[1], '%Y%m%d%H')]
+    fnames['real'] = [tmpl % d.strftime('%Y%m%d%H') for d in dates]
+    out_str = sys.argv[2]
+    if out_str == 'all':
+        use_filter = False
+    elif sys.argv[2] == 'upper_trop':
+        use_filter = True
+        filter_min = 5000
+        filter_max = 10000
+    elif sys.argv[2] == 'near_sfc':
+        use_filter = True
+        filter_min = -100
+        filter_max = 50
+    elif sys.argv[2] == 'pbl':
+        use_filter = True
+        filter_min = 500
+        filter_max = 1000
 
 
 #---------------------------------------------------------------------------------------------------
