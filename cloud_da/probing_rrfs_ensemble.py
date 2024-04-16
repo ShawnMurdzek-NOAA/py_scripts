@@ -32,6 +32,7 @@ import sys
 import pyDA_utils.plot_model_data as pmd
 import pyDA_utils.bufr as bufr
 import pyDA_utils.ensemble_utils as eu
+import pyDA_utils.upp_postprocess as uppp
 
 
 #---------------------------------------------------------------------------------------------------
@@ -132,15 +133,16 @@ def preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss):
     """
 
     for m in ens_obj.mem_names:
-        print('computing ceiling AGL heights for {m}'.format(m=m))
-        for old_name, new_name, miss in zip(ceil_fields, ceil_names, ceil_miss):
-            ens_obj.subset_ds[m][new_name] = ens_obj.subset_ds[m][old_name]
-            ens_obj.subset_ds[m][new_name].values = (mc.geopotential_to_height(ens_obj.subset_ds[m][old_name].values * units.m * const.g).magnitude -
-                                                     mc.geopotential_to_height(ens_obj.subset_ds[m]['HGT_P0_L1_GLC0'].values * units.m * const.g).magnitude)
-            if not np.isnan(miss):
-                ens_obj.subset_ds[m][new_name].values[np.isclose(ens_obj.subset_ds[m][old_name].values, miss)] = np.nan
-            ens_obj.subset_ds[m][new_name].attrs['long_name'] = 'ceiling height'
-            ens_obj.subset_ds[m][new_name].attrs['units'] = 'm AGL'
+        print(f'computing ceiling AGL heights for {m}')
+        ens_obj.subset_ds[m] = uppp.compute_ceil_agl(ens_obj.subset_ds[m], no_ceil=np.nan)
+        #for old_name, new_name, miss in zip(ceil_fields, ceil_names, ceil_miss):
+        #    ens_obj.subset_ds[m][new_name] = ens_obj.subset_ds[m][old_name]
+        #    ens_obj.subset_ds[m][new_name].values = (mc.geopotential_to_height(ens_obj.subset_ds[m][old_name].values * units.m * const.g).magnitude -
+        #                                             mc.geopotential_to_height(ens_obj.subset_ds[m]['HGT_P0_L1_GLC0'].values * units.m * const.g).magnitude)
+        #    if not np.isnan(miss):
+        #        ens_obj.subset_ds[m][new_name].values[np.isclose(ens_obj.subset_ds[m][old_name].values, miss)] = np.nan
+        #    ens_obj.subset_ds[m][new_name].attrs['long_name'] = 'ceiling height'
+        #    ens_obj.subset_ds[m][new_name].attrs['units'] = 'm AGL'
 
     return ens_obj
 
