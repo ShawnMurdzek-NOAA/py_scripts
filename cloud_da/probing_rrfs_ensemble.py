@@ -542,7 +542,8 @@ if __name__ == '__main__':
     #ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2', 'cld_base']
     #ceil_miss = [np.nan, np.nan, 20000, -5000]
     ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
-    ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2']
+    #ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2']
+    ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
     ceil_miss = [np.nan, np.nan, 20000]
 
     # Read input data
