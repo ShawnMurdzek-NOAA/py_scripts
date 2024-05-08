@@ -33,6 +33,8 @@ import pyDA_utils.plot_model_data as pmd
 import pyDA_utils.bufr as bufr
 import pyDA_utils.ensemble_utils as eu
 import pyDA_utils.upp_postprocess as uppp
+import pyDA_utils.cloud_DA_forward_operator as cfo
+import pyDA_utils.cloud_DA_forward_operator_viz as cfov
 
 
 #---------------------------------------------------------------------------------------------------
@@ -531,6 +533,62 @@ def plot_ceil_ob_ranks(ens_obj, param, ceil_names, bufr_field='CEILING', verbosi
     return None
 
 
+def run_cld_forward_operator(ens_obj, param, ens_name=['mem0001']):
+
+    for n in ens_name:
+        print(f'Running forward operator on ensemble member {n}')
+        model_ds = ens_obj.subset_ds[n]
+        bufr_obj = ens_obj._subset_bufr(['ADPSFC', 'MSONET'])
+
+        cld_ob_df = cfo.find_bufr_cloud_obs(bufr_obj)
+
+        # Interpolating model columns to obs locations
+        cld_hofx = cfo.sfc_cld_forward_operator(cld_ob_df, model_ds, debug=0)
+        cld_hofx.interp_model_col_to_ob()
+
+        # Imposing height limits and min cld fraction
+        cld_hofx.impose_hgt_limits(hgt_field='model_col_height_agl',
+                                fields=['model_col_height_agl', 'model_col_TCDC_P0_L105_GLC0'])
+        cld_hofx.impose_min_cld_frac()
+
+        # Set clear obs to have HOCB = 50 m so they don't get removed
+        for i in cld_hofx.data['idx']:
+            if np.isclose(cld_hofx.data['CLAM'][i][0], 0):
+                cld_hofx.data['HOCB'][i][0] = 50
+        cld_hofx.impose_hgt_limits(hgt_field='HOCB',
+                                fields=['CLAM', 'HOCB'])
+        cld_hofx.clean_obs()
+        for i in cld_hofx.data['idx']:
+            if np.isclose(cld_hofx.data['CLAM'][i][0], 0):
+                cld_hofx.data['HOCB'][i][0] = np.nan
+
+        # Adding clear obs and interpolating model clouds in column to ob heights
+        cld_hofx.add_clear_obs()
+        cld_hofx.decode_ob_clam()
+        cld_hofx.interp_model_to_obs()
+
+        # Compute RMSD
+        rmsd = cld_hofx.compute_OmB()
+
+        # Make plots
+        cld_hofx_viz = cfov.sfc_cld_forward_operator_viz(cld_hofx)
+
+        cld_hofx_viz.scatterplot()
+        plt.savefig(f"{param['out_dir']}/cld_amt_scatterplot_{n}_{param['save_tag']}.png")
+
+        cld_hofx_viz.hist(plot_param={'field':'OmB'})
+        plt.savefig(f"{param['out_dir']}/OmB_hist_{n}_{param['save_tag']}.png")
+
+        cld_hofx_viz.vert_columns(lon_lim=[-124, -70], lat_lim=[21, 49])
+        plt.savefig(f"{param['out_dir']}/hofx_vcols_{n}_{param['save_tag']}.png")
+
+        cld_hofx_viz.composite_cld_cover(lon_lim=[param['min_lon'], param['max_lon']], 
+                                         lat_lim=[param['min_lat'], param['max_lon']])
+        plt.savefig(f"{param['out_dir']}/composite_cld_cover_{n}_{param['save_tag']}.png")
+    
+    return rmsd
+
+
 if __name__ == '__main__':
 
     # YAML inputs
@@ -542,7 +600,6 @@ if __name__ == '__main__':
     #ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2', 'cld_base']
     #ceil_miss = [np.nan, np.nan, 20000, -5000]
     ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
-    #ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2']
     ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
     ceil_miss = [np.nan, np.nan, 20000]
 
@@ -561,6 +618,11 @@ if __name__ == '__main__':
         _ = plot_ens_mean_std(ens_obj, param)
         _ = plot_bec_horiz_1var(ens_obj, param)
         _ = plot_ens_deviation_hist(ens_obj, param)
+
+       # Apply cloud DA forward operator
+        rmsd = run_cld_forward_operator(ens_obj, param)
+        print(f'Forward operator RMSD = {rmsd}')
+
     _ = plot_ceil_ob_ranks(ens_obj, param, ceil_names)
 
 
