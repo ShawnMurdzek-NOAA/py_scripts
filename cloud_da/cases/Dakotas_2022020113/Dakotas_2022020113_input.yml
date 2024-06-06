@@ -38,3 +38,6 @@ do_bec: True
 bec_lat: 46.2667
 bec_lon: -100.2329
 bec_klvl: 0
+
+# Option to run ceilometer hofx
+do_hofx: False

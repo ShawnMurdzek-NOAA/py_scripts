@@ -13,12 +13,46 @@ nmem: 30
 bufr_fname: '/lfs4/BMC/wrfruc/murdzek/real_obs/decoded_bufr_for_cloudDA/202202011300.rap.prepbufr.csv'
 
 # Subset domain
-min_lon: -134.1
-max_lon: -60.9
-min_lat: 10.0
-max_lat: 53.0
+min_lon: -101.0
+max_lon: -98.25
+min_lat: 45.25
+max_lat: 47.0
 z_ind:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+  - 10
+  - 11
   - 12
+  - 13
+  - 14
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 26
+  - 27
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32
+  - 33
+  - 34
+  - 35
 
 # Variables to include in state matrix (assumed to be 3D)
 state_vars:
@@ -27,17 +61,17 @@ state_vars:
   - 'TCDC_P0_L105_GLC0'
 
 # Tag to add to output files and output file directory
-save_tag: 'CONUS_2022020113'
-out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/CONUS_2022020113' 
+save_tag: 'Dakotas_2022020113'
+out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/Dakotas_2022020113' 
 
 # Size of markers for spatial rank plot
-msize: 50
+msize: 350
 
 # "Target" (lat, lon) coordinate for BEC spatial plots
-do_bec: False
+do_bec: True
 bec_lat: 46.2667
 bec_lon: -100.2329
 bec_klvl: 0
 
 # Option to run ceilometer hofx
-do_hofx: False
+do_hofx: True

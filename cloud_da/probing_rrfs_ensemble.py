@@ -533,42 +533,23 @@ def plot_ceil_ob_ranks(ens_obj, param, ceil_names, bufr_field='CEILING', verbosi
     return None
 
 
-def run_cld_forward_operator(ens_obj, param, ens_name=['mem0001']):
-
-    for n in ens_name:
+def run_cld_forward_operator(ens_obj, param, ens_name=['mem0001'], hofx_kw={}):
+    
+    rmsd = np.zeros(len(ens_name))
+    for i, n in enumerate(ens_name):
         print(f'Running forward operator on ensemble member {n}')
         model_ds = ens_obj.subset_ds[n]
-        bufr_obj = ens_obj._subset_bufr(['ADPSFC', 'MSONET'])
+        bufr_df = ens_obj._subset_bufr(['ADPSFC', 'MSONET'])
+        cld_ob_df = cfo.remove_missing_cld_ob(bufr_df)
 
-        cld_ob_df = cfo.find_bufr_cloud_obs(bufr_obj)
+        # Create ceilometer forward operator object
+        cld_hofx = cfo.ceilometer_hofx_driver(cld_ob_df, model_ds, **hofx_kw)
+        nobs = len(cld_hofx.data['idx'])
+        print(f"number of obs = {nobs}")
 
-        # Interpolating model columns to obs locations
-        cld_hofx = cfo.sfc_cld_forward_operator(cld_ob_df, model_ds, debug=0)
-        cld_hofx.interp_model_col_to_ob()
-
-        # Imposing height limits and min cld fraction
-        cld_hofx.impose_hgt_limits(hgt_field='model_col_height_agl',
-                                fields=['model_col_height_agl', 'model_col_TCDC_P0_L105_GLC0'])
-        cld_hofx.impose_min_cld_frac()
-
-        # Set clear obs to have HOCB = 50 m so they don't get removed
-        for i in cld_hofx.data['idx']:
-            if np.isclose(cld_hofx.data['CLAM'][i][0], 0):
-                cld_hofx.data['HOCB'][i][0] = 50
-        cld_hofx.impose_hgt_limits(hgt_field='HOCB',
-                                fields=['CLAM', 'HOCB'])
-        cld_hofx.clean_obs()
-        for i in cld_hofx.data['idx']:
-            if np.isclose(cld_hofx.data['CLAM'][i][0], 0):
-                cld_hofx.data['HOCB'][i][0] = np.nan
-
-        # Adding clear obs and interpolating model clouds in column to ob heights
-        cld_hofx.add_clear_obs()
-        cld_hofx.decode_ob_clam()
-        cld_hofx.interp_model_to_obs()
-
-        # Compute RMSD
-        rmsd = cld_hofx.compute_OmB()
+        # Compute OmB and RMSD
+        cld_hofx.compute_OmB()
+        rmsd[i] = cld_hofx.compute_global_RMS(field='OmB')
 
         # Make plots
         cld_hofx_viz = cfov.sfc_cld_forward_operator_viz(cld_hofx)
@@ -576,14 +557,26 @@ def run_cld_forward_operator(ens_obj, param, ens_name=['mem0001']):
         cld_hofx_viz.scatterplot()
         plt.savefig(f"{param['out_dir']}/cld_amt_scatterplot_{n}_{param['save_tag']}.png")
 
-        cld_hofx_viz.hist(plot_param={'field':'OmB'})
+        cld_hofx_viz.hist()
         plt.savefig(f"{param['out_dir']}/OmB_hist_{n}_{param['save_tag']}.png")
 
-        cld_hofx_viz.vert_columns(lon_lim=[-124, -70], lat_lim=[21, 49])
+        cld_hofx_viz.vert_columns(idx=list(range(min(35, nobs))))
+        plt.savefig(f"{param['out_dir']}/obs_vcols_{n}_{param['save_tag']}.png")
+
+        cld_hofx_viz.vert_columns(idx=list(range(min(35, nobs))),
+                                  pt_param={'field':'hofx', 
+                                            'label':'H(x) Cloud Amount (%)', 
+                                            'kwargs':{'vmin':0, 'vmax':100, 's':75, 'edgecolors':'k', 'cmap':'plasma_r'}})
         plt.savefig(f"{param['out_dir']}/hofx_vcols_{n}_{param['save_tag']}.png")
 
+        cld_hofx_viz.vert_columns(idx=list(range(min(35, nobs))),
+                                  pt_param={'field':'OmB', 
+                                            'label':r'O$-$B (%)', 
+                                            'kwargs':{'vmin':-100, 'vmax':100, 's':75, 'edgecolors':'k', 'cmap':'bwr'}})
+        plt.savefig(f"{param['out_dir']}/OmB_vcols_{n}_{param['save_tag']}.png")
+
         cld_hofx_viz.composite_cld_cover(lon_lim=[param['min_lon'], param['max_lon']], 
-                                         lat_lim=[param['min_lat'], param['max_lon']])
+                                         lat_lim=[param['min_lat'], param['max_lat']])
         plt.savefig(f"{param['out_dir']}/composite_cld_cover_{n}_{param['save_tag']}.png")
     
     return rmsd
@@ -619,9 +612,12 @@ if __name__ == '__main__':
         _ = plot_bec_horiz_1var(ens_obj, param)
         _ = plot_ens_deviation_hist(ens_obj, param)
 
-       # Apply cloud DA forward operator
-        rmsd = run_cld_forward_operator(ens_obj, param)
-        print(f'Forward operator RMSD = {rmsd}')
+    # Apply cloud DA forward operator
+    if param['do_hofx']:
+        rmsd = run_cld_forward_operator(ens_obj, param, 
+                                        ens_name=ens_obj.mem_names,
+                                        hofx_kw={'hgt_lim_kw':{'max_hgt':3500}})
+        print(f'Forward operator RMSDs = {rmsd}')
 
     _ = plot_ceil_ob_ranks(ens_obj, param, ceil_names)
 
