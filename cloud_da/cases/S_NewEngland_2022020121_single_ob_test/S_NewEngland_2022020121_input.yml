@@ -7,7 +7,7 @@ prslev_vars:
   - 'HGT_P0_L215_GLC0'
   - 'CEIL_P0_L215_GLC0'
   - 'CEIL_P0_L2_GLC0'
-nmem: 3
+nmem: 30
 
 # BUFR parameters
 bufr_fname: '/lfs4/BMC/wrfruc/murdzek/real_obs/decoded_bufr_for_cloudDA/202202012100.rap.prepbufr.csv'
@@ -81,3 +81,4 @@ do_single_ob: True
 ob_sid: 'KHFD'
 ob_idx: -1
 ob_var: 156.25
+plot_klvl: 18
