@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #SBATCH -A wrfruc
-#SBATCH -t 04:00:00
+#SBATCH -t 08:00:00
 #SBATCH --ntasks=1
 #SBATCH --partition=orion
 
