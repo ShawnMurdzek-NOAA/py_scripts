@@ -27,6 +27,8 @@ import xarray as xr
 import cartopy.crs as ccrs
 import yaml
 import sys
+import pandas as pd
+import copy
 
 import pyDA_utils.plot_model_data as pmd
 import pyDA_utils.upp_postprocess as uppp
@@ -43,6 +45,7 @@ with open(yaml_name, 'r') as fptr:
 
 # Extract input parameters
 model_info = param['model_info']
+time_info = param['time_info']
 field_info = param['field_info']
 lat_lim = param['lat_lim']
 lon_lim = param['lon_lim']
@@ -61,6 +64,35 @@ proj = ccrs.PlateCarree()
 #---------------------------------------------------------------------------------------------------
 # Plot Data
 #---------------------------------------------------------------------------------------------------
+
+# Timing
+start = dt.datetime.now()
+print(f"starting time = {start.strftime('%Y%m%d %H:%M:%S')}")
+print()
+
+# Modify files list using time_info parameters
+if time_info['use']:
+    init_list = pd.date_range(start=dt.datetime.strptime(time_info['init_start'], '%Y%m%d%H'),
+                              end=dt.datetime.strptime(time_info['init_end'], '%Y%m%d%H'),
+                              freq=time_info['init_step']).tolist()
+    for comp_name in model_info.keys():
+        for mname in model_info[comp_name].keys():
+            files = []
+            template = model_info[comp_name][mname]['files'][0]
+            for itime in init_list:
+                for fhr in time_info['fcst_hr']:
+                    dum = copy.deepcopy(template)
+                    dum = dum.replace('{iYYYY}', itime.strftime('%Y'))
+                    dum = dum.replace('{iMM}', itime.strftime('%m'))
+                    dum = dum.replace('{iDD}', itime.strftime('%d'))
+                    dum = dum.replace('{iHH}', itime.strftime('%H'))
+                    dum = dum.replace('{vYYYY}', (itime + dt.timedelta(hours=fhr)).strftime('%Y'))
+                    dum = dum.replace('{vMM}', (itime + dt.timedelta(hours=fhr)).strftime('%m'))
+                    dum = dum.replace('{vDD}', (itime + dt.timedelta(hours=fhr)).strftime('%d'))
+                    dum = dum.replace('{vHH}', (itime + dt.timedelta(hours=fhr)).strftime('%H'))
+                    dum = dum.replace('{FFF}', f'{fhr:03d}')
+                    files.append(dum)
+            model_info[comp_name][mname]['files'] = files
 
 field_list = list(field_info.keys())
 
@@ -154,6 +186,10 @@ for comp_name in model_info.keys():
             else:
                 plt.savefig(f"{comp_name}_{save_tag}_{init_time.strftime('%Y%m%d%H')}_f{fhr[0]:03d}_f{fhr[1]:03d}_{prslev/1e2}mb_{field.split('_')[0]}.png")
             plt.close()
+
+# Timing
+print()
+print(f"elapsed time = {(dt.datetime.now() - start).total_seconds()} s")
 
 
 """

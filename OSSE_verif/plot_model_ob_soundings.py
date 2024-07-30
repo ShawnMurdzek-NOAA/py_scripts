@@ -33,7 +33,7 @@ sim_obs_p_range = [1500, 100]
 
 # Name of model1 and model2
 model1_name = 'NR'
-model2_name = 'RRFS_spring_ctrl'
+model2_name = 'RRFS_spring_uas35'
 
 # Location: RAOB station IDs or (lat, lon) coordinates
 use_ob_site = False
