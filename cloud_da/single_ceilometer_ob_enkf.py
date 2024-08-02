@@ -18,6 +18,7 @@ import datetime as dt
 import probing_rrfs_ensemble as pre
 import pyDA_utils.cloud_DA_forward_operator as cfo
 from pyDA_utils import enkf
+import pyDA_utils.plot_model_data as pmd
 
 
 #---------------------------------------------------------------------------------------------------
@@ -52,17 +53,20 @@ def run_cld_forward_operator_1ob(ens_obj, param, ens_name=['mem0001'], hofx_kw={
     return cld_amt, hofx_output, cld_ob_df
 
 
-def unravel_state_matrix(x, ens_obj):
+def unravel_state_matrix(x, ens_obj, ens_dim=True):
     """
     Unravel state matrix so fields can be plotted
     """
 
     output = {}
     for v in np.unique(ens_obj.state_matrix['vars']):
-        output[v] = {}
         var_cond = ens_obj.state_matrix['vars'] == v
-        for i, ens in enumerate(ens_obj.mem_names):
-            output[v][ens] = np.reshape(x[var_cond, i], ens_obj.subset_ds[ens][v].shape)
+        if ens_dim:
+            output[v] = {}
+            for i, ens in enumerate(ens_obj.mem_names):
+                output[v][ens] = np.reshape(x[var_cond, i], ens_obj.subset_ds[ens][v].shape)
+        else:
+            output[v] = np.reshape(x[var_cond], ens_obj.subset_ds[ens_obj.mem_names[0]][v].shape)
 
     return output
 
@@ -87,6 +91,85 @@ def add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj):
                 ens_obj.subset_ds[ens][label+v].values = out[v][ens]
 
     return ens_obj
+
+
+def add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj):
+    """
+    Add the ensemble mean, standard deviation, and Kalman gain to the first ensemble member
+    """
+
+    # Compute stats
+    var_2d = {}
+    for x, label1 in zip([enkf_obj.x_b, enkf_obj.x_a], ['', 'ana']):
+        for fct, label2 in zip([np.mean, np.std], ['mean', 'std']):
+            var_2d[f'{label2}_{label1}'] = unravel_state_matrix(fct(x, axis=1), ens_obj, ens_dim=False)
+    var_2d['K'] = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
+
+    # Add fields to ens_obj
+    ens = ens_obj.mem_names[0]
+    for v in var_2d[list(var_2d.keys())[0]]:
+        for key in var_2d.keys():
+            ens_obj.subset_ds[ens][f"{key}_{v}"] = ens_obj.subset_ds[ens][v].copy()
+            ens_obj.subset_ds[ens][f"{key}_{v}"].values = var_2d[key][v]
+            if key == 'K':
+                units = ens_obj.subset_ds[ens][f"{key}_{v}"].attrs['units']
+                ens_obj.subset_ds[ens][f"{key}_{v}"].attrs['units'] = f"{units} / [obs units]"
+                ens_obj.subset_ds[ens][f"{key}_{v}"].attrs['long_name'] = "Kalman gain"
+        ens_obj.subset_ds[ens][f"mean_incr_{v}"] = ens_obj.subset_ds[ens][v].copy()
+        ens_obj.subset_ds[ens][f"mean_incr_{v}"].values = var_2d['mean_ana'][v] - var_2d['mean_'][v]
+
+    return ens_obj
+
+
+def plot_horiz_slices(ds, field, ens_obj, nrows=4, ncols=4, 
+                      klvls=list(range(16)), figsize=(12, 12), verbose=False, cntf_kw={}, 
+                      ob={'plot':False}):
+    """
+    Plot several horizontal slices at various levels
+    """
+    
+    # Make plot
+    fig = plt.figure(figsize=figsize)
+    for i, k in enumerate(klvls):
+        if verbose:
+            print(f"plotting k = {k}")
+        plot_obj = pmd.PlotOutput([ds], 'upp', fig, nrows, ncols, i+1)
+
+        # Make filled contour plot
+        # Skip plotting if < 2 NaN
+        make_plot = np.sum(~np.isnan(ds[field][k, :, :])) > 1
+        if make_plot:
+            plot_obj.contourf(field, cbar=False, ingest_kw={'zind':[k]}, cntf_kw=cntf_kw)
+            cax = plot_obj.cax
+            meta = plot_obj.metadata['contourf0']
+        else:
+            if verbose:
+                print(f"skipping plot for k = {k}")
+            plot_obj.ax = fig.add_subplot(nrows, ncols, i+1, projection=plot_obj.proj)
+        
+        # Add location of observation
+        if ob['plot']:
+            plot_obj.plot(ob['x'], ob['y'], plt_kw=ob['kwargs'])
+
+        plot_obj.config_ax(grid=False)
+        plot_obj.set_lim(ens_obj.lat_limits[0], ens_obj.lat_limits[1], 
+                         ens_obj.lon_limits[0], ens_obj.lon_limits[1])
+        title = 'avg z = {z:.1f} m'.format(z=float(np.mean(ds['HGT_P0_L105_GLC0'][k, :, :] -
+                                                            ds['HGT_P0_L1_GLC0'])))
+        plot_obj.ax.set_title(title, size=14)
+    
+    plt.subplots_adjust(left=0.01, right=0.85)
+
+    cb_ax = fig.add_axes([0.865, 0.02, 0.02, 0.9])
+    cbar = plt.colorbar(cax, cax=cb_ax, orientation='vertical', aspect=35)
+    cbar.set_label(f"{meta['name']} ({meta['units']})", size=14)
+
+    plt.suptitle(field, size=18)
+
+    # Save figure
+    plt.savefig(f"{param['out_dir']}/{field}_{param['save_tag']}.png")
+
+    return fig
 
 
 def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl=0, 
@@ -174,6 +257,70 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
     return fig
 
 
+def plot_kalman_gain(enkf_obj, ens_obj, param, var='TCDC_P0_L105_GLC0', nrows=4, ncols=4, 
+                     klvls=list(range(16)), figsize=(12, 12), verbose=False, cntf_kw={}, 
+                     ob={'plot':False}):
+    """
+    Plot the Kalman gain
+
+    Have separate subplots for each vertical level
+    """
+
+    # Compute K and unravel
+    enkf_obj.compute_Kalman_gain()
+    K_unravel = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
+
+    # Add fields to DataSet for first ensemble member
+    ds = ens_obj.subset_ds[ens_obj.mem_names[0]]
+    for v in K_unravel.keys():
+        ds['K_'+v] = ds[v].copy()
+        ds['K_'+v].values = K_unravel[v]
+    
+    # Make plot
+    fig = plt.figure(figsize=figsize)
+    field = 'K_' + var
+    for i, k in enumerate(klvls):
+        if verbose:
+            print(f"plotting k = {k}")
+        plot_obj = pmd.PlotOutput([ds], 'upp', fig, nrows, ncols, i+1)
+
+        # Make filled contour plot
+        # Skip plotting if < 2 NaN
+        make_plot = np.sum(~np.isnan(ds[field][k, :, :])) > 1
+        if make_plot:
+            plot_obj.contourf(field, cbar=False, ingest_kw={'zind':[k]}, cntf_kw=cntf_kw)
+            cax = plot_obj.cax
+            meta = plot_obj.metadata['contourf0']
+        else:
+            if verbose:
+                print(f"skipping plot for k = {k}")
+            plot_obj.ax = fig.add_subplot(nrows, ncols, i+1, projection=plot_obj.proj)
+        
+        # Add location of observation
+        if ob['plot']:
+            plot_obj.plot(ob['x'], ob['y'], plt_kw=ob['kwargs'])
+
+        plot_obj.config_ax(grid=False)
+        plot_obj.set_lim(ens_obj.lat_limits[0], ens_obj.lat_limits[1], 
+                         ens_obj.lon_limits[0], ens_obj.lon_limits[1])
+        title = 'avg z = {z:.1f} m'.format(z=float(np.mean(ds['HGT_P0_L105_GLC0'][k, :, :] -
+                                                            ds['HGT_P0_L1_GLC0'])))
+        plot_obj.ax.set_title(title, size=14)
+    
+    plt.subplots_adjust(left=0.01, right=0.85)
+
+    cb_ax = fig.add_axes([0.865, 0.02, 0.02, 0.9])
+    cbar = plt.colorbar(cax, cax=cb_ax, orientation='vertical', aspect=35)
+    cbar.set_label(f"{meta['units']} / [obs units]", size=14)
+
+    plt.suptitle(f"{var} Kalman Gain", size=18)
+
+    # Save figure
+    plt.savefig(f"{param['out_dir']}/K_{var}_{param['save_tag']}.png")
+
+    return fig
+
+
 if __name__ == '__main__':
 
     start = dt.datetime.now()
@@ -213,18 +360,68 @@ if __name__ == '__main__':
 
     # Save output to ens_obj for easier plotting
     ens_obj = add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj)
+    ens_obj = add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj)
 
-    # Make plots
-    for meta in ['', 'incr_', 'ana_']:
+    # Plot ensemble mean and standard deviation
+    if param['plot_ens_stats']:
+        print('Making ensemble mean and standard deviation plots')
+        for meta, cmap in zip(['mean__', 'mean_ana_', 'mean_incr_', 'std__', 'std_ana_', 'K_'], 
+                              ['plasma', 'plasma', 'bwr', 'plasma', 'plasma', 'bwr']):
+            for v in param['state_vars']:
+                field = meta + v
+                print(f'plotting {field}...')
+                maxval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 99)
+                minval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 1)
+                if cmap == 'bwr':
+                    clevels = np.linspace(-1, 1, 30) * maxval
+                else:
+                    clevels = np.linspace(minval, maxval, 30)
+                fig = plot_horiz_slices(ens_obj.subset_ds[ens_obj.mem_names[0]], 
+                                        field,
+                                        ens_obj,
+                                        nrows=param['plot_nrows'],
+                                        ncols=param['plot_ncols'],
+                                        klvls=param['plot_klvls'], 
+                                        cntf_kw={'cmap':cmap, 'levels':clevels, 'extend':'both'},
+                                        ob={'plot':True,
+                                            'x':cld_ob_df['XOB'].values[0] - 360, 
+                                            'y':cld_ob_df['YOB'].values[0], 
+                                            'kwargs':{'marker':'*', 'color':'k'}})
+                plt.close(fig)
+
+    # Make postage stamp plots
+    if param['plot_postage_stamp']:
+        print('Making postage stamp plots')
+        for meta in ['', 'incr_', 'ana_']:
+            for v in param['state_vars']:
+                print(f'plotting {meta}{v}...')
+                fig = plot_horiz_postage_stamp(ens_obj, param, upp_field=f'{meta}{v}', 
+                                               klvl=param['plot_postage_stamp_klvl'],
+                                               ob={'plot':True,
+                                                   'x':cld_ob_df['XOB'].values[0] - 360, 
+                                                   'y':cld_ob_df['YOB'].values[0], 
+                                                   'kwargs':{'marker':'*', 'color':'k'}})
+                plt.close(fig)
+    """
+    # Plot Kalman gain
+    if param['plot_cov']:
+        print('Making Kalman gain plots')
+        K_unravel = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
         for v in param['state_vars']:
-            print(f'plotting {meta}{v}...')
-            fig = plot_horiz_postage_stamp(ens_obj, param, upp_field=f'{meta}{v}', klvl=param['plot_klvl'],
-                                           ob={'plot':True,
-                                               'x':cld_ob_df['XOB'].values[0] - 360, 
-                                               'y':cld_ob_df['YOB'].values[0], 
-                                               'kwargs':{'marker':'*', 'color':'k'}})
-            plt.close(fig)
-    
+            maxval = np.percentile(np.abs(K_unravel[v]), 99)
+            clevels = np.linspace(-1, 1, 30) * maxval
+            fig = plot_kalman_gain(enkf_obj, ens_obj, param, var=v, 
+                                   nrows=param['plot_nrows'],
+                                   ncols=param['plot_ncols'],
+                                   klvls=param['plot_klvls'],
+                                   cntf_kw={'cmap':'bwr', 'levels':clevels, 'extend':'both'},
+                                   ob={'plot':True,
+                                       'x':cld_ob_df['XOB'].values[0] - 360, 
+                                       'y':cld_ob_df['YOB'].values[0], 
+                                       'kwargs':{'marker':'*', 'color':'k'}})
+        plt.close(fig)
+        """
+
     print(f'total elapsed time = {(dt.datetime.now() - start).total_seconds()} s')
 
 

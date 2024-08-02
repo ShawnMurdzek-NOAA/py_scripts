@@ -81,4 +81,25 @@ do_single_ob: True
 ob_sid: 'KHFD'
 ob_idx: -1
 ob_var: 156.25
-plot_klvl: 18
+plot_postage_stamp: False
+plot_postage_stamp_klvl: 18
+plot_ens_stats: True
+plot_nrows: 4
+plot_ncols: 4
+plot_klvls:
+  - 2
+  - 4
+  - 6
+  - 8
+  - 10
+  - 12
+  - 14
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  - 22
+  - 24
+  - 26
+  - 28
