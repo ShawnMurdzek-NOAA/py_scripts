@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import cartopy
 import cartopy.crs as ccrs
 import datetime as dt
+import metpy.calc as mc
+from metpy.units import units
 
 import probing_rrfs_ensemble as pre
 import pyDA_utils.cloud_DA_forward_operator as cfo
@@ -71,6 +73,68 @@ def unravel_state_matrix(x, ens_obj, ens_dim=True):
     return output
 
 
+def compute_RH(ens_obj, prefix=''):
+    """
+    Compute RH for the ensemble subset spatial domain
+    """
+
+    for mem in ens_obj.mem_names:
+        ens_obj.subset_ds[mem][f"{prefix}RH_P0_L105_GLC0"] = ens_obj.subset_ds[mem]['SPFH_P0_L105_GLC0'].copy()
+        p = ens_obj.subset_ds[mem]["PRES_P0_L105_GLC0"].values * units.Pa
+        T = ens_obj.subset_ds[mem][f"{prefix}TMP_P0_L105_GLC0"].values * units.K
+        Q = ens_obj.subset_ds[mem][f"{prefix}SPFH_P0_L105_GLC0"].values * units.kg / units.kg
+        ens_obj.subset_ds[mem][f"{prefix}RH_P0_L105_GLC0"].values = mc.relative_humidity_from_specific_humidity(p, T, Q).magnitude * 100
+        ens_obj.subset_ds[mem][f"{prefix}RH_P0_L105_GLC0"].attrs['long_name'] = 'relative humidity'
+        ens_obj.subset_ds[mem][f"{prefix}RH_P0_L105_GLC0"].attrs['units'] = '%'
+
+    return ens_obj
+
+
+def compute_ens_stats_3D(ens_obj, field, stat_fct={'mean_':np.mean, 'std_': np.std}):
+    """
+    Compute various ensemble stats and analysis increments for the desired 3D field
+    (i.e., the field is not part of the state vector)
+
+    Save output to the first ensemble member
+    """
+
+    mem_names = ens_obj.mem_names
+    shape = ens_obj.subset_ds[mem_names[0]][field].shape
+    full_array = np.zeros([shape[0], shape[1], shape[2], len(mem_names)])
+
+    # Extract the desired field from each ensemble member
+    for i, m in enumerate(mem_names):
+        full_array[:, :, :, i] = ens_obj.subset_ds[m][field].values
+    
+    # Compute stats
+    for f in stat_fct.keys():
+        ens_obj.subset_ds[mem_names[0]][f"{f}{field}"] = ens_obj.subset_ds[mem_names[0]][field].copy()
+        ens_obj.subset_ds[mem_names[0]][f"{f}{field}"].values = stat_fct[f](full_array, axis=3)
+
+    return ens_obj
+
+
+def compute_ens_incr_3D(ens_obj, field):
+    """
+    Compute increments for the desired field and save the mean increment to the first ensemble member
+    """
+
+    mem_names = ens_obj.mem_names
+    incr_sum = np.zeros(ens_obj.subset_ds[mem_names[0]][field].shape)
+
+    # Compute increment for each ensemble member
+    for m in mem_names:
+        ens_obj.subset_ds[m][f"incr_{field}"] = ens_obj.subset_ds[m][field].copy()
+        ens_obj.subset_ds[m][f"incr_{field}"].values = ens_obj.subset_ds[m][f"ana_{field}"].values - ens_obj.subset_ds[m][field].values
+        incr_sum = incr_sum + ens_obj.subset_ds[m][f"incr_{field}"].values
+    
+    # Add average increment to first ensemble member
+    ens_obj.subset_ds[mem_names[0]][f"mean_incr_{field}"] = ens_obj.subset_ds[mem_names[0]][field].copy()
+    ens_obj.subset_ds[mem_names[0]][f"mean_incr_{field}"].values = incr_sum / len(mem_names)
+
+    return ens_obj
+
+
 def add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj):
     """
     Add the analysis increment and analysis fields to the ens_obj for easier plotting
@@ -102,7 +166,11 @@ def add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj):
     var_2d = {}
     for x, label1 in zip([enkf_obj.x_b, enkf_obj.x_a], ['', 'ana']):
         for fct, label2 in zip([np.mean, np.std], ['mean', 'std']):
-            var_2d[f'{label2}_{label1}'] = unravel_state_matrix(fct(x, axis=1), ens_obj, ens_dim=False)
+            if label1 == '':
+                name = label2
+            else:
+                name = f'{label2}_{label1}'
+            var_2d[name] = unravel_state_matrix(fct(x, axis=1), ens_obj, ens_dim=False)
     var_2d['K'] = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
 
     # Add fields to ens_obj
@@ -116,7 +184,7 @@ def add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj):
                 ens_obj.subset_ds[ens][f"{key}_{v}"].attrs['units'] = f"{units} / [obs units]"
                 ens_obj.subset_ds[ens][f"{key}_{v}"].attrs['long_name'] = "Kalman gain"
         ens_obj.subset_ds[ens][f"mean_incr_{v}"] = ens_obj.subset_ds[ens][v].copy()
-        ens_obj.subset_ds[ens][f"mean_incr_{v}"].values = var_2d['mean_ana'][v] - var_2d['mean_'][v]
+        ens_obj.subset_ds[ens][f"mean_incr_{v}"].values = var_2d['mean_ana'][v] - var_2d['mean'][v]
 
     return ens_obj
 
@@ -237,6 +305,20 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
         cmap = 'bwr'
         clevels = np.arange(-5.75, 5.76, 0.5) * 1e-4
 
+    elif (upp_field == 'RH_P0_L105_GLC0') or (upp_field == 'ana_RH_P0_L105_GLC0'):
+        if upp_field == 'RH_P0_L105_GLC0':
+            save_fname = f"{param['out_dir']}/postage_stamp_RH_bgd_{param['save_tag']}.png"
+        else:
+            save_fname = f"{param['out_dir']}/postage_stamp_RH_ana_{param['save_tag']}.png"
+        title = 'Relative Humidity'
+        cmap = 'plasma'
+        clevels = np.arange(0, 100.1, 5)
+    elif upp_field == 'incr_RH_P0_L105_GLC0':
+        save_fname = f"{param['out_dir']}/postage_stamp_RH_incr_{param['save_tag']}.png"
+        title = 'Relative Humidity'
+        cmap = 'bwr'
+        clevels = np.arange(-5.75, 5.76, 0.5) * 4
+
     nrows = 5
     ncols = 6
     figsize = (12, 10)
@@ -257,70 +339,6 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
     return fig
 
 
-def plot_kalman_gain(enkf_obj, ens_obj, param, var='TCDC_P0_L105_GLC0', nrows=4, ncols=4, 
-                     klvls=list(range(16)), figsize=(12, 12), verbose=False, cntf_kw={}, 
-                     ob={'plot':False}):
-    """
-    Plot the Kalman gain
-
-    Have separate subplots for each vertical level
-    """
-
-    # Compute K and unravel
-    enkf_obj.compute_Kalman_gain()
-    K_unravel = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
-
-    # Add fields to DataSet for first ensemble member
-    ds = ens_obj.subset_ds[ens_obj.mem_names[0]]
-    for v in K_unravel.keys():
-        ds['K_'+v] = ds[v].copy()
-        ds['K_'+v].values = K_unravel[v]
-    
-    # Make plot
-    fig = plt.figure(figsize=figsize)
-    field = 'K_' + var
-    for i, k in enumerate(klvls):
-        if verbose:
-            print(f"plotting k = {k}")
-        plot_obj = pmd.PlotOutput([ds], 'upp', fig, nrows, ncols, i+1)
-
-        # Make filled contour plot
-        # Skip plotting if < 2 NaN
-        make_plot = np.sum(~np.isnan(ds[field][k, :, :])) > 1
-        if make_plot:
-            plot_obj.contourf(field, cbar=False, ingest_kw={'zind':[k]}, cntf_kw=cntf_kw)
-            cax = plot_obj.cax
-            meta = plot_obj.metadata['contourf0']
-        else:
-            if verbose:
-                print(f"skipping plot for k = {k}")
-            plot_obj.ax = fig.add_subplot(nrows, ncols, i+1, projection=plot_obj.proj)
-        
-        # Add location of observation
-        if ob['plot']:
-            plot_obj.plot(ob['x'], ob['y'], plt_kw=ob['kwargs'])
-
-        plot_obj.config_ax(grid=False)
-        plot_obj.set_lim(ens_obj.lat_limits[0], ens_obj.lat_limits[1], 
-                         ens_obj.lon_limits[0], ens_obj.lon_limits[1])
-        title = 'avg z = {z:.1f} m'.format(z=float(np.mean(ds['HGT_P0_L105_GLC0'][k, :, :] -
-                                                            ds['HGT_P0_L1_GLC0'])))
-        plot_obj.ax.set_title(title, size=14)
-    
-    plt.subplots_adjust(left=0.01, right=0.85)
-
-    cb_ax = fig.add_axes([0.865, 0.02, 0.02, 0.9])
-    cbar = plt.colorbar(cax, cax=cb_ax, orientation='vertical', aspect=35)
-    cbar.set_label(f"{meta['units']} / [obs units]", size=14)
-
-    plt.suptitle(f"{var} Kalman Gain", size=18)
-
-    # Save figure
-    plt.savefig(f"{param['out_dir']}/K_{var}_{param['save_tag']}.png")
-
-    return fig
-
-
 if __name__ == '__main__':
 
     start = dt.datetime.now()
@@ -329,10 +347,6 @@ if __name__ == '__main__':
     yml_fname = sys.argv[1]
     
     # Ceiling field to examine
-    # NOTE: the v0.6.2 RRFS output appears to have an older formulation for the cloud base, so we'll omit for now
-    #ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0', 'HGT_P0_L2_GLC0']
-    #ceil_names = ['ceiling', 'ceil_exp1', 'ceil_exp2', 'cld_base']
-    #ceil_miss = [np.nan, np.nan, 20000, -5000]
     ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
     ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
     ceil_miss = [np.nan, np.nan, 20000]
@@ -362,13 +376,23 @@ if __name__ == '__main__':
     ens_obj = add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj)
     ens_obj = add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj)
 
+    # Compute RH as well as ensemble stats for RH
+    for p in ['', 'ana_']:
+        ens_obj = compute_RH(ens_obj, prefix=p)
+        ens_obj = compute_ens_stats_3D(ens_obj, f"{p}RH_P0_L105_GLC0")
+    ens_obj = compute_ens_incr_3D(ens_obj, "RH_P0_L105_GLC0")
+    param['state_vars'].append('RH_P0_L105_GLC0')
+
     # Plot ensemble mean and standard deviation
     if param['plot_ens_stats']:
         print('Making ensemble mean and standard deviation plots')
-        for meta, cmap in zip(['mean__', 'mean_ana_', 'mean_incr_', 'std__', 'std_ana_', 'K_'], 
+        for meta, cmap in zip(['mean_', 'mean_ana_', 'mean_incr_', 'std_', 'std_ana_', 'K_'], 
                               ['plasma', 'plasma', 'bwr', 'plasma', 'plasma', 'bwr']):
             for v in param['state_vars']:
                 field = meta + v
+                if field not in ens_obj.subset_ds[ens_obj.mem_names[0]]:
+                    print(f'field {field} is missing. Skipping.')
+                    continue
                 print(f'plotting {field}...')
                 maxval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 99)
                 minval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 1)
@@ -402,25 +426,6 @@ if __name__ == '__main__':
                                                    'y':cld_ob_df['YOB'].values[0], 
                                                    'kwargs':{'marker':'*', 'color':'k'}})
                 plt.close(fig)
-    """
-    # Plot Kalman gain
-    if param['plot_cov']:
-        print('Making Kalman gain plots')
-        K_unravel = unravel_state_matrix(enkf_obj.K, ens_obj, ens_dim=False)
-        for v in param['state_vars']:
-            maxval = np.percentile(np.abs(K_unravel[v]), 99)
-            clevels = np.linspace(-1, 1, 30) * maxval
-            fig = plot_kalman_gain(enkf_obj, ens_obj, param, var=v, 
-                                   nrows=param['plot_nrows'],
-                                   ncols=param['plot_ncols'],
-                                   klvls=param['plot_klvls'],
-                                   cntf_kw={'cmap':'bwr', 'levels':clevels, 'extend':'both'},
-                                   ob={'plot':True,
-                                       'x':cld_ob_df['XOB'].values[0] - 360, 
-                                       'y':cld_ob_df['YOB'].values[0], 
-                                       'kwargs':{'marker':'*', 'color':'k'}})
-        plt.close(fig)
-        """
 
     print(f'total elapsed time = {(dt.datetime.now() - start).total_seconds()} s')
 

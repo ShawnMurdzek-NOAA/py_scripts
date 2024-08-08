@@ -81,7 +81,7 @@ do_single_ob: True
 ob_sid: 'KHFD'
 ob_idx: -1
 ob_var: 156.25
-plot_postage_stamp: False
+plot_postage_stamp: True
 plot_postage_stamp_klvl: 18
 plot_ens_stats: True
 plot_nrows: 4
