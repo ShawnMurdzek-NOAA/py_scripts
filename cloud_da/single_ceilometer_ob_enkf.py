@@ -9,6 +9,7 @@ shawn.s.murdzek@noaa.gov
 #---------------------------------------------------------------------------------------------------
 
 import sys
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 import cartopy
@@ -16,6 +17,7 @@ import cartopy.crs as ccrs
 import datetime as dt
 import metpy.calc as mc
 from metpy.units import units
+import copy
 
 import probing_rrfs_ensemble as pre
 import pyDA_utils.cloud_DA_forward_operator as cfo
@@ -27,13 +29,37 @@ import pyDA_utils.plot_model_data as pmd
 # Functions
 #---------------------------------------------------------------------------------------------------
 
-def run_cld_forward_operator_1ob(ens_obj, param, ens_name=['mem0001'], hofx_kw={}, verbose=False):
+def read_preprocess_ens(yml_fname):
+    """
+    Read in and preprocess ensemble output
+
+    This step is independent of the observation being assimilated, so it should only need to be done
+    once
+    """
+
+    # Ceiling field to examine
+    ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
+    ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
+    ceil_miss = [np.nan, np.nan, 20000]
+
+    # Read input data
+    param = pre.read_input_yaml(yml_fname)
+    ens_obj = pre.read_ensemble_output(param)
+
+    # Preprocess ceiling fields
+    ens_obj = pre.preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss)
+    ens_obj = pre.preprocess_obs_ceil(ens_obj)
+
+    return ens_obj, param
+
+
+def run_cld_forward_operator_1ob(ens_obj, ob_sid, ob_idx, ens_name=['mem0001'], hofx_kw={}, verbose=False):
     
     hofx_output = np.zeros(len(ens_name))
 
     # Select observation for DA
     bufr_df = ens_obj._subset_bufr(['ADPSFC', 'MSONET'])
-    dum = bufr_df.loc[bufr_df['SID'] == param['ob_sid'], :]
+    dum = bufr_df.loc[bufr_df['SID'] == ob_sid, :]
     cld_ob_df = cfo.remove_missing_cld_ob(dum)
     if verbose: print("Observation:\n", cld_ob_df.loc[:, ['TYP', 'SID', 'XOB', 'YOB', 'CLAM', 'HOCB']])
     
@@ -49,10 +75,11 @@ def run_cld_forward_operator_1ob(ens_obj, param, ens_name=['mem0001'], hofx_kw={
             print("cld_hofx.data['HOCB'] = ", cld_hofx.data['HOCB'])
             print("cld_hofx.data['ob_cld_amt'] = ", cld_hofx.data['ob_cld_amt'])
             print("cld_hofx.data['hofx'] = ", cld_hofx.data['hofx'])
-        hofx_output[i] = cld_hofx.data['hofx'][0][param['ob_idx']]
-        cld_amt = cld_hofx.data['ob_cld_amt'][0][param['ob_idx']]
+        hofx_output[i] = cld_hofx.data['hofx'][0][ob_idx]
+        cld_amt = cld_hofx.data['ob_cld_amt'][0][ob_idx]
+        cld_z = cld_hofx.data['HOCB'][0][ob_idx]
     
-    return cld_amt, hofx_output, cld_ob_df
+    return cld_amt, cld_z, hofx_output, cld_ob_df
 
 
 def unravel_state_matrix(x, ens_obj, ens_dim=True):
@@ -189,9 +216,10 @@ def add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj):
     return ens_obj
 
 
-def plot_horiz_slices(ds, field, ens_obj, nrows=4, ncols=4, 
+def plot_horiz_slices(ds, field, ens_obj, param, nrows=4, ncols=4, 
                       klvls=list(range(16)), figsize=(12, 12), verbose=False, cntf_kw={}, 
-                      ob={'plot':False}):
+                      ob={'plot':False},
+                      save_dir=None):
     """
     Plot several horizontal slices at various levels
     """
@@ -235,13 +263,16 @@ def plot_horiz_slices(ds, field, ens_obj, nrows=4, ncols=4,
     plt.suptitle(field, size=18)
 
     # Save figure
-    plt.savefig(f"{param['out_dir']}/{field}_{param['save_tag']}.png")
+    if save_dir is None:
+        plt.savefig(f"{param['out_dir']}/{field}_{param['save_tag']}.png")
+    else:
+        plt.savefig(f"{save_dir}/{field}_{param['save_tag']}.png")
 
     return fig
 
 
 def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl=0, 
-                             ob={'plot':False}):
+                             ob={'plot':False}, save_dir=None):
     """
     Make horizontal cross section postage stamp plots
 
@@ -261,60 +292,63 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
 
     # Field name and colorbar limits/colormap. Set klvl to NaN if 2D field
     extend = 'both'
+    if save_dir is None:
+        save_dir = param['out_dir']
     if (upp_field == 'TCDC_P0_L105_GLC0') or (upp_field == 'ana_TCDC_P0_L105_GLC0'):
         if upp_field == 'TCDC_P0_L105_GLC0':
-            save_fname = f"{param['out_dir']}/postage_stamp_cloud_cover_bgd_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_cloud_cover_bgd_{param['save_tag']}.png"
         else:
-            save_fname = f"{param['out_dir']}/postage_stamp_cloud_cover_ana_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_cloud_cover_ana_{param['save_tag']}.png"
         title = 'Cloud Cover'
         cmap = 'plasma_r'
         clevels = np.arange(0, 100.1, 5)
         extend = 'neither'
     elif upp_field == 'incr_TCDC_P0_L105_GLC0':
-        save_fname = f"{param['out_dir']}/postage_stamp_cloud_cover_incr_{param['save_tag']}.png"
+        save_fname = f"{save_dir}/postage_stamp_cloud_cover_incr_{param['save_tag']}.png"
         title = 'Cloud Cover'
         cmap = 'bwr'
         clevels = np.arange(-97.5, 97.6, 5)
 
     elif (upp_field == 'TMP_P0_L105_GLC0') or (upp_field == 'ana_TMP_P0_L105_GLC0'):
         if upp_field == 'TMP_P0_L105_GLC0':
-            save_fname = f"{param['out_dir']}/postage_stamp_T_bgd_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_T_bgd_{param['save_tag']}.png"
         else:
-            save_fname = f"{param['out_dir']}/postage_stamp_T_ana_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_T_ana_{param['save_tag']}.png"
         title = 'Temperature'
         cmap = 'plasma'
         clevels = np.arange(250, 270, 1)
     elif upp_field == 'incr_TMP_P0_L105_GLC0':
-        save_fname = f"{param['out_dir']}/postage_stamp_T_incr_{param['save_tag']}.png"
+        save_fname = f"{save_dir}/postage_stamp_T_incr_{param['save_tag']}.png"
         title = 'Temperature'
         cmap = 'bwr'
         clevels = np.arange(-5.75, 5.76, 0.5)
     
     elif (upp_field == 'SPFH_P0_L105_GLC0') or (upp_field == 'ana_SPFH_P0_L105_GLC0'):
         if upp_field == 'SPFH_P0_L105_GLC0':
-            save_fname = f"{param['out_dir']}/postage_stamp_Q_bgd_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_Q_bgd_{param['save_tag']}.png"
         else:
-            save_fname = f"{param['out_dir']}/postage_stamp_Q_ana_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_Q_ana_{param['save_tag']}.png"
         title = 'Specific Humidity'
         cmap = 'plasma'
         clevels = np.arange(0, 5e-3, 2.4e-4)
         extend = 'max'
     elif upp_field == 'incr_SPFH_P0_L105_GLC0':
-        save_fname = f"{param['out_dir']}/postage_stamp_Q_incr_{param['save_tag']}.png"
+        save_fname = f"{save_dir}/postage_stamp_Q_incr_{param['save_tag']}.png"
         title = 'Specific Humidity'
         cmap = 'bwr'
         clevels = np.arange(-5.75, 5.76, 0.5) * 1e-4
 
     elif (upp_field == 'RH_P0_L105_GLC0') or (upp_field == 'ana_RH_P0_L105_GLC0'):
         if upp_field == 'RH_P0_L105_GLC0':
-            save_fname = f"{param['out_dir']}/postage_stamp_RH_bgd_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_RH_bgd_{param['save_tag']}.png"
         else:
-            save_fname = f"{param['out_dir']}/postage_stamp_RH_ana_{param['save_tag']}.png"
+            save_fname = f"{save_dir}/postage_stamp_RH_ana_{param['save_tag']}.png"
         title = 'Relative Humidity'
         cmap = 'plasma'
         clevels = np.arange(0, 100.1, 5)
+        extend = 'neither'
     elif upp_field == 'incr_RH_P0_L105_GLC0':
-        save_fname = f"{param['out_dir']}/postage_stamp_RH_incr_{param['save_tag']}.png"
+        save_fname = f"{save_dir}/postage_stamp_RH_incr_{param['save_tag']}.png"
         title = 'Relative Humidity'
         cmap = 'bwr'
         clevels = np.arange(-5.75, 5.76, 0.5) * 4
@@ -343,89 +377,99 @@ if __name__ == '__main__':
 
     start = dt.datetime.now()
 
-    # YAML inputs
-    yml_fname = sys.argv[1]
-    
-    # Ceiling field to examine
-    ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
-    ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
-    ceil_miss = [np.nan, np.nan, 20000]
+    # Read and preprocess ensemble
+    ens_obj, param = read_preprocess_ens(sys.argv[1])
+    ens_obj_original = copy.deepcopy(ens_obj)
 
-    # Read input data
-    param = pre.read_input_yaml(yml_fname)
-    ens_obj = pre.read_ensemble_output(param)
+    # Loop over each observation
+    for ob_sid, ob_idx in zip(param['ob_sid'], param['ob_idx']):
 
-    # Preprocess ceiling fields
-    ens_obj = pre.preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss)
-    ens_obj = pre.preprocess_obs_ceil(ens_obj)
+        start_loop = dt.datetime.now()
+        print()
+        print('-----------------------------------------------')
+        print(f"Starting single-ob test for {ob_sid} {ob_idx}")
 
-    # Apply cloud DA forward operator
-    cld_amt, hofx, cld_ob_df = run_cld_forward_operator_1ob(ens_obj, param, 
-                                                            ens_name=ens_obj.mem_names,
-                                                            hofx_kw={'hgt_lim_kw':{'max_hgt':3500},
-                                                                     'verbose':0},
-                                                            verbose=False)
-    print('Cloud ceilometer H(x) =', hofx)
-    print('Cloud ceilometer ob =', cld_amt)
+        # Apply cloud DA forward operator
+        cld_amt, cld_z, hofx, cld_ob_df = run_cld_forward_operator_1ob(ens_obj, ob_sid, ob_idx, 
+                                                                    ens_name=ens_obj.mem_names,
+                                                                    hofx_kw={'hgt_lim_kw':{'max_hgt':3500},
+                                                                                'verbose':0},
+                                                                    verbose=False)
+        print('Cloud ceilometer ob hgt =', cld_z)
+        print('Cloud ceilometer ob amt =', cld_amt)
+        print('Cloud ceilometer H(x) =', hofx)
+        print(f"Time to complete forward operator = {(dt.datetime.now() - start_loop).total_seconds()} s")
 
-    # Run EnKF
-    enkf_obj = enkf.enkf_1ob(ens_obj.state_matrix['data'], cld_amt, hofx, param['ob_var'])
-    enkf_obj.EnSRF()
+        # Run EnKF
+        enkf_obj = enkf.enkf_1ob(ens_obj.state_matrix['data'], cld_amt, hofx, param['ob_var'])
+        enkf_obj.EnSRF()
+        print(f"Time to complete forward operator and EnSRF = {(dt.datetime.now() - start_loop).total_seconds()} s")
 
-    # Save output to ens_obj for easier plotting
-    ens_obj = add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj)
-    ens_obj = add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj)
+        # Save output to ens_obj for easier plotting
+        ens_obj = add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj)
+        ens_obj = add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj)
 
-    # Compute RH as well as ensemble stats for RH
-    for p in ['', 'ana_']:
-        ens_obj = compute_RH(ens_obj, prefix=p)
-        ens_obj = compute_ens_stats_3D(ens_obj, f"{p}RH_P0_L105_GLC0")
-    ens_obj = compute_ens_incr_3D(ens_obj, "RH_P0_L105_GLC0")
-    param['state_vars'].append('RH_P0_L105_GLC0')
+        # Compute RH as well as ensemble stats for RH
+        for p in ['', 'ana_']:
+            ens_obj = compute_RH(ens_obj, prefix=p)
+            ens_obj = compute_ens_stats_3D(ens_obj, f"{p}RH_P0_L105_GLC0")
+        ens_obj = compute_ens_incr_3D(ens_obj, "RH_P0_L105_GLC0")
+        param['state_vars'].append('RH_P0_L105_GLC0')
 
-    # Plot ensemble mean and standard deviation
-    if param['plot_ens_stats']:
-        print('Making ensemble mean and standard deviation plots')
-        for meta, cmap in zip(['mean_', 'mean_ana_', 'mean_incr_', 'std_', 'std_ana_', 'K_'], 
-                              ['plasma', 'plasma', 'bwr', 'plasma', 'plasma', 'bwr']):
-            for v in param['state_vars']:
-                field = meta + v
-                if field not in ens_obj.subset_ds[ens_obj.mem_names[0]]:
-                    print(f'field {field} is missing. Skipping.')
-                    continue
-                print(f'plotting {field}...')
-                maxval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 99)
-                minval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 1)
-                if cmap == 'bwr':
-                    clevels = np.linspace(-1, 1, 30) * maxval
-                else:
-                    clevels = np.linspace(minval, maxval, 30)
-                fig = plot_horiz_slices(ens_obj.subset_ds[ens_obj.mem_names[0]], 
-                                        field,
-                                        ens_obj,
-                                        nrows=param['plot_nrows'],
-                                        ncols=param['plot_ncols'],
-                                        klvls=param['plot_klvls'], 
-                                        cntf_kw={'cmap':cmap, 'levels':clevels, 'extend':'both'},
-                                        ob={'plot':True,
-                                            'x':cld_ob_df['XOB'].values[0] - 360, 
-                                            'y':cld_ob_df['YOB'].values[0], 
-                                            'kwargs':{'marker':'*', 'color':'k'}})
-                plt.close(fig)
+        # Plot ensemble mean and standard deviation
+        save_dir = f"{param['out_dir']}/{ob_sid}_{ob_idx}"
+        os.system(f"mkdir {save_dir}")
+        if param['plot_ens_stats']:
+            print('Making ensemble mean and standard deviation plots')
+            for meta, cmap in zip(['mean_', 'mean_ana_', 'mean_incr_', 'std_', 'std_ana_', 'K_'], 
+                                ['plasma', 'plasma', 'bwr', 'plasma', 'plasma', 'bwr']):
+                for v in param['state_vars']:
+                    field = meta + v
+                    if field not in ens_obj.subset_ds[ens_obj.mem_names[0]]:
+                        print(f'field {field} is missing. Skipping.')
+                        continue
+                    print(f'plotting {field}...')
+                    maxval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 99)
+                    minval = np.percentile(np.abs(ens_obj.subset_ds[ens_obj.mem_names[0]][field]), 1)
+                    if cmap == 'bwr':
+                        clevels = np.linspace(-1, 1, 30) * maxval
+                    else:
+                        clevels = np.linspace(minval, maxval, 30)
+                    if (maxval == 0) and (minval == 0):
+                        clevels = np.linspace(-1, 1, 30)
+                    fig = plot_horiz_slices(ens_obj.subset_ds[ens_obj.mem_names[0]], 
+                                            field,
+                                            ens_obj,
+                                            param,
+                                            nrows=param['plot_nrows'],
+                                            ncols=param['plot_ncols'],
+                                            klvls=param['plot_klvls'], 
+                                            cntf_kw={'cmap':cmap, 'levels':clevels, 'extend':'both'},
+                                            ob={'plot':True,
+                                                'x':cld_ob_df['XOB'].values[0] - 360, 
+                                                'y':cld_ob_df['YOB'].values[0], 
+                                                'kwargs':{'marker':'*', 'color':'k'}},
+                                            save_dir=save_dir)
+                    plt.close(fig)
 
-    # Make postage stamp plots
-    if param['plot_postage_stamp']:
-        print('Making postage stamp plots')
-        for meta in ['', 'incr_', 'ana_']:
-            for v in param['state_vars']:
-                print(f'plotting {meta}{v}...')
-                fig = plot_horiz_postage_stamp(ens_obj, param, upp_field=f'{meta}{v}', 
-                                               klvl=param['plot_postage_stamp_klvl'],
-                                               ob={'plot':True,
-                                                   'x':cld_ob_df['XOB'].values[0] - 360, 
-                                                   'y':cld_ob_df['YOB'].values[0], 
-                                                   'kwargs':{'marker':'*', 'color':'k'}})
-                plt.close(fig)
+        # Make postage stamp plots
+        if param['plot_postage_stamp']:
+            print('Making postage stamp plots')
+            for meta in ['', 'incr_', 'ana_']:
+                for v in param['state_vars']:
+                    print(f'plotting {meta}{v}...')
+                    fig = plot_horiz_postage_stamp(ens_obj, param, upp_field=f'{meta}{v}', 
+                                                klvl=param['plot_postage_stamp_klvl'],
+                                                ob={'plot':True,
+                                                    'x':cld_ob_df['XOB'].values[0] - 360, 
+                                                    'y':cld_ob_df['YOB'].values[0], 
+                                                    'kwargs':{'marker':'*', 'color':'k'}},
+                                                save_dir=save_dir)
+                    plt.close(fig)
+        
+        # Clean up
+        print(f'total time for {ob_sid} {ob_idx} (forward operator, EnSRF, and plots) = {(dt.datetime.now() - start_loop).total_seconds()} s')
+        ens_obj = copy.deepcopy(ens_obj_original)
 
     print(f'total elapsed time = {(dt.datetime.now() - start).total_seconds()} s')
 

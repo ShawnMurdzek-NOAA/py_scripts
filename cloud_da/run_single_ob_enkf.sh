@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #SBATCH -A nrtrr
-#SBATCH -t 04:00:00
+#SBATCH -t 08:00:00
 #SBATCH --nodes=1 --ntasks=1
 #SBATCH --mem=10GB
 
@@ -17,7 +17,7 @@ date
 . ~/.bashrc
 my_py
 
-python single_ceilometer_ob_enkf.py /lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test/S_NewEngland_2022020121_input.yml
+python single_ceilometer_ob_enkf.py /lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test/S_NewEngland_2022020121_single_ob_DA_input.yml
 
 report-mem
 date

@@ -2,7 +2,7 @@
 #--------------------------------------------
 
 # UPP output for each ensemble member
-str_format: '/mnt/lfs4/BMC/wrfruc/murdzek/RRFS_Ens_Cloud_DA/Feb2022_retro/Ens_GDAS_SDLVDL_noGF_cloud1/v0.6.2/prod/rrfs_conus_3km_ensda.20220201/20/mem{num:04d}/rrfs.t20z.{lev}.f001.conus_3km.grib2'
+str_format: '/mnt/lfs5/BMC/wrfruc/murdzek/RRFS_Ens_Cloud_DA/Feb2022_retro/Ens_GDAS_SDLVDL_noGF_cloud1/v0.6.2/prod/rrfs_conus_3km_ensda.20220201/20/mem{num:04d}/rrfs.t20z.{lev}.f001.conus_3km.grib2'
 prslev_vars:
   - 'HGT_P0_L215_GLC0'
   - 'CEIL_P0_L215_GLC0'
@@ -10,7 +10,7 @@ prslev_vars:
 nmem: 30
 
 # BUFR parameters
-bufr_fname: '/lfs4/BMC/wrfruc/murdzek/real_obs/decoded_bufr_for_cloudDA/202202012100.rap.prepbufr.csv'
+bufr_fname: '/lfs5/BMC/wrfruc/murdzek/real_obs/decoded_bufr_for_cloudDA/202202012100.rap.prepbufr.csv'
 
 # Subset domain
 min_lon: -73.0
@@ -62,24 +62,22 @@ state_vars:
 
 # Tag to add to output files and output file directory
 save_tag: 'S_NewEngland_2022020121_single_ob_test'
-out_dir: '/lfs4/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test' 
+out_dir: '/lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test' 
 
-# Size of markers for spatial rank plot
-msize: 350
-
-# "Target" (lat, lon) coordinate for BEC spatial plots
+# Misc options
 do_bec: False
-bec_lat: 42.2626
-bec_lon: -71.8023
-bec_klvl: 0
 
-# Option to run ceilometer hofx
-do_hofx: True
-
-# Option to run single observation test
-do_single_ob: True
-ob_sid: 'KHFD'
-ob_idx: -1
+# Options for single observation test
+ob_sid: 
+  - 'KEWB'
+  - 'KHFD'
+  - 'KBOS'
+  - 'KBOS'
+ob_idx: 
+  - 1
+  - 2
+  - 1
+  - 2
 ob_var: 156.25
 plot_postage_stamp: True
 plot_postage_stamp_klvl: 18
