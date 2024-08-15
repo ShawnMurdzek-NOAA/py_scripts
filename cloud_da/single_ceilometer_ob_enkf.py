@@ -29,6 +29,18 @@ import pyDA_utils.plot_model_data as pmd
 # Functions
 #---------------------------------------------------------------------------------------------------
 
+def ens_avg_z_1d(ens_obj):
+    """
+    Return a 1D array of the average height AGL for each model level
+    """
+
+    mem_name = ens_obj.mem_names[0]
+    z1d = np.mean(ens_obj.subset_ds[mem_name]['HGT_P0_L105_GLC0'].values - 
+                  ens_obj.subset_ds[mem_name]['HGT_P0_L1_GLC0'].values[np.newaxis, :, :], axis=(1, 2))
+
+    return z1d
+
+
 def read_preprocess_ens(yml_fname):
     """
     Read in and preprocess ensemble output
@@ -50,7 +62,10 @@ def read_preprocess_ens(yml_fname):
     ens_obj = pre.preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss)
     ens_obj = pre.preprocess_obs_ceil(ens_obj)
 
-    return ens_obj, param
+    # Create 1D array of average heights AGL
+    z1d = ens_avg_z_1d(ens_obj)
+
+    return ens_obj, z1d, param
 
 
 def run_cld_forward_operator_1ob(ens_obj, ob_sid, ob_idx, ens_name=['mem0001'], hofx_kw={}, verbose=False):
@@ -378,8 +393,9 @@ if __name__ == '__main__':
     start = dt.datetime.now()
 
     # Read and preprocess ensemble
-    ens_obj, param = read_preprocess_ens(sys.argv[1])
+    ens_obj, ens_z1d, param = read_preprocess_ens(sys.argv[1])
     ens_obj_original = copy.deepcopy(ens_obj)
+    param_original = copy.deepcopy(param)
 
     # Loop over each observation
     for ob_sid, ob_idx in zip(param['ob_sid'], param['ob_idx']):
@@ -455,11 +471,13 @@ if __name__ == '__main__':
         # Make postage stamp plots
         if param['plot_postage_stamp']:
             print('Making postage stamp plots')
+            klvl = np.argmin(np.abs(ens_z1d - cld_z))
+            print(f"postage stamp klvl = {klvl} ({ens_z1d[klvl]} m AGL)")
             for meta in ['', 'incr_', 'ana_']:
                 for v in param['state_vars']:
                     print(f'plotting {meta}{v}...')
                     fig = plot_horiz_postage_stamp(ens_obj, param, upp_field=f'{meta}{v}', 
-                                                klvl=param['plot_postage_stamp_klvl'],
+                                                klvl=klvl,
                                                 ob={'plot':True,
                                                     'x':cld_ob_df['XOB'].values[0] - 360, 
                                                     'y':cld_ob_df['YOB'].values[0], 
@@ -470,6 +488,7 @@ if __name__ == '__main__':
         # Clean up
         print(f'total time for {ob_sid} {ob_idx} (forward operator, EnSRF, and plots) = {(dt.datetime.now() - start_loop).total_seconds()} s')
         ens_obj = copy.deepcopy(ens_obj_original)
+        param = copy.deepcopy(param_original)
 
     print(f'total elapsed time = {(dt.datetime.now() - start).total_seconds()} s')
 
