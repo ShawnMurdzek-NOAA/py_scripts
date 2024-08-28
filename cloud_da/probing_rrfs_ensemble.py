@@ -108,7 +108,7 @@ def read_ensemble_output(param, verbose=1):
     return ens_obj
 
 
-def preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss):
+def preprocess_model_ceil(ens_obj):
     """
     Convert model ceiling heights to AGL and set missing values to NaN
 
@@ -134,17 +134,11 @@ def preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss):
         
     """
 
+    print('pre.preprocess_model_ceil is deprecated. Please use method in pyDA_utils.ensemble_utils instead.')
+
     for m in ens_obj.mem_names:
         print(f'computing ceiling AGL heights for {m}')
         ens_obj.subset_ds[m] = uppp.compute_ceil_agl(ens_obj.subset_ds[m], no_ceil=np.nan)
-        #for old_name, new_name, miss in zip(ceil_fields, ceil_names, ceil_miss):
-        #    ens_obj.subset_ds[m][new_name] = ens_obj.subset_ds[m][old_name]
-        #    ens_obj.subset_ds[m][new_name].values = (mc.geopotential_to_height(ens_obj.subset_ds[m][old_name].values * units.m * const.g).magnitude -
-        #                                             mc.geopotential_to_height(ens_obj.subset_ds[m]['HGT_P0_L1_GLC0'].values * units.m * const.g).magnitude)
-        #    if not np.isnan(miss):
-        #        ens_obj.subset_ds[m][new_name].values[np.isclose(ens_obj.subset_ds[m][old_name].values, miss)] = np.nan
-        #    ens_obj.subset_ds[m][new_name].attrs['long_name'] = 'ceiling height'
-        #    ens_obj.subset_ds[m][new_name].attrs['units'] = 'm AGL'
 
     return ens_obj
 
@@ -601,7 +595,7 @@ if __name__ == '__main__':
     ens_obj = read_ensemble_output(param)
 
     # Preprocess ceiling fields
-    ens_obj = preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss)
+    ens_obj.preprocess_model_ceil()
     ens_obj = preprocess_obs_ceil(ens_obj)
 
     # Create plots
