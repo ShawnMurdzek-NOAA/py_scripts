@@ -62,25 +62,29 @@ state_vars:
 
 # Tag to add to output files and output file directory
 save_tag: 'S_NewEngland_2022020121_single_ob_test'
-out_dir: '/lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test' 
+out_dir: '/lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test/default_test' 
 
 # Misc options
 do_bec: False
 
 # Options for single observation test
-ob_sid: 
+ob_sid:
+  - 'KPVD' 
   - 'KEWB'
   - 'KHFD'
   - 'KBOS'
   - 'KBOS'
+  - 'KBDL'
 ob_idx: 
   - 1
+  - 1
   - 2
   - 1
   - 2
+  - 3
 ob_var: 156.25
-plot_postage_stamp: False
-plot_ens_stats: False
+plot_postage_stamp: True
+plot_ens_stats: True
 plot_nrows: 4
 plot_ncols: 4
 plot_klvls:
