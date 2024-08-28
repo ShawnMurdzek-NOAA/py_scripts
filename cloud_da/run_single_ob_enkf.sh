@@ -17,7 +17,7 @@ date
 . ~/.bashrc
 my_py
 
-python single_ceilometer_ob_enkf.py /lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test/S_NewEngland_2022020121_single_ob_DA_input.yml
+python single_ceilometer_ob_enkf.py /lfs5/BMC/wrfruc/murdzek/src/py_scripts/cloud_da/cases/S_NewEngland_2022020121_single_ob_test/default_test/S_NewEngland_2022020121_single_ob_DA_input.yml
 
 report-mem
 date

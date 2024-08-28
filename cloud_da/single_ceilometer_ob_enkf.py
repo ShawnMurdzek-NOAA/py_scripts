@@ -14,10 +14,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cartopy
 import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 import datetime as dt
 import metpy.calc as mc
 from metpy.units import units
 import copy
+import yaml
 
 import probing_rrfs_ensemble as pre
 import pyDA_utils.cloud_DA_forward_operator as cfo
@@ -32,6 +34,17 @@ import pyDA_utils.plot_model_data as pmd
 def ens_avg_z_1d(ens_obj):
     """
     Return a 1D array of the average height AGL for each model level
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    
+    Returns
+    -------
+    z1d : array
+        Average height AGL for each model level
+
     """
 
     mem_name = ens_obj.mem_names[0]
@@ -45,22 +58,31 @@ def read_preprocess_ens(yml_fname):
     """
     Read in and preprocess ensemble output
 
+    Parameters
+    ----------
+    yml_fname : string
+        Input YAML file name
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    z1d : array
+        1D array of average heights AGL for each model level
+    param : dictionary
+        Input parameters
+
+    Notes
+    -----
     This step is independent of the observation being assimilated, so it should only need to be done
     once
+
     """
 
-    # Ceiling field to examine
-    ceil_fields = ['HGT_P0_L215_GLC0', 'CEIL_P0_L215_GLC0', 'CEIL_P0_L2_GLC0']
-    ceil_names = ['CEIL_LEGACY', 'CEIL_EXP1', 'CEIL_EXP2']
-    ceil_miss = [np.nan, np.nan, 20000]
-
     # Read input data
-    param = pre.read_input_yaml(yml_fname)
+    with open(yml_fname, 'r') as fptr:
+        param = yaml.safe_load(fptr)
     ens_obj = pre.read_ensemble_output(param)
-
-    # Preprocess ceiling fields
-    ens_obj = pre.preprocess_model_ceil(ens_obj, ceil_fields, ceil_names, ceil_miss)
-    ens_obj = pre.preprocess_obs_ceil(ens_obj)
 
     # Create 1D array of average heights AGL
     z1d = ens_avg_z_1d(ens_obj)
@@ -69,11 +91,42 @@ def read_preprocess_ens(yml_fname):
 
 
 def run_cld_forward_operator_1ob(ens_obj, ob_sid, ob_idx, ens_name=['mem0001'], hofx_kw={}, verbose=False):
+    """
+    Run the cloud DA forward operator for a single observation
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    ob_sid : string
+        Observation station ID
+    ob_idx : integer
+        Observation index. Each ob_sid may have multiple obs (especially after the forward operator
+        adds clear obs), so ob_idx selects which observation to use from a particular station.
+    ens_name : list of strings, optional
+        Ensemble names
+    hofx_kw : dictionary, optional
+        Keyword arguments passed to cfo.ceilometer_hofx_driver()
+    verbose : boolean, optional
+        Option to print extra output
+    
+    Returns
+    -------
+    cld_amt : float
+        Observed cloud amount (%)
+    cld_z : float
+        Observed cloud base (m AGL)
+    hofx_output : list
+        Model cloud amount from each ensemble member (%). Height is the same as cld_z.
+    cld_ob_df : pd.DataFrame
+        All ceilometer observations (excluding those added by the forward operator) for ob_sid
+
+    """
     
     hofx_output = np.zeros(len(ens_name))
 
     # Select observation for DA
-    bufr_df = ens_obj._subset_bufr(['ADPSFC', 'MSONET'])
+    bufr_df = ens_obj._subset_bufr(['ADPSFC', 'MSONET'], DHR=np.nan)
     dum = bufr_df.loc[bufr_df['SID'] == ob_sid, :]
     cld_ob_df = cfo.remove_missing_cld_ob(dum)
     if verbose: print("Observation:\n", cld_ob_df.loc[:, ['TYP', 'SID', 'XOB', 'YOB', 'CLAM', 'HOCB']])
@@ -99,7 +152,23 @@ def run_cld_forward_operator_1ob(ens_obj, ob_sid, ob_idx, ens_name=['mem0001'], 
 
 def unravel_state_matrix(x, ens_obj, ens_dim=True):
     """
-    Unravel state matrix so fields can be plotted
+    Unravel state matrix from ens_obj so fields can be plotted
+
+    Parameters
+    ----------
+    x : array
+        State matrix. Dimensions (M, N), where M is the (number of gridpoints) X (number of fields)
+        and N is the number of ensemble members
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    ens_dim : boolean, optional
+        Option to also unravel the ensemble dimension. Set to False if x is 1D
+    
+    Returns
+    -------
+    output : dictionary
+        Unraveled state matrix. Keys are the different fields, and each field is now 3D
+    
     """
 
     output = {}
@@ -118,6 +187,20 @@ def unravel_state_matrix(x, ens_obj, ens_dim=True):
 def compute_RH(ens_obj, prefix=''):
     """
     Compute RH for the ensemble subset spatial domain
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    prefix : string, optional
+        RH field is written to "{prefix}RH_P0_L105_GLC0" using "PRES_P0_L105_GLC0", 
+        "{prefix}TMP_P0_L105_GLC0", and "{prefix}SPFH_P0_L105_GLC0"
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output with the added RH fields
+
     """
 
     for mem in ens_obj.mem_names:
@@ -134,10 +217,27 @@ def compute_RH(ens_obj, prefix=''):
 
 def compute_ens_stats_3D(ens_obj, field, stat_fct={'mean_':np.mean, 'std_': np.std}):
     """
-    Compute various ensemble stats and analysis increments for the desired 3D field
-    (i.e., the field is not part of the state vector)
+    Compute various ensemble stats for a 3D field that is not part of the state vector
 
-    Save output to the first ensemble member
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    field : string
+        Field from ens_obj.subset_ds[m] to compute statistics for
+    stat_fct : dictionary, optional
+        Statistics to compute. Key is the prefix added to the resulting field and the value is the 
+        function
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output with statistics for the desired field added to the first ensemble member
+
+    Notes
+    -----
+    Output is saved to the first ensemble member
+
     """
 
     mem_names = ens_obj.mem_names
@@ -158,7 +258,24 @@ def compute_ens_stats_3D(ens_obj, field, stat_fct={'mean_':np.mean, 'std_': np.s
 
 def compute_ens_incr_3D(ens_obj, field):
     """
-    Compute increments for the desired field and save the mean increment to the first ensemble member
+    Compute analysis increments for the desired field
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    field : string
+        Field from ens_obj.subset_ds[m] to compute statistics for
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output with analysis increments (using the prefix "incr_")
+
+    Notes
+    -----
+    The mean analysis increment is saved to the first ensemble member with the prefix "mean_incr_"
+
     """
 
     mem_names = ens_obj.mem_names
@@ -179,7 +296,20 @@ def compute_ens_incr_3D(ens_obj, field):
 
 def add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj):
     """
-    Add the analysis increment and analysis fields to the ens_obj for easier plotting
+    Add the analysis increment and analysis fields to ens_obj for easier plotting
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    enkf_obj : pyDA_utils.enkf.enkf_1ob object
+        EnKF output
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output with the analysis increment and analysis fields added
+
     """
 
     # Compute increment
@@ -202,6 +332,20 @@ def add_inc_and_analysis_to_ens_obj(ens_obj, enkf_obj):
 def add_ens_mean_std_K_to_ens_obj(ens_obj, enkf_obj):
     """
     Add the ensemble mean, standard deviation, and Kalman gain to the first ensemble member
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    enkf_obj : pyDA_utils.enkf.enkf_1ob object
+        EnKF output
+    
+    Returns
+    -------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output with the ensemble mean, standard deviation, and K added to the first
+        ensemble member
+
     """
 
     # Compute stats
@@ -236,7 +380,40 @@ def plot_horiz_slices(ds, field, ens_obj, param, nrows=4, ncols=4,
                       ob={'plot':False},
                       save_dir=None):
     """
-    Plot several horizontal slices at various levels
+    Plot horizontal slices of the desired field at various vertical levels
+
+    Parameters
+    ----------
+    ds : xr.Dataset
+        Output from a single model
+    field : string
+        Field to plot
+    ens_obj : pyDA_utils.ensemble_utils.ensemble object
+        Ensemble output
+    param : dictionary
+        YAML inputs
+    nrows : int, optional
+        Number of subplot rows, by default 4
+    ncols : int, optional
+        Number of subplot columns, by default 4
+    klvls : list, optional
+        Vertical levels to plot, by default list(range(16))
+    figsize : tuple, optional
+        Figure size, by default (12, 12)
+    verbose : bool, optional
+        Option to print extra output, by default False
+    cntf_kw : dict, optional
+        Keyword arguments passed to contourf, by default {}
+    ob : dict, optional
+        Observation plotting options, by default {'plot':False}
+    save_dir : string, optional
+        Directory to save figure to. Setting to None uses 'out_dir' from param, by default None
+
+    Returns
+    -------
+    fig : plt.figure
+        Figure with the desired plot
+
     """
     
     # Make plot
@@ -289,7 +466,7 @@ def plot_horiz_slices(ds, field, ens_obj, param, nrows=4, ncols=4,
 def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl=0, 
                              ob={'plot':False}, save_dir=None):
     """
-    Make horizontal cross section postage stamp plots
+    Make horizontal cross section postage stamp plots (i.e., one plot per ensemble member)
 
     Parameters
     ----------
@@ -297,6 +474,14 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
         Ensemble object
     param : dictionary
         YAML inputs
+    upp_field : string, optional
+        UPP field to plot
+    klvl : integer, optional
+        Vertical level to plot
+    ob : dict, optional
+        Observation plotting options, by default {'plot':False}
+    save_dir : string, optional
+        Directory to save figure to. Setting to None uses 'out_dir' from param, by default None
 
     Returns
     -------
@@ -388,6 +573,76 @@ def plot_horiz_postage_stamp(ens_obj, param, upp_field='TCDC_P0_L105_GLC0', klvl
     return fig
 
 
+def plot_cld_obs(ens_obj, param, bins=np.arange(0, 2001, 250), nrows=2, ncols=4, figsize=(10, 10), 
+                 hofx_kw={}, scatter_kw={}):
+    """
+    Plot ceilometer obs in horizontal slices for various vertical bins
+
+    Parameters
+    ----------
+    ens_obj : pyDA_utils.ensemble_utils.ensemble
+        Ensemble object
+    param : dictionary
+        YAML inputs
+    bins : array, optional
+        Vertical bins used to sort ceilometer obs, by default np.arange(0, 2001, 250)
+    nrows : int, optional
+        Number of subplot rows, by default 2
+    ncols : int, optional
+        Number of subplot columns, by default 4
+    figsize : tuple, optional
+        Figure size, by default (10, 10)
+    hofx_kw : dict, optional
+        Keyword arguments passed to cfo.ceilometer_hofx_driver(), by default {}
+    scatter_kw : dict, optional
+        Keyword arbuments passed to plt.scatter(), by default {}
+
+    Returns
+    -------
+    fig : plt.figure()
+        Plot with desired figure
+
+    """
+
+    # Extract cloud obs
+    bufr_df = ens_obj._subset_bufr(['ADPSFC', 'MSONET'], DHR=np.nan)
+    cld_ob_df = cfo.remove_missing_cld_ob(bufr_df)
+    cld_hofx = cfo.ceilometer_hofx_driver(cld_ob_df, ens_obj.subset_ds[ens_obj.mem_names[0]], **hofx_kw)
+
+    # Make plot
+    fig = plt.figure(figsize=figsize)
+    axes = []
+    for i in range(len(bins) - 1):
+
+        # Extract obs within this height bin
+        obs = {'lat':[], 'lon':[], 'ob_cld_amt':[]}
+        for j in range(len(cld_hofx.data['HOCB'])):
+            ob_idx = np.where(np.logical_and(cld_hofx.data['HOCB'][j] >= bins[i],
+                                             cld_hofx.data['HOCB'][j] < bins[i+1]))[0]
+            for k in ob_idx:
+                obs['lat'].append(cld_hofx.data['lat'][j])
+                obs['lon'].append(cld_hofx.data['lon'][j])
+                obs['ob_cld_amt'].append(cld_hofx.data['ob_cld_amt'][j][k])
+
+        # Make plot
+        axes.append(fig.add_subplot(nrows, ncols, i+1, projection=ccrs.LambertConformal()))
+        cax = axes[-1].scatter(obs['lon'], obs['lat'], c=obs['ob_cld_amt'], transform=ccrs.PlateCarree(),
+                               **scatter_kw)
+        axes[-1].set_extent([param['min_lon'], param['max_lon'], param['min_lat'], param['max_lat']])
+        axes[-1].coastlines('50m', edgecolor='gray', linewidth=0.25)
+        borders = cfeature.NaturalEarthFeature(category='cultural',
+                                               scale='50m',
+                                               facecolor='none',
+                                                name='admin_1_states_provinces')
+        axes[-1].add_feature(borders, linewidth=0.25, edgecolor='gray')
+        axes[-1].set_title(f"[{bins[i]:.0f}, {bins[i+1]:.0f})", size=14)
+    
+    cbar = plt.colorbar(cax, ax=axes, orientation='vertical')
+    cbar.set_label('observed cloud percentage', size=14)
+
+    return fig
+
+
 if __name__ == '__main__':
 
     start = dt.datetime.now()
@@ -396,6 +651,14 @@ if __name__ == '__main__':
     ens_obj, ens_z1d, param = read_preprocess_ens(sys.argv[1])
     ens_obj_original = copy.deepcopy(ens_obj)
     param_original = copy.deepcopy(param)
+
+    # Create plot of observations
+    print('create plot with obs cloud fractions')
+    bins = [0] + list(0.5*(ens_z1d[param['plot_klvls']][1:] + ens_z1d[param['plot_klvls']][:-1]))
+    fig = plot_cld_obs(ens_obj, param, bins=bins, nrows=param['plot_nrows'], ncols=param['plot_ncols'],
+                       scatter_kw={'vmin':0, 'vmax':100, 'cmap':'plasma_r', 's':32, 'edgecolors':'k', 'linewidths':0.5})
+    plt.savefig(f"{param['out_dir']}/obs_clouds.png")
+    plt.close(fig)
 
     # Loop over each observation
     for ob_sid, ob_idx in zip(param['ob_sid'], param['ob_idx']):
