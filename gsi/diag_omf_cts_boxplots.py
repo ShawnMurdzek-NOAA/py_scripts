@@ -44,11 +44,16 @@ tmpl_hrrr = '/mnt/lfs4/BMC/wrfruc/murdzek/HRRR_OSSE/syn_data/winter/run/%s/gsipr
 path_tmpl = {}
 path_tmpl['HRRR-like'] = [tmpl_hrrr % d.strftime('%Y%m%d%H') for d in dates]
 
+dates = [dt.datetime(2022, 4, 29, 16)]
+path_tmpl = {}
+path_tmpl['UAS Test'] = ['/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_hercules/UAS_DA_test/NCO_dirs/ptmp/prod/rrfs.20220429/16_spinup/']
+path_tmpl['Ctrl'] = ['/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_app_orion/spring_2iter/NCO_dirs/ptmp/prod/rrfs.20220429/16_spinup/']
+
 # Variables to plot
 omf_vars = ['ps', 't', 'q', 'u', 'v', 'pw']
 
 # Diag type ('netcdf' or 'text')
-diag_type = 'text'
+diag_type = 'netcdf'
 
 # Subset of each observation type to plot ('all' - all obs, 'assim' - only obs that are assimilated)
 data_subset = 'assim'
@@ -74,7 +79,7 @@ sim2 = 'osse'
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'HRRR_test'
+out_str = 'UAS_test'
 
 # Option to save some output statistics to a pickle file
 save_output = False

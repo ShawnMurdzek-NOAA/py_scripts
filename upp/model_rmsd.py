@@ -20,11 +20,11 @@ import datetime as dt
 #---------------------------------------------------------------------------------------------------
 
 rrfs1_dir = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter_updated/NCO_dirs/ptmp/prod/'
-rrfs2_dir = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter_no_sfc/NCO_dirs/ptmp/prod/'
-#rrfs2_dir = '/work2/noaa/wrfruc/murdzek/RRFS_ORION/NCO_dirs/ptmp/prod/'
+#rrfs2_dir = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data/winter_no_sfc/NCO_dirs/ptmp/prod/'
+rrfs2_dir = '/work2/noaa/wrfruc/murdzek/RRFS_ORION/NCO_dirs/ptmp/prod/'
 
 # UPP files
-init_times = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(30)]
+init_times = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(3)]
 upp_set1 = ['%s/rrfs.%s/%s/rrfs.t%sz.natlev.f003.conus_3km.grib2' % 
             (rrfs1_dir, t.strftime('%Y%m%d'), t.strftime('%H'), t.strftime('%H')) for t in init_times]
 upp_set2 = ['%s/rrfs.%s/%s/rrfs.t%sz.natlev.f003.conus_3km.grib2' % 
@@ -36,7 +36,7 @@ upp_vars = ['TMP_P0_L105_GLC0', 'SPFH_P0_L105_GLC0', 'UGRD_P0_L105_GLC0', 'VGRD_
             'HGT_P0_L105_GLC0']
 
 # Output text file
-out_text = 'RRFS_orion_update_diff_fhr003_no_sfc.txt'
+out_text = 'RRFS_orion_update_diff_fhr003_UPDATED.txt'
 
 
 #---------------------------------------------------------------------------------------------------

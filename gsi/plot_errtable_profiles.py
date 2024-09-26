@@ -23,18 +23,24 @@ import pyDA_utils.gsi_fcts as gsi
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-etable_std_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtables/errtable.rrfs'] + 
-                     ['/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter/errtable.1st_iter.%dday' % i for i in range(1, 8)])
+#etable_std_fnames = (['/work2/noaa/wrfruc/murdzek/real_obs/errtables/errtable.rrfs'] + 
+#                     ['/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter/errtable.1st_iter.%dday' % i for i in range(1, 8)])
+etable_std_fnames = ['/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter_assim_only/errtable.1st_iter.2day',
+                     '/work2/noaa/wrfruc/murdzek/real_obs/errtables/1st_iter_assim_only/errtable.1st_iter.7day']
 etable_mean_fname = []
 
-etable_labels = ['original'] + ['%d day' % i for i in range(1, 8)]
-etable_colors = ['k'] + [cm.plasma(i / (len(etable_std_fnames) - 1)) for i in range(1, 8)]
-etable_linestyles = ['--'] + ['-'] * (len(etable_std_fnames) - 1)
+#etable_labels = ['original'] + ['%d day' % i for i in range(1, 8)]
+#etable_colors = ['k'] + [cm.plasma(i / (len(etable_std_fnames) - 1)) for i in range(1, 8)]
+#etable_linestyles = ['--'] + ['-'] * (len(etable_std_fnames) - 1)
+
+etable_labels = ['2day', '7day']
+etable_colors = ['r', 'b']
+etable_linestyles = ['-', '-']
 
 out_fname = './errtable_profiles.pdf'
 
 # Select observation types to save as PNGs
-ob_pngs = [120, 133, 180, 187, 188, 220, 233, 280, 287, 288]
+ob_pngs = []
 
 
 #---------------------------------------------------------------------------------------------------
