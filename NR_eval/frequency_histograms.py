@@ -32,7 +32,8 @@ import pickle
 model = sys.argv[1]
 
 # Dates to use
-eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
+#eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
+eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(8)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':

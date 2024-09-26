@@ -27,13 +27,13 @@ import pickle
 model = 'NR'
 
 # Dates to use
-#eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
-eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(9)]
+eval_dates = [dt.datetime(2022, 2, 1) + dt.timedelta(days=i) for i in range(8)]
+#eval_dates = [dt.datetime(2022, 4, 29) + dt.timedelta(days=i) for i in range(9)]
 
 # NR data file path and subdirectories to use
 if model == 'NR':
-    #NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
-    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
+    NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_winter/UPP'
+    #NR_path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
 elif model == 'HRRR':
     NR_path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
 
@@ -51,7 +51,7 @@ MRMS_offset = [-7, 0, 7]
 eval_times = ['0000', '0600', '1200', '1800']
 
 # Domain (options: 'all', 'easternUS')
-domain = 'all'
+domain = 'easternUS'
 
 # Reflectivity contour used to define objects (dBZ)
 ref_thres = 30
@@ -71,10 +71,10 @@ MRMS_mask_file = './MRMS_mask.npy'
 # If use_pickle is True, then the script will attempt to read the pickle file specified. If the file
 # is not found, that file will be written to.
 use_pickle = True
-pickle_fname = './NR_cref_obj_%sdbz_%sminsize_%s_spring.pkl' % (ref_thres, min_size, domain)
+pickle_fname = './NR_cref_obj_%sdbz_%sminsize_%s_winter.pkl' % (ref_thres, min_size, domain)
 
 # Output file
-out_file = './NR_cref_obj_%sdbz_%sminsize_%s_spring.png' % (ref_thres, min_size, domain)
+out_file = './NR_cref_obj_%sdbz_%sminsize_%s_winter.png' % (ref_thres, min_size, domain)
 
 
 #---------------------------------------------------------------------------------------------------

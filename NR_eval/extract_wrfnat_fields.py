@@ -5,7 +5,8 @@ This simple script extracts a single 2D field from a bunch of UPP wrfnat files a
 a single, separate netcdf file for easy use. UPP wrfnat files can be from the Nature Run or HRRR.
 
 Command line arguments:
-    argv[1] = Date (YYYYMMDD)
+    argv[1] = Path to UPP output files
+    argv[2] = Date (YYYYMMDD)
 
 shawn.s.murdzek@noaa.gov
 Date Created: 7 March 2023
@@ -25,27 +26,27 @@ import os
 # Input Parameters
 #---------------------------------------------------------------------------------------------------
 
-path = '/work2/noaa/wrfruc/murdzek/HRRR_data'
-#date = sys.argv[1]
-date = '20220208'
+path = sys.argv[1]
+date = sys.argv[2]
+#path = '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP'
+#date = '20220208'
 
 # Input UPP wrfnat files (file names MUST end in .grib2, or else Xarray will throw an error)
 
 # NR
-#template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
-#upp_files = [template % i for i in range(0, 1801, 600)]
-#upp_files = [upp_files[0]]
+template = '%s/%s/wrfnat_%s' % (path, date, date) + '%04d.grib2'
+upp_files = [template % i for i in range(0, 2301, 100)]
 
 # HRRR
-t1 = dt.datetime.strptime(date, '%Y%m%d')
-t0 = t1 - dt.timedelta(days=1)
-upp_files = []
-template = '%s/%s/%s' % (path, date, t1.strftime('%y%j')) + '%02d000001.grib2'
-upp_files = upp_files + [template % i for i in range(5, 19, 6)]
+#t1 = dt.datetime.strptime(date, '%Y%m%d')
+#t0 = t1 - dt.timedelta(days=1)
+#upp_files = []
+#template = '%s/%s/%s' % (path, date, t1.strftime('%y%j')) + '%02d000001.grib2'
+#upp_files = upp_files + [template % i for i in range(5, 19, 6)]
 
 # Output netcdf file
 #out_file = '%s/%s/cref_%s.nc' % (path, date, date)
-out_file = '%s/%s/precip1hr_%s.nc' % (path, date, date)
+out_file = '%s/%s/precip1hr_all_%s.nc' % (path, date, date)
 
 # Field to extract from each UPP file
 #field = 'REFC_P0_L200_GLC0'  # Used in NR
