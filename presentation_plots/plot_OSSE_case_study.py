@@ -25,14 +25,22 @@ import pyDA_utils.plot_model_data as pmd
 
 # Figure size and files to include
 figsize = (8, 6)
-files = np.array([['/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220504/wrfprs_202205041600_er.grib2',
-                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f000.conus_3km.grib2',
-                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f000.conus_3km.grib2'],
+#files = np.array([['/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220504/wrfprs_202205041600_er.grib2',
+#                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f000.conus_3km.grib2',
+#                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f000.conus_3km.grib2'],
+#                  ['/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220504/wrfprs_202205041900_er.grib2',
+#                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f003.conus_3km.grib2',
+#                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f003.conus_3km.grib2']])
+#titles = np.array([['Nature Run 16:00 UTC', 'Ctrl f00 hr', '35-km UAS f00 hr'],
+#                   ['Nature Run 19:00 UTC', 'Ctrl f03 hr', '35-km UAS f03 hr']])
+files = np.array([['/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220504/wrfprs_202205041500_er.grib2',
+                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/15/rrfs.t15z.prslev.f000.conus_3km.grib2',
+                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/15/rrfs.t15z.prslev.f000.conus_3km.grib2'],
                   ['/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/20220504/wrfprs_202205041900_er.grib2',
-                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f003.conus_3km.grib2',
-                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/16/rrfs.t16z.prslev.f003.conus_3km.grib2']])
-titles = np.array([['Nature Run 16:00 UTC', 'Ctrl f00 hr', '35-km UAS f00 hr'],
-                   ['Nature Run 19:00 UTC', 'Ctrl f03 hr', '35-km UAS f03 hr']])
+                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.20220504/15/rrfs.t15z.prslev.f004.conus_3km.grib2',
+                   '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.20220504/15/rrfs.t15z.prslev.f004.conus_3km.grib2']])
+titles = np.array([['Nature Run 15:00 UTC', 'Ctrl f00 hr', '35-km UAS f00 hr'],
+                   ['Nature Run 19:00 UTC', 'Ctrl f04 hr', '35-km UAS f04 hr']])
 
 # Field plotting parameters
 field = 'REFC_P0_L200_GLC0'
@@ -45,7 +53,7 @@ lat = [28, 36]
 lon = [-105, -96]
 
 # Output file
-out_fname = 'S_TX_2022050419.png'
+out_fname = 'S_TX_2022050419_f04.png'
 
 # Option for debugging (only use one GRIB2 file to make the code run faster)
 debug = False
