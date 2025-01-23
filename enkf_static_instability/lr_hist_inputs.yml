@@ -1,0 +1,66 @@
+# Input Parameters for Lapse Rate Histogram Plots
+#------------------------------------------------
+
+# Input data and dataset-specific plotting parameters
+#   Use {num:04d} for ensemble member number
+data:
+  background:
+    fmt: /gpfs/f6/pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061023/mem{num:04d}/fcst_fv3lam/RESTART/20230611.000000.fv_core.res.tile1.nc
+    plot_kw:
+      color: 'b'
+      ls: '-'
+  analysis:
+    fmt: /gpfs/f6/pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061100/mem{num:04d}/fcst_fv3lam/DA_OUTPUT/fv_core.res.tile1.nc
+    plot_kw:
+      color: 'r'
+      ls: '--'    
+
+# General plotting parameters
+gen_param:
+  nens: 9
+  subplot_kw:
+    nrows: 3
+    ncols: 3
+  figsize:
+    - 7
+    - 7
+  lr_bins:
+    - 8
+    - 8.2
+    - 8.4
+    - 8.6
+    - 8.8
+    - 9
+    - 9.2
+    - 9.4
+    - 9.6
+    - 9.8
+    - 10
+    - 10.2
+    - 10.4
+    - 10.6
+    - 10.8
+    - 11
+    - 11.2
+    - 11.4
+    - 11.6
+    - 11.8
+    - 12
+  z_bins:
+    start: 0
+    stop: 12.1
+    step: 0.5
+  hist2d_pcolormesh_kw:
+    cmap: 'bwr'
+    vmin: -100000
+    vmax: 100000
+  subplots_adjust:
+    left: 0.1
+    bottom: 0.1
+    right: 0.96
+    top: 0.9
+    hspace: 0.32
+    wspace: 0.1
+  grid: True
+  title: 'EnKF background (blue) and analysis (red)'
+  out_tag: 'test'

@@ -1,0 +1,3 @@
+This directory contains results from a simple analysis that sees how many gridpoints have lapse
+rates greater than the dry adiabatic lapse rate (DALR) in the FV3-based RRFS ensemble after 
+performing DA with an EnKF.
