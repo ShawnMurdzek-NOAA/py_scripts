@@ -5,12 +5,12 @@
 #   Use {num:04d} for ensemble member number
 data:
   background:
-    fmt: /gpfs/f6/pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061023/mem{num:04d}/fcst_fv3lam/RESTART/20230611.000000.fv_core.res.tile1.nc
+    fmt: /gpfs/f6/bil-pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061011/mem{num:04d}/fcst_fv3lam/RESTART/20230610.120000.fv_core.res.tile1.nc
     plot_kw:
       color: 'b'
       ls: '-'
   analysis:
-    fmt: /gpfs/f6/pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061100/mem{num:04d}/fcst_fv3lam/DA_OUTPUT/fv_core.res.tile1.nc
+    fmt: /gpfs/f6/bil-pmp/scratch/Shawn.S.Murdzek/RRFSE_from_JeffD/2023061012/mem{num:04d}/fcst_fv3lam/DA_OUTPUT/fv_core.res.tile1.nc
     plot_kw:
       color: 'r'
       ls: '--'    
@@ -63,4 +63,4 @@ gen_param:
     wspace: 0.1
   grid: True
   title: 'EnKF background (blue) and analysis (red)'
-  out_tag: 'test'
+  out_tag: '2023061012'
