@@ -1,0 +1,60 @@
+# Input Parameters for 2D Convolutions of 2D Difference Fields
+#
+# shawn.s.murdzek@noaa.gov
+# ==================================================================================================
+
+# Model information
+# Notes:
+#     - For the files, the following placeholders can be used:
+#         {iYYYY} = Initialization year
+#         {iMM} = Initialization month
+#         {iDD} = Initialization day
+#         {iHH} = Initialization hour
+#         {vYYYY} = Valid year
+#         {vMM} = Valid month
+#         {vDD} = Valid day
+#         {vHH} = Valid hour
+#         {FFF} = Forecast hour
+#     - For init_time, specify the start and end of the range, as well as the step in hours 
+#     - If computing RMSD differences between two forecast hours (rmsd_fhr_diff = True), then
+#         fcst_hr must have exactly two entries
+model:
+  file1: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
+  file2: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter_uas_35km/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
+  rmsd_fhr_diff: True
+  fcst_hr:
+    - 000
+    - {FCST_HR}
+  init:
+    start: '2022020109'
+    stop: '2022020723'
+    step: '1h'
+
+# Field information
+# Notes:
+#     - "binary" refers to setting all values > binary_val to 1 and all other values to 0. This can
+#         be useful when trying to see differences around a particular threshold (e.g., ceilings 
+#         near 500 ft)
+#     - In addition to UPP output, the following fields are supported:
+#         * WSPD: Wind speed
+#         * WDIR: Wind direction
+#         * CEIL: Cloud ceiling AGL (using ceil_name, which is one of the ceiling names outpu by
+#             uppp.compute_ceil_agl())
+field:
+  name: '{FIELD_NAME}'
+  level: 0
+  ceil_name: 'CEIL_EXP2'
+  binary: {BINARY}
+  binary_val: {BINARY_VAL}
+
+# Convolution information
+# Notes:
+#     - subset: This allows the user to only keep every nth value from the convolution. Can be
+#         helpful for excluding overlapping windows.
+convolve:
+  size: 100
+  subset: 50
+
+# Output information
+out:
+  tag: 'winter_f{FCST_HR}'

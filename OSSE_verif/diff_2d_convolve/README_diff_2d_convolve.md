@@ -23,3 +23,10 @@ Thus, the patches with the largest differences between the two forecasts will be
 Program options are controlled using the `input_diff_2d_convolve.yml` file. To run, use the following command:
 
 `python diff_2d_convolve.py input_diff_2d_convolve.yml`
+
+To run several instances as batch jobs (using `run_diff.sh`)
+
+1. Create a clean directory
+2. Copy `make_submit_diff_2d_convolve.sh` and `input_diff_2d_convolve_TEMPLATE.yml` to the new directory
+3. Edit `make_submit_diff_2d_convolve.sh` and `input_diff_2d_convolve_TEMPLATE.yml`
+4. `bash make_submit_diff_2d_convolve.sh`
