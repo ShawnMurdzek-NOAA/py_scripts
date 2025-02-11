@@ -80,6 +80,11 @@ def parse_in_yaml(args):
                                            end=t_stop,
                                            freq=param['model']['init']['step']).tolist()
 
+    # Raise error if rmsd_fhr_diff = True, but fcst_hr does not have 2 entries
+    if param['model']['rmsd_fhr_diff']:
+        if len(param['model']['fcst_hr']) != 2:
+            raise ValueError('model/fcst_hr must have 2 entries if model/rmsd_fhr_diff = True')
+
     return param
 
 
@@ -161,25 +166,45 @@ def perform_diff_2d_convolve(field1, field2, param):
     return rmsd
 
 
-def init_out_dict():
+def rmsd_diff_field_names(param):
 
-    out = {'rmsd':[],
-           'lat':[],
+    fhr1 = param['model']['fcst_hr'][0]
+    fhr2 = param['model']['fcst_hr'][1]
+
+    return f"rmsd_{fhr1}", f"rmsd_{fhr2}"
+
+
+def init_out_dict(param):
+
+    out = {'lat':[],
            'lon':[],
-           'init':[],
-           'fhr':[]}
+           'init':[]}
+
+    if param['model']['rmsd_fhr_diff']:
+        n1, n2 = rmsd_diff_field_names(param)
+        out[n1] = []
+        out[n2] = []
+    else:
+        out['rmsd'] = []
+        out['fhr'] = []
 
     return out
 
 
-def save_output_1iter(rmsd, lat, lon, init, fhr, out):
+def save_output_1iter(param, rmsd, lat, lon, init, fhr, out):
 
     size = lat.size
-    out['rmsd'] = out['rmsd'] + list(rmsd.flatten())
     out['lat'] = out['lat'] + list(lat.flatten())
     out['lon'] = out['lon'] + list(lon.flatten())
     out['init'] = out['init'] + [init]*size
-    out['fhr'] = out['fhr'] + [fhr]*size
+
+    if param['model']['rmsd_fhr_diff']:
+        n1, n2 = rmsd_diff_field_names(param)
+        out[n1] = out[n1] + list(rmsd[0].flatten())
+        out[n2] = out[n2] + list(rmsd[1].flatten())
+    else:
+        out['rmsd'] = out['rmsd'] + list(rmsd.flatten())
+        out['fhr'] = out['fhr'] + [fhr]*size
 
     return out
 
@@ -199,7 +224,12 @@ def save_output_fname(out, param):
         fname = f"{var}_{lvl}_{tag}.csv"
 
     # Sort by RMSD
-    out_df.sort_values('rmsd', ascending=False, inplace=True)
+    if param['model']['rmsd_fhr_diff']:
+        n1, n2 = rmsd_diff_field_names(param)
+        out_df['rmsd_diff'] = out_df[n2] - out_df[n1]
+        out_df.sort_values('rmsd_diff', ascending=False, inplace=True)
+    else:
+        out_df.sort_values('rmsd', ascending=False, inplace=True)
 
     # Save to CSV
     out_df.to_csv(fname)
@@ -207,31 +237,49 @@ def save_output_fname(out, param):
     return out_df
 
 
+def compute_rmsds_1init(init, param, out_dict, verbose=1):
+
+    if param['model']['rmsd_fhr_diff']:
+        rmsd = []
+
+    for fhr in param['model']['fcst_hr']:
+        if verbose > 0: print(f"init = {t}, fhr = {fhr}")
+        ds1, ds2 = read_fcst_output(param, t, fhr)
+        field1 = extract_field(ds1, param)
+        field2 = extract_field(ds2, param)
+        lat, lon = extract_lat_lon(ds1, param)
+        if param['model']['rmsd_fhr_diff']:
+            rmsd.append(perform_diff_2d_convolve(field1, field2, param))
+        else:
+            rmsd = perform_diff_2d_convolve(field1, field2, param)
+            out_dict = save_output_1iter(param, rmsd, lat, lon, t, fhr, out_dict)
+
+    if param['model']['rmsd_fhr_diff']:
+        out_dict = save_output_1iter(param, rmsd, lat, lon, t, fhr, out_dict)
+
+    return out_dict
+
+
 if __name__ == '__main__':
 
     # Record start time
     start = dt.datetime.now()
+    print()
     print('Starting diff_2d_convolve')
     print(f"Start time = {start.strftime('%Y%m%d %H:%M:%S')}")
-    print()
 
     # Parse command-line args
     args = parse_args(sys.argv[1:])
     param = parse_in_yaml(args)
+    print(f"Compute RMSD Diffs? {param['model']['rmsd_fhr_diff']}")
+    print()
 
     # Dictionary to save output
-    out_dict = init_out_dict()
+    out_dict = init_out_dict(param)
 
     # Main loop
     for t in param['model']['init']:
-        for fhr in param['model']['fcst_hr']:
-            print(f"init = {t}, fhr = {fhr}")
-            ds1, ds2 = read_fcst_output(param, t, fhr)
-            field1 = extract_field(ds1, param)
-            field2 = extract_field(ds2, param)
-            lat, lon = extract_lat_lon(ds1, param)
-            rmsd = perform_diff_2d_convolve(field1, field2, param)
-            out_dict = save_output_1iter(rmsd, lat, lon, t, fhr, out_dict)
+        out_dict = compute_rmsds_1init(t, param, out_dict, verbose=1)
 
     # Save output to CSV file
     out_df = save_output_fname(out_dict, param)

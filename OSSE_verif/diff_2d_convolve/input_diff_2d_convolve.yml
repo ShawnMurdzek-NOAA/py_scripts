@@ -16,10 +16,14 @@
 #         {vHH} = Valid hour
 #         {FFF} = Forecast hour
 #     - For init_time, specify the start and end of the range, as well as the step in hours 
+#     - If computing RMSD differences between two forecast hours (rmsd_fhr_diff = True), then
+#         fcst_hr must have exactly two entries
 model:
   file1: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
   file2: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter_uas_35km/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
+  rmsd_fhr_diff: True
   fcst_hr:
+    - 000
     - 003
   init:
     start: '2022020112'
@@ -48,8 +52,8 @@ field:
 #     - subset: This allows the user to only keep every nth value from the convolution. Can be
 #         helpful for excluding overlapping windows.
 convolve:
-  size: 40
-  subset: 20
+  size: 100
+  subset: 50
 
 # Output information
 out:
