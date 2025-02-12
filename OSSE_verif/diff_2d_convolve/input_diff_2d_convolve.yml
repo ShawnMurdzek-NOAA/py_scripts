@@ -21,13 +21,13 @@
 model:
   file1: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
   file2: /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter_uas_35km/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
-  rmsd_fhr_diff: True
+  rmsd_fhr_diff: False
   fcst_hr:
     - 000
     - 003
   init:
-    start: '2022020112'
-    stop: '2022020113'
+    start: '2022020417'
+    stop: '2022020418'
     step: '1h'
 
 # Field information

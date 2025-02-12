@@ -21,6 +21,7 @@ import sys
 import argparse
 import datetime as dt
 import copy
+import Nio
 
 import pyDA_utils.upp_postprocess as uppp
 
@@ -104,7 +105,7 @@ def read_fcst_output(param, itime, fhr):
     Returns
     -------
     ds1, ds2 : xr.Dataset
-        Forecast output from the two forecasts being examined
+        Forecast output from the two forecasts being examined. Return None if files are missing
 
     """
 
@@ -122,8 +123,12 @@ def read_fcst_output(param, itime, fhr):
         dum = dum.replace('{FFF}', f'{fhr:03d}')
         fnames[key] = dum
 
-    ds1 = xr.open_dataset(fnames['file1'], engine='pynio')
-    ds2 = xr.open_dataset(fnames['file2'], engine='pynio')
+    try:
+        ds1 = xr.open_dataset(fnames['file1'], engine='pynio')
+        ds2 = xr.open_dataset(fnames['file2'], engine='pynio')
+    except Nio.NIOError:
+        ds1 = None
+        ds2 = None
 
     return ds1, ds2
 
@@ -396,10 +401,14 @@ def compute_rmsds_1init(init, param, out_dict, verbose=1):
 
     if param['model']['rmsd_fhr_diff']:
         rmsd = []
+        missing_file = False
 
     for fhr in param['model']['fcst_hr']:
         if verbose > 0: print(f"init = {t}, fhr = {fhr}")
         ds1, ds2 = read_fcst_output(param, t, fhr)
+        if ds1 is None:
+            missing_file = True
+            continue
         field1 = extract_field(ds1, param)
         field2 = extract_field(ds2, param)
         lat, lon = extract_lat_lon(ds1, param)
@@ -409,7 +418,7 @@ def compute_rmsds_1init(init, param, out_dict, verbose=1):
             rmsd = perform_diff_2d_convolve(field1, field2, param)
             out_dict = save_output_1iter(param, rmsd, lat, lon, t, fhr, out_dict)
 
-    if param['model']['rmsd_fhr_diff']:
+    if param['model']['rmsd_fhr_diff'] and not missing_file:
         out_dict = save_output_1iter(param, rmsd, lat, lon, t, fhr, out_dict)
 
     return out_dict
