@@ -121,9 +121,11 @@ def compute_lapse_rates_FV3(ds):
 
     """
 
-    # Compute lapse rate
+    # Compute lapse rates and average heights for lapse rates
     lr = ((ds['T'].values[:, 1:, :, :] - ds['T'].values[:, :-1, :, :]) /
           (1e-3 * (ds['hgt'].values[:, :-1, :, :] - ds['hgt'].values[:, 1:, :, :])))
+    
+    hgt_lr = 1e-3*0.5*(ds['hgt'].values[:, 1:, :, :] + ds['hgt'].values[:, :-1, :, :])
     
     # Add lapse rate to Dataset
     lr_dict = {'data':lr, 
@@ -131,6 +133,13 @@ def compute_lapse_rates_FV3(ds):
                'coords':{'zaxis_2':{'dims':'zaxis_2', 'data':np.arange(1, 65)}}}
     da = xr.DataArray.from_dict(lr_dict)
     ds['lapse_rate'] = da
+
+    # Add lapse rate z to Dataset
+    hgt_dict = {'data':hgt_lr, 
+                'dims':['Time', 'zaxis_2', 'yaxis_2', 'xaxis_1'],
+                'coords':{'zaxis_2':{'dims':'zaxis_2', 'data':np.arange(1, 65)}}}
+    da = xr.DataArray.from_dict(hgt_dict)
+    ds['hgt_lr'] = da
 
     return ds
 
@@ -248,9 +257,8 @@ def plot_lr_hgt_hist_2d(ens_dict, param):
         sims = list(param['data'].keys())
         for key in sims:
             if n in ens_dict[key].keys():
-                avg_hgt = 1e-3*0.5*(ens_dict[key][n]['hgt'].values[0, 1:, :, :] + ens_dict[key][n]['hgt'].values[0, :-1, :, :])
                 hist[key], _, _ = np.histogram2d(ens_dict[key][n]['lapse_rate'].values.flatten(),
-                                                 avg_hgt.flatten(),
+                                                 ens_dict[key][n]['hgt_lr'].values.flatten(),
                                                  bins=[lr_bins, z_bins])
         if len(hist) == 2:
             cax = ax.pcolormesh(lr_bins, z_bins, (hist[sims[1]] - hist[sims[0]]).T, 
@@ -265,11 +273,127 @@ def plot_lr_hgt_hist_2d(ens_dict, param):
         axes[i, 0].set_ylabel('height (km AGL)', size=12)
     for i in range(ncols): 
         axes[nrows-1, i].set_xlabel('lapse rate (K km$^{-1}$)', size=12)
-    plt.suptitle(f"{param['gen_param']['title']}", size=16)
     cbar = plt.colorbar(cax, ax=axes, orientation='horizontal', pad=0.12)
     cbar.set_label(f"difference in counts ({sims[1]} - {sims[0]})", size=12)
     
     return fig
+
+
+def find_closest_idx(lat, lon, grid_spec_fname):
+    """
+    Find the closest index to a given (lat, lon) coordinate
+
+    Parameters
+    ----------
+    lat : float
+        Latitude (deg N)
+    lon : float
+        Longitude (deg E)
+    grid_spec_fname : string
+        Name of FV3 grid_spec file
+    
+    Returns
+    -------
+    i, j : integer
+        Indices of closest gridpoint to (lat, lon)
+
+    """
+
+    i = 1
+    j = 1
+
+    return i, j
+
+
+def plot_lr_1loc(ens_dict, lat, lon, loc, param):
+    """
+    Plot lapse rates for a single (lat, lon) coordinate
+
+    Parameters
+    ----------
+    ens_dict : dictionary
+        Ensemble output
+    lat : float
+        Latitude (deg N)
+    lon : float
+        Longitude (deg E)
+    loc : string
+        Location name
+    param : dictionary
+        Plotting parameters
+    
+    Returns
+    -------
+    fig : matplotlib.figure
+        Figure containing lapse rate plots
+
+    """
+
+    # Determine indices closest to (lat, lon)
+    idx = find_closest_idx(ens_dict, lat, lon)
+
+    # Create figure and subplots
+    nrows = param['gen_param']['subplot_kw']['nrows']
+    ncols = param['gen_param']['subplot_kw']['ncols']
+    fig, axes = plt.subplots(nrows=nrows, ncols=ncols,
+                             figsize=param['gen_param']['figsize'],
+                             sharex=True, sharey=True)
+    plt.subplots_adjust(**param['gen_param']['subplots_adjust'])
+    
+    # Plot lapse rates
+    for n in range(1, param['gen_param']['nens']+1):
+        ax = axes[int((n-1) / ncols), (n-1)%ncols]
+        sims = list(param['data'].keys())
+        for key in sims:
+            if n in ens_dict[key].keys():
+                ax.plot(ens_dict[key][n]['lapse_rate'][:, :, idx[0], idx[1]].values,
+                        ens_dict[key][n]['hgt_lr'][:, :, idx[0], idx[1]].values,
+                        label=key, **param['data'][key]['plot_kw'])
+        ax.set_xlim(param['lr_col']['xlim'])
+        ax.set_ylim(param['lr_col']['ylim'])
+        ax.axvline(9.8, ls='--', c='k')
+        ax.set_title(f"mem{n:04}", size=12)
+        ax.grid()
+    
+    # Add annotations
+    plt.suptitle(f"{loc}: {param['gen_param']['title']}", size=16)
+    for i in range(nrows): 
+        axes[i, 0].set_ylabel('height (km AGL)', size=12)
+    for i in range(ncols): 
+        axes[nrows-1, i].set_xlabel('lapse rate (K km$^{-1}$)', size=12)
+
+    return fig
+
+
+def plot_lr_1loc_wrapper(ens_dict, param):
+    """
+    Loop over each input (lat, lon) coordinate and plot lapse rates
+
+    Parameters
+    ----------
+    ens_dict : dictionary
+        Ensemble output
+    param : dictionary
+        Plotting parameters
+
+    Returns
+    -------
+    None
+
+    """
+
+    #if param['lr_col']['use']:
+    if False:
+        for loc in param['lr_col']['coords']:
+            lat = param['lr_col']['coords']['loc'][0]
+            lon = param['lr_col']['coords']['loc'][1]
+            fig = plot_lr_1loc(ens_dict, lat, lon, loc, param)
+            plt.suptitle(f"{loc}: {lat} deg N, {lon} deg E")
+            plt.savefig(f"{loc}_lr_vprof_{param['gen_param']['out_tag']}.png")
+            plt.close()
+
+    print('Cannot create vprofs of lapse rates b/c we cannot determine (lat, lon) coordinates from FV3 raw output')
+    return None
 
 
 if __name__ == '__main__':
@@ -299,6 +423,10 @@ if __name__ == '__main__':
     fig = plot_lr_hgt_hist_2d(ens_dict, param)
     fname = f"lr_hgt_2D_hist_{param['gen_param']['out_tag']}.png"
     plt.savefig(fname)
+
+    # Plot lapse rates at specific (lat, lon) coordinates
+    print('Plotting lapse rates at (lat, lon) coords...')
+    plot_lr_1loc_wrapper(ens_dict, param)
 
     print()
     print(f'total elapsed time = {(dt.datetime.now() - start).total_seconds()} s')

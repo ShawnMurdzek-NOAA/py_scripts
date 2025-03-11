@@ -64,3 +64,35 @@ gen_param:
   grid: True
   title: 'EnKF background (blue) and analysis (red)'
   out_tag: '2023061012'
+
+# Plot lapse rates at individual (lat, lon) coordinates
+# coords is a dictionary where the key is the location name and the value is the (lat, lon) 
+# coordinates
+lr_col:
+  use: False
+  ylim:
+    - 0
+    - 1.5
+  xlim:
+    - 8
+    - 12
+  coords:
+    ATL:
+      - 33.7501
+      - -84.3885
+    DEN:
+      - 39.8563
+      - -104.6764
+    JFK:
+      - 40.6446
+      - -73.7797
+    LAX:
+      - 33.9422
+      - -118.4036
+    ORD:
+      - 41.9803
+      - -87.9090
+    IAH:
+      - 29.9931
+      - 95.3416
+    
