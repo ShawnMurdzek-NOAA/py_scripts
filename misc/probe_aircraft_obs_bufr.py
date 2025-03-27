@@ -21,11 +21,12 @@ from pyDA_utils import bufr
 #---------------------------------------------------------------------------------------------------
 
 # Observation types
-all_typ = [130, 131, 133, 134, 135]
+#all_typ = [130, 131, 133, 134, 135]
+all_typ = [120]
 
 # BUFR CSV file names
-bufr_fnames = [f"/work/noaa/wrfruc/murdzek/nature_run_spring/obs/perfect_conv/real_csv/20220430{i:02d}00.rap.prepbufr.csv" for i in range(23)]
-#bufr_fnames = [f"/work/noaa/wrfruc/murdzek/nature_run_winter/obs/perfect_conv/real_csv/20220201{i:02d}00.rap.prepbufr.csv" for i in range(23)]
+bufr_fnames = [f"/work/noaa/wrfruc/murdzek/nature_run_spring/obs/perfect_conv/real_csv/20220430{i:02d}00.rap.prepbufr.csv" for i in range(24)]
+#bufr_fnames = [f"/work/noaa/wrfruc/murdzek/nature_run_winter/obs/perfect_conv/real_csv/20220201{i:02d}00.rap.prepbufr.csv" for i in range(24)]
 
 
 #---------------------------------------------------------------------------------------------------
@@ -41,6 +42,7 @@ for f in bufr_fnames:
     for t in all_typ:
         subset = bufr_obj[-1].df.loc[bufr_obj[-1].df['TYP'] == t, :]
         print(f"Type {t} (n = {len(subset)}), DHR min = {subset['DHR'].min()}, DHR max = {subset['DHR'].max()}")
+        print(f"Type {t} (n = {len(subset)}), HRDR min = {subset['HRDR'].min()}, DHR max = {subset['HRDR'].max()}")
 
 # Determine if any observations are repeated across prepBUFR files
 print()
@@ -53,7 +55,7 @@ for i in range(1, len(bufr_obj)):
     copy_df.loc[:, 'DHR'] = copy_df.loc[:, 'DHR'] - 1
     concat_df = pd.concat([copy_df, bufr_obj[i].df])
     for t in all_typ:
-        subset = concat_df.loc[concat_df['TYP'] == t, ['TYP', 'SID', 'DHR', 'XOB', 'YOB', 'ELV', 'TOB', 'QOB', 'UOB', 'VOB']]
+        subset = concat_df.loc[concat_df['TYP'] == t, ['TYP', 'SID', 'DHR', 'HRDR', 'XOB', 'YOB', 'ELV', 'TOB', 'QOB', 'UOB', 'VOB']]
         subset.reset_index(drop=True)
         duplicates = subset.duplicated()
         print(f"Type {t} has {duplicates.sum()} duplicates")
