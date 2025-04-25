@@ -1,0 +1,22 @@
+# Inputs for plot_hcrsxn_rmse_diff.py
+
+# Forecast simulations (use strftime placeholders for init time)
+sims:
+  spring: '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring/NCO_dirs/ptmp/prod/rrfs.%Y%m%d/%H/rrfs.t%Hz.prslev.f003.conus_3km.grib2'
+  spring_uas_35km: '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/spring_uas_35km/NCO_dirs/ptmp/prod/rrfs.%Y%m%d/%H/rrfs.t%Hz.prslev.f003.conus_3km.grib2'
+
+# Nature run output (use strftime placeholders for valid time)
+truth: '/work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/%Y%m%d/wrfprs_%Y%m%d%H00_er.grib2'
+
+# Timing parameters
+fcst_hr: 3
+start_time: 2022-04-29 21:00:00
+nhrs: 2
+
+# Compute RMSEs using the following field. Set rmse_zlvl to np.nan for 2D fields
+rmse_field: 'UGRD_P0_L103_GLC0'
+rmse_zlvl: 3
+rmse_zlvl_truth: 1
+
+# Output image file
+out_fname: 'spring_ctrl_uas35_rmse_diff_wind80m_f03.png'
