@@ -92,6 +92,13 @@ def parse_in_args(argv):
                         help='Size of scatterplot dots',
                         type=float)
 
+    parser.add_argument('--file2',
+                        dest='atm_file2', 
+                        default=np.nan,
+                        help='Second MPAS netCDF file containing atmospheric output. \
+                              Used for differences. Set to NaN to not use.',
+                        type=str)
+
     parser.add_argument('--outtag',
                         dest='out_tag',
                         default='',
@@ -160,29 +167,42 @@ def read_process_data(param):
     """
 
     # Read in netCDF files
-    atm_ds = xr.open_dataset(param.atm_file)
+    atm_ds = [xr.open_dataset(param.atm_file)]
     fix_ds = xr.open_dataset(param.fix_file)
+    diff = False
+    if type(param.atm_file2) == str:
+        diff = True
+        atm_ds.append(xr.open_dataset(param.atm_file2))
 
     # Extract atmospheric field
-    # Be sure to remove teh time dimension, which should always be 1
-    if len(atm_ds[param.field].shape) == 2:
-        data = atm_ds[param.field].values[0, :]
-    else:
-        if param.reduction == 'none':
-            data = atm_ds[param.field].values[0, :, param.level]
-        elif param.reduction == 'max':
-            data = np.amax(atm_ds[param.field].values[0, :, :], axis=1)
-        elif param.reduction == 'min':
-            data = np.amin(atm_ds[param.field].values[0, :, :], axis=1)
-        elif param.reduction == 'mean':
-            data = np.mean(atm_ds[param.field].values[0, :, :], axis=1)
-        elif param.reduction == 'median':
-            data = np.median(atm_ds[param.field].values[0, :, :], axis=1)
+    # Be sure to remove the time dimension, which should always be 1
+    data_ls = []
+    for ds in atm_ds:
+        if len(ds[param.field].shape) == 2:
+            data_ls.append(ds[param.field].values[0, :])
         else:
-            raise ValueError(f"reduction method {param.reduction} is not supported")
+            if param.reduction == 'none':
+                data_ls.append(ds[param.field].values[0, :, param.level])
+            elif param.reduction == 'max':
+                data_ls.append(np.amax(ds[param.field].values[0, :, :], axis=1))
+            elif param.reduction == 'min':
+                data_ls.append(np.amin(ds[param.field].values[0, :, :], axis=1))
+            elif param.reduction == 'mean':
+                data_ls.append(np.mean(ds[param.field].values[0, :, :], axis=1))
+            elif param.reduction == 'median':
+                data_ls.append(np.median(ds[param.field].values[0, :, :], axis=1))
+            else:
+                raise ValueError(f"reduction method {param.reduction} is not supported")
+        
+    # Compute differences
+    if diff:
+        data = data_ls[0] - data_ls[1]
+    else:
+        data = data_ls[0]
 
     # Create colorbar label
-    cbar_label = f"{atm_ds[param.field].long_name} ({atm_ds[param.field].units})"
+    cbar_label = f"{atm_ds[0][param.field].long_name} ({atm_ds[0][param.field].units})"
+    if diff: cbar_label = f"diff {cbar_label}"
 
     # Cell coordinate information
     lat = np.rad2deg(fix_ds['latCell'].values)
