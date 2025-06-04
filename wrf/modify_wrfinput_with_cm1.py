@@ -1,0 +1,273 @@
+"""
+Modify WRF Input File Using CM1 Output
+
+shawn.murdzek@colorado.edu
+"""
+
+#---------------------------------------------------------------------------------------------------
+# Import Modules
+#---------------------------------------------------------------------------------------------------
+
+import datetime as dt
+import sys
+import argparse
+import copy
+import numpy as np
+import xarray as xr
+import pandas as pd
+import metpy.calc as mc
+from metpy.units import units
+import scipy.interpolate as si
+
+
+#---------------------------------------------------------------------------------------------------
+# Main Program
+#---------------------------------------------------------------------------------------------------
+
+def parse_in_args(argv):
+    """
+    Parse input arguments
+
+    Parameters
+    ----------
+    argv : list
+        Command-line arguments from sys.argv[1:]
+    
+    Returns
+    -------
+    Parsed input arguments
+
+    """
+
+    parser = argparse.ArgumentParser(description='Script that interpolates CM1 fields to a \
+                                                  wrfinput file')
+    
+    # Positional arguments
+    parser.add_argument('cm1_file', 
+                        help='CM1 netCDF restart file (e.g., cm1out_rst_XXXXXX.nc)',
+                        type=str)
+    
+    parser.add_argument('cm1_base', 
+                        help='CM1 input_sounding text file',
+                        type=str)
+
+    parser.add_argument('wrf_infile', 
+                        help='Input wrfinput netCDF file',
+                        type=str)
+
+    parser.add_argument('wrf_outfile', 
+                        help='Output wrfinput netCDF file',
+                        type=str)
+
+    # Optional arguments
+    parser.add_argument('-i',
+                        dest='iopt',
+                        default='nearest',
+                        help='Interpolation option. Passed to scipy.RegularGridInterpolator',
+                        type=str)
+
+    parser.add_argument('-s',
+                        dest='sopt',
+                        default='none',
+                        help='Smoothing option. Options: "none"',
+                        type=str)
+
+    parser.add_argument('--bmag',
+                        dest='bubble_mag',
+                        default=0,
+                        help='Warm bubble magnitude (K). Set to 0 to not include a warm bubble',
+                        type=float)
+
+    # Default bubble configuration comes from CM1v18, init3d.F, iinit = 1
+    parser.add_argument('--bx',
+                        dest='bubble_x',
+                        default=0,
+                        help='Warm bubble x coordinate (m)',
+                        type=float)
+
+    parser.add_argument('--by',
+                        dest='bubble_y',
+                        default=0,
+                        help='Warm bubble y coordinate (m)',
+                        type=float)
+
+    parser.add_argument('--bz',
+                        dest='bubble_z',
+                        default=1400,
+                        help='Warm bubble z coordinate (m)',
+                        type=float)
+
+    parser.add_argument('--bhrad',
+                        dest='bubble_hrad',
+                        default=10000,
+                        help='Warm bubble horizontal radius (m)',
+                        type=float)
+
+    parser.add_argument('--bvrad',
+                        dest='bubble_vrad',
+                        default=1400,
+                        help='Warm bubble vertical radius (m)',
+                        type=float)
+
+    return parser.parse_args(argv)
+
+
+def read_cm1_restart(fname):
+    """
+    Read in CM1 restart file
+    """
+
+    cm1_ds = xr.open_dataset(fname)
+
+    # Remove extra times
+    cm1_ds = cm1_ds.sel(time=slice(cm1_ds['time'].values[0]))
+
+    return cm1_ds
+
+
+def read_cm1_input_sounding(fname):
+    """
+    Read in CM1 base state from input_sounding
+    """
+
+    return pd.read_csv('input_sounding', 
+                       sep='\s+', 
+                       names=['hgt', 'theta', 'qv', 'u', 'v'],
+                       skiprows=1)
+
+
+def compute_wrf_grid(wrf_ds):
+    """
+    Create an (x, y, z) grid for WRF output in m
+    """
+
+    wrf_grid = {}
+
+    # X direction
+    wrf_grid['west_east'] = wrf_ds.attrs['DX'] * wrf_ds['west_east'].values
+    wrf_grid['west_east_stag'] = wrf_ds.attrs['DX'] * wrf_ds['west_east_stag'].values
+    wrf_grid['west_east_stag'] = wrf_grid['west_east_stag'] - 0.5*(wrf_grid['west_east'][-1] + wrf_ds.attrs['DX'])
+    wrf_grid['west_east'] = wrf_grid['west_east'] - 0.5*wrf_grid['west_east'][-1]
+
+    # Y direction
+    wrf_grid['south_north'] = wrf_ds.attrs['DY'] * wrf_ds['south_north'].values
+    wrf_grid['south_north_stag'] = wrf_ds.attrs['DY'] * wrf_ds['south_north_stag'].values
+    wrf_grid['south_north_stag'] = wrf_grid['south_north_stag'] - 0.5*(wrf_grid['south_north'][-1] + wrf_ds.attrs['DY'])
+    wrf_grid['south_north'] = wrf_grid['south_north'] - 0.5*wrf_grid['south_north'][-1]
+    
+    # Z direction
+    # Assume geopotential is constant at each vertical level (i.e., there is no terrain)
+    geopotential = wrf_ds['PH'].values[0, :, 0, 0] + wrf_ds['PHB'].values[0, :, 0, 0]
+    hgt = mc.geopotential_to_height(geopotential * units.m**2 / units.s**2).to(units.m).magnitude
+    wrf_grid['bottom_top_stag'] = hgt
+    wrf_grid['bottom_top'] = 0.5 * (wrf_grid['bottom_top_stag'][:-1] + wrf_grid['bottom_top_stag'][1:])
+
+    return wrf_grid
+
+
+def interp_1_field(wrf_ds, cm1_ds, wrf_field, cm1_field, wrf_grid, method='nearest'):
+    """
+    Interpolate a single field from CM1 to WRF
+    """
+
+    # Create RegularGridInterpolator using Scipy
+    # Need 0 index to eliminate time dimension (which is always first)
+    cm1_coords = []
+    for d in cm1_ds[cm1_field].dims:
+        if d == 'time': 
+            continue
+        elif d == 'ni':
+            key = 'xh'
+        elif d == 'nip1':
+            key = 'xf'
+        elif d == 'nj':
+            key = 'yh'
+        elif d == 'njp1':
+            key = 'yf'
+        elif d == 'nk':
+            key = 'zh'
+        elif d == 'nkp1':
+            key = 'zf'
+        cm1_coords.append(cm1_ds[key].values)
+    interp = si.RegularGridInterpolator(cm1_coords, cm1_ds[cm1_field][0].values, method=method)
+
+    # Interpolate to WRF grid
+    wrf_dims = wrf_ds[wrf_field].dims
+    if len(wrf_dims) == 3:
+        wrf_coords = np.meshgrid(wrf_grid[wrf_dims[1]], wrf_grid[wrf_dims[2]], indexing='ij')
+    elif len(wrf_dims) == 4:
+        wrf_coords = np.meshgrid(wrf_grid[wrf_dims[1]], wrf_grid[wrf_dims[2]], wrf_grid[wrf_dims[3]], indexing='ij')
+    else:
+        raise ValueError(f"WRF field with {len(wrf_dims) - 1} dimensions is not supported")
+    out = interp(wrf_coords)
+    wrf_ds[wrf_field].values = out[np.newaxis, :]
+
+    return wrf_ds
+
+
+def interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method='nearest', verbose=1):
+    """
+    Interpolate several fields from CM1 to WRF
+    """
+
+    for f in fields.keys():
+
+        if verbose > 0: print(f"Interpolating {f}")
+
+        # Preprocess
+        if fields[f] == 'tha':
+            # Convert perturbation potential temperature to regular potential temperature
+            cm1_ds['theta'] = copy.deepcopy(cm1_ds['tha'])
+            th_base = np.interp(cm1_ds['zh'].values, cm1_base['hgt'].values, cm1_base['theta'].values)
+            cm1_ds['theta'].values = cm1_ds['tha'].values + th_base[np.newaxis, :, np.newaxis, np.newaxis]
+            cm1_ds['theta'].attrs['long_name'] = 'potential temperature'
+            fields[f] = 'theta'
+
+        # Interpolate
+        wrf_ds = interp_1_field(wrf_ds, cm1_ds, f, fields[f], wrf_grid, method=method)
+
+        # Postprocess (e.g., convert from "full" value back to perturbation
+        if f == 'T':
+            # Convert regular potential temperature to perturbation potential temperature
+            # Value of 300K is hard coded in share/module_model_constants.F in WRF
+            wrf_ds['T'].values = wrf_ds['T'].values - 300.
+
+    return wrf_ds
+
+
+if __name__ == '__main__':
+
+    start = dt.datetime.now()
+    print('Starting modify_wrfinput_with_cm1.py')
+    print(f"Time = {start.strftime('%Y%m%d %H:%M:%S')}")
+
+    # Fields to interpolate
+    fields = {'U':'ua',
+              'V':'va',
+              'T':'tha',
+              'Q2':'q2',
+              'TH2':'th2',
+              'QVAPOR':'qv'}
+
+    # Read in data and compute WRF grid
+    param = parse_in_args(sys.argv[1:])
+    cm1_ds = read_cm1_restart(param.cm1_file)
+    wrf_ds = xr.open_dataset(param.wrf_infile)
+    cm1_base = read_cm1_input_sounding(param.cm1_base)
+    wrf_grid = compute_wrf_grid(wrf_ds)
+
+    # Interpolate
+    wrf_ds = interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method=param.iopt)
+
+    # Add warm bubble
+
+    # Write out wrf_ds
+    wrf_ds.to_netcdf(param.wrf_outfile)
+
+    print('Program finished!')
+    print(f"Elapsed time = {(dt.datetime.now() - start).total_seconds()} s")
+
+
+"""
+End modify_wrfinput_with_cm1.py
+"""
