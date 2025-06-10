@@ -130,7 +130,7 @@ def read_cm1_input_sounding(fname):
     Read in CM1 base state from input_sounding
     """
 
-    return pd.read_csv('input_sounding', 
+    return pd.read_csv(fname, 
                        sep='\s+', 
                        names=['hgt', 'theta', 'qv', 'u', 'v'],
                        skiprows=1)
