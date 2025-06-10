@@ -235,6 +235,53 @@ def interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method='neares
     return wrf_ds
 
 
+def recompute_wrf_density(wrf_ds):
+    """
+    Recompute WRF inverse density perturbations
+
+    Uses the same code as WRF/dyn_em/module_initialize_ideal.F (lines 1172-1217)
+    """
+
+    # Constants (taken from WRF/share/module_model_constants.F)
+    r_d = 287.
+    cp = 7. * r_d / 2 
+    r_v = 461.6
+    cv = cp - r_d
+    cvpm = -cv / cp
+    p1000mb = 100000.
+    t0 = 300.
+    rvovrd = r_v / r_d
+
+    # Compute qv correction for virtual temperature
+    qvf = 1. + (rvovrd * wrf_ds['QVAPOR'].values)
+
+    # Compute total inverse density
+    alt = ((r_d/p1000mb) * (wrf_ds['T'].values + t0) * qvf * 
+           ((wrf_ds['P'].values + wrf_ds['PB'].values) / p1000mb)**cvpm)
+
+    # Computer perturbation inverse density
+    wrf_ds['AL'].values = alt - wrf_ds['ALB'].values
+
+    return wrf_ds
+
+
+def rebalance_PH_hydrostatic(wrf_ds):
+    """
+    Rebalance perturbation geopotential. Must recompute inverse density perturbations first. 
+
+    Uses the same code as WRF/dyn_em/module_initialize_ideal.F (lines 1172-1217)
+    """
+
+    for k in range(1, wrf_ds.attrs['BOTTOM-TOP_GRID_DIMENSION']):
+        wrf_ds['PH'].values[:, k, :, :] = wrf_ds['PH'].values[:, k-1, :, :] - (wrf_ds['DNW'].values[:, k-1] *
+                                           (((wrf_ds['C1H'].values[:, k-1] * wrf_ds['MUB'].values + wrf_ds['C2H'].values[:, k-1]) +
+                                             wrf_ds['C1H'].values[:, k-1] * wrf_ds['MU'].values) *
+                                            wrf_ds['AL'].values[:, k-1, :, :] + 
+                                            (wrf_ds['C1H'].values[:, k-1] * wrf_ds['MU'].values) * wrf_ds['ALB'].values[:, k-1, :, :]))
+
+    return wrf_ds
+
+
 if __name__ == '__main__':
 
     start = dt.datetime.now()
@@ -260,6 +307,11 @@ if __name__ == '__main__':
     wrf_ds = interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method=param.iopt)
 
     # Add warm bubble
+
+    # Recompute inverse perturbation density + rebalance hydrostatically
+    print('Recomputing inverse perturbation density and perturbation geopotential')
+    wrf_ds = recompute_wrf_density(wrf_ds)
+    wrf_ds = rebalance_PH_hydrostatic(wrf_ds)
 
     # Write out wrf_ds
     wrf_ds.to_netcdf(param.wrf_outfile)
