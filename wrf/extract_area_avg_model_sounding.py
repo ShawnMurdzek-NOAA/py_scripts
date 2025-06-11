@@ -119,32 +119,32 @@ def read_cm1_rst(param):
 
     # Read in base-state sounding and restart file
     base_df = read_cm1_input_sounding(param.snd_fname)
-    ds = xr.open_dataset(param.in_file)
+    ds = xr.open_dataset(param.in_file, decode_timedelta=False)
 
     # Extract height (m AGL)
     out_dict['hgt'] = ds['zh'].values[:, np.newaxis, np.newaxis]
 
     # Extract theta perturbations and add base-state theta
     th_base = np.interp(np.squeeze(out_dict['hgt']), base_df['hgt'].values, base_df['theta'].values)
-    out_dict['theta'] = (ds['tha'].values[0, :, param.jstart:param.jend, param.istart:param.iend] +
+    out_dict['theta'] = (ds['tha'][0, :, param.jstart:param.jend, param.istart:param.iend].values +
                          th_base[:, np.newaxis, np.newaxis])
 
     # Extract water vapor mixing ratio and convert from kg/kg to g/kg
-    out_dict['qv'] = 1e3 * ds['qv'].values[0, :, param.jstart:param.jend, param.istart:param.iend]
+    out_dict['qv'] = 1e3 * ds['qv'][0, :, param.jstart:param.jend, param.istart:param.iend].values
 
     # Extract winds and interpolate to mass grid
-    u = 0.5 * (ds['ua'].values[0, :, :, :-1] + ds['ua'].values[0, :, :, 1:])
-    v = 0.5 * (ds['va'].values[0, :, :-1, :] + ds['va'].values[0, :, 1:, :])
+    u = 0.5 * (ds['ua'][0, :, :, :-1].values + ds['ua'][0, :, :, 1:].values)
+    v = 0.5 * (ds['va'][0, :, :-1, :].values + ds['va'][0, :, 1:, :].values)
     out_dict['u'] = u[:, param.jstart:param.jend, param.istart:param.iend]
     out_dict['v'] = v[:, param.jstart:param.jend, param.istart:param.iend]
 
     # Extract pressure and convert to hPa
-    out_dict['p'] = 1e-2 * ds['prs'].values[0, :, param.jstart:param.jend, param.istart:param.iend]
+    out_dict['p'] = 1e-2 * ds['prs'][0, :, param.jstart:param.jend, param.istart:param.iend].values
 
     # Extract surface conditions. Use 2-m theta and qv as surface values
-    out_dict['psfc'] = 1e-2 * ds['psfc'].values[0, param.jstart:param.jend, param.istart:param.iend]
-    out_dict['thsfc'] = ds['th2'].values[0, param.jstart:param.jend, param.istart:param.iend]
-    out_dict['qvsfc'] = 1e3 * ds['q2'].values[0, param.jstart:param.jend, param.istart:param.iend]
+    out_dict['psfc'] = 1e-2 * ds['psfc'][0, param.jstart:param.jend, param.istart:param.iend].values
+    out_dict['thsfc'] = ds['th2'][0, param.jstart:param.jend, param.istart:param.iend].values
+    out_dict['qvsfc'] = 1e3 * ds['q2'][0, param.jstart:param.jend, param.istart:param.iend].values
 
     return out_dict
 
@@ -155,44 +155,45 @@ def read_wrfout(param):
     """
 
     out_dict = {}
-    ds = xr.open_dataset(param.in_file)
+    ds = xr.open_dataset(param.in_file, decode_timedelta=False)
 
     # Extract height (m AGL)
-    geopotential = (ds['PH'].values[0, :, param.jstart:param.jend, param.istart:param.iend] +
-                    ds['PHB'].values[0, :, param.jstart:param.jend, param.istart:param.iend])
+    geopotential = (ds['PH'][0, :, param.jstart:param.jend, param.istart:param.iend].values +
+                    ds['PHB'][0, :, param.jstart:param.jend, param.istart:param.iend].values)
     hgt = mc.geopotential_to_height(geopotential * units.m**2 / units.s**2).to(units.m).magnitude
     out_dict['hgt'] = 0.5 * (hgt[:-1] + hgt[1:])
 
     # Extract theta perturbations and add base-state value (300 K)
-    out_dict['theta'] = ds['T'].values[0, :, param.jstart:param.jend, param.istart:param.iend] + 300.
+    out_dict['theta'] = ds['T'][0, :, param.jstart:param.jend, param.istart:param.iend].values + 300.
 
     # Extract water vapor mixing ratio and convert from kg/kg to g/kg
-    out_dict['qv'] = 1e3 * ds['QVAPOR'].values[0, :, param.jstart:param.jend, param.istart:param.iend]
+    out_dict['qv'] = 1e3 * ds['QVAPOR'][0, :, param.jstart:param.jend, param.istart:param.iend].values
 
     # Extract winds and interpolate to mass grid
-    u = 0.5 * (ds['U'].values[0, :, :, :-1] + ds['U'].values[0, :, :, 1:])
-    v = 0.5 * (ds['V'].values[0, :, :-1, :] + ds['V'].values[0, :, 1:, :])
+    u = 0.5 * (ds['U'][0, :, :, :-1].values + ds['U'][0, :, :, 1:].values)
+    v = 0.5 * (ds['V'][0, :, :-1, :].values + ds['V'][0, :, 1:, :].values)
     out_dict['u'] = u[:, param.jstart:param.jend, param.istart:param.iend]
     out_dict['v'] = v[:, param.jstart:param.jend, param.istart:param.iend]
 
     # Extract pressure
-    out_dict['p'] = 1e-2 * (ds['P'].values[0, :, param.jstart:param.jend, param.istart:param.iend] +
-                            ds['PB'].values[0, :, param.jstart:param.jend, param.istart:param.iend])
+    out_dict['p'] = 1e-2 * (ds['P'][0, :, param.jstart:param.jend, param.istart:param.iend].values +
+                            ds['PB'][0, :, param.jstart:param.jend, param.istart:param.iend].values)
 
     # Extract surface conditions. Use 2-m theta and qv as surface values
-    out_dict['psfc'] = 1e-2 * ds['PSFC'].values[0, param.jstart:param.jend, param.istart:param.iend]
-    out_dict['thsfc'] = ds['TH2'].values[0, param.jstart:param.jend, param.istart:param.iend]
-    out_dict['qvsfc'] = 1e3 * ds['Q2'].values[0, param.jstart:param.jend, param.istart:param.iend]
+    out_dict['psfc'] = 1e-2 * ds['PSFC'][0, param.jstart:param.jend, param.istart:param.iend].values
+    out_dict['thsfc'] = ds['TH2'][0, param.jstart:param.jend, param.istart:param.iend].values
+    out_dict['qvsfc'] = 1e3 * ds['Q2'][0, param.jstart:param.jend, param.istart:param.iend].values
 
     return out_dict
 
 
-def extract_avg_sounding(param):
+def extract_avg_sounding(param, verbose=1):
     """
     Extract area-averaged sounding from model output
     """
 
     # Extract required 3D model fields
+    if verbose > 0: print('extracting model data')
     if param.model == 'CM1':
         model_dict = read_cm1_rst(param)
     elif param.model == 'WRF':
@@ -201,6 +202,7 @@ def extract_avg_sounding(param):
         raise ValueError(f"model value {model} is not supported")
 
     # Compute area-averaged sounding
+    if verbose > 0: print('computing area-averaged sounding')
     fields3d = ['hgt', 'theta', 'qv', 'u', 'v', 'p']
     snd_dict = {}
     for f in fields3d:
@@ -266,7 +268,7 @@ def plot_sounding(snd_df):
     h.plot(snd_df['u'].values, snd_df['v'].values, c='b', ls='-')
 
     # Labels
-    skew.ax.set_xlabel('temperature ($^{\circ}$C)', size=14)
+    skew.ax.set_xlabel(r'temperature ($^{\circ}$C)', size=14)
     skew.ax.set_ylabel('pressure (hPa)', size=14)
 
     return fig
@@ -282,12 +284,14 @@ if __name__ == '__main__':
     param = parse_in_args(sys.argv[1:])
 
     # Extract sounding
-    snd_df, sfc_dict = extract_avg_sounding(param)
+    snd_df, sfc_dict = extract_avg_sounding(param, verbose=1)
 
     # Write sounding to text file
+    print('Writing sounding text file')
     write_sounding(snd_df, sfc_dict, param.out_txt_file)
 
     # Plot sounding
+    print('Creating skew-T, logp diagram')
     fig = plot_sounding(snd_df)
     plt.savefig(param.out_image_file)
 
