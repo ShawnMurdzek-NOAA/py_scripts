@@ -66,6 +66,15 @@ def parse_in_args(argv):
                         help='Interpolation option. Passed to scipy.RegularGridInterpolator',
                         type=str)
 
+    parser.add_argument('--ndcnst',
+                        dest='ndcnst',
+                        default=300.,
+                        help='Constant droplet number concentration (cm^-3) used in CM1 \
+                              (e.g., for Morrison 2-moment scheme). Set to 0 if droplet number \
+                              concentration is predicted in CM1',
+                        type=float)
+
+    '''
     parser.add_argument('-s',
                         dest='sopt',
                         default='none',
@@ -108,8 +117,27 @@ def parse_in_args(argv):
                         default=1400,
                         help='Warm bubble vertical radius (m)',
                         type=float)
-
+    '''
     return parser.parse_args(argv)
+
+
+def constants():
+    """
+    Define constants as global variables
+    """
+
+    # Taken from WRF/share/module_model_constants.F
+    global r_d, cp, r_v, cv, cvpm, p1000mb, t0, rvovrd
+    r_d = 287.
+    cp = 7. * r_d / 2
+    r_v = 461.6
+    cv = cp - r_d
+    cvpm = -cv / cp
+    p1000mb = 100000.
+    t0 = 300.
+    rvovrd = r_v / r_d
+
+    return None
 
 
 def read_cm1_restart(fname):
@@ -117,7 +145,7 @@ def read_cm1_restart(fname):
     Read in CM1 restart file
     """
 
-    cm1_ds = xr.open_dataset(fname)
+    cm1_ds = xr.open_dataset(fname, decode_timedelta=False)
 
     # Remove extra times
     cm1_ds = cm1_ds.sel(time=slice(cm1_ds['time'].values[0]))
@@ -173,6 +201,7 @@ def interp_1_field(wrf_ds, cm1_ds, wrf_field, cm1_field, wrf_grid, method='neare
     # Create RegularGridInterpolator using Scipy
     # Need 0 index to eliminate time dimension (which is always first)
     cm1_coords = []
+    noextrapolate = True
     for d in cm1_ds[cm1_field].dims:
         if d == 'time': 
             continue
@@ -188,8 +217,10 @@ def interp_1_field(wrf_ds, cm1_ds, wrf_field, cm1_field, wrf_grid, method='neare
             key = 'zh'
         elif d == 'nkp1':
             key = 'zf'
+            noextrapolate = False  # Vertical extrapolation is often necessary
         cm1_coords.append(cm1_ds[key].values)
-    interp = si.RegularGridInterpolator(cm1_coords, cm1_ds[cm1_field][0].values, method=method)
+    interp = si.RegularGridInterpolator(cm1_coords, cm1_ds[cm1_field][0].values, method=method,
+                                        fill_value=None, bounds_error=noextrapolate)
 
     # Interpolate to WRF grid
     wrf_dims = wrf_ds[wrf_field].dims
@@ -222,6 +253,13 @@ def interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method='neares
             cm1_ds['theta'].values = cm1_ds['tha'].values + th_base[np.newaxis, :, np.newaxis, np.newaxis]
             cm1_ds['theta'].attrs['long_name'] = 'potential temperature'
             fields[f] = 'theta'
+        elif fields[f] == 'thm':
+            # Compute perturbation moist potential temperature
+            cm1_ds['thm'] = copy.deepcopy(cm1_ds['tha'])
+            th_base = np.interp(cm1_ds['zh'].values, cm1_base['hgt'].values, cm1_base['theta'].values)
+            theta = cm1_ds['tha'].values + th_base[np.newaxis, :, np.newaxis, np.newaxis]
+            cm1_ds['thm'].values = (1. + (r_v / r_d) * cm1_ds['qv'].values) * theta - t0
+            cm1_ds['thm'].attrs['long_name'] = 'perturbation moist potential temperature'
 
         # Interpolate
         wrf_ds = interp_1_field(wrf_ds, cm1_ds, f, fields[f], wrf_grid, method=method)
@@ -230,7 +268,26 @@ def interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method='neares
         if f == 'T':
             # Convert regular potential temperature to perturbation potential temperature
             # Value of 300K is hard coded in share/module_model_constants.F in WRF
-            wrf_ds['T'].values = wrf_ds['T'].values - 300.
+            wrf_ds['T'].values = wrf_ds['T'].values - t0
+
+    return wrf_ds
+
+
+def interp_const_droplet_number(wrf_ds, ndcnst):
+    """
+    Interpolate constant droplet number concentration from CM1 to WRF
+
+    Must interpolate cloud water mixing ratio to WRF first
+    """
+
+    # Initialize droplet number mixing ratio to 0
+    wrf_ds['QNDROP'].values = np.zeros(wrf_ds['QNDROP'].shape)
+    
+    # Determine cloudy gridpoints
+    icloud = wrf_ds['QCLOUD'].values > 0
+
+    # Compute QNDROP from ndcnst
+    wrf_ds['QNDROP'].values[icloud] = ndcnst * 1e6 * (wrf_ds['AL'].values[icloud] + wrf_ds['ALB'].values[icloud])
 
     return wrf_ds
 
@@ -242,16 +299,6 @@ def recompute_wrf_density(wrf_ds):
     Uses the same code as WRF/dyn_em/module_initialize_ideal.F (lines 1172-1217)
     """
 
-    # Constants (taken from WRF/share/module_model_constants.F)
-    r_d = 287.
-    cp = 7. * r_d / 2 
-    r_v = 461.6
-    cv = cp - r_d
-    cvpm = -cv / cp
-    p1000mb = 100000.
-    t0 = 300.
-    rvovrd = r_v / r_d
-
     # Compute qv correction for virtual temperature
     qvf = 1. + (rvovrd * wrf_ds['QVAPOR'].values)
 
@@ -259,7 +306,7 @@ def recompute_wrf_density(wrf_ds):
     alt = ((r_d/p1000mb) * (wrf_ds['T'].values + t0) * qvf * 
            ((wrf_ds['P'].values + wrf_ds['PB'].values) / p1000mb)**cvpm)
 
-    # Computer perturbation inverse density
+    # Compute perturbation inverse density
     wrf_ds['AL'].values = alt - wrf_ds['ALB'].values
 
     return wrf_ds
@@ -288,23 +335,41 @@ if __name__ == '__main__':
     print('Starting modify_wrfinput_with_cm1.py')
     print(f"Time = {start.strftime('%Y%m%d %H:%M:%S')}")
 
-    # Fields to interpolate
-    fields = {'U':'ua',
-              'V':'va',
-              'T':'tha',
-              'Q2':'q2',
-              'TH2':'th2',
-              'QVAPOR':'qv'}
-
     # Read in data and compute WRF grid
+    constants()
     param = parse_in_args(sys.argv[1:])
     cm1_ds = read_cm1_restart(param.cm1_file)
     wrf_ds = xr.open_dataset(param.wrf_infile)
     cm1_base = read_cm1_input_sounding(param.cm1_base)
     wrf_grid = compute_wrf_grid(wrf_ds)
 
+    # Fields to interpolate
+    # Note that we need to interpolate T for rebalancing
+    fields = {'U':'ua',
+              'V':'va',
+              'W':'wa',
+              'T':'tha',
+              'THM':'thm',
+              'QVAPOR':'qv',
+              'QCLOUD':'qc',
+              'QRAIN':'qr',
+              'QICE':'qi',
+              'QSNOW':'qs',
+              'QGRAUP':'qg',
+              'QNRAIN':'ncr',
+              'QNICE':'nci',
+              'QNSNOW':'ncs',
+              'QNGRAUPEL':'ncg'}
+
+    # Add cloud droplet number mixing ratio
+    if np.isclose(param.ndcnst, 0):
+        fields['QNDROP'] = 'nc'
+
     # Interpolate
     wrf_ds = interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method=param.iopt)
+    if param.ndcnst > 0:
+        print('Interpolating QNDROP')
+        wrf_ds = interp_const_droplet_number(wrf_ds, param.ndcnst)
 
     # Add warm bubble
 
