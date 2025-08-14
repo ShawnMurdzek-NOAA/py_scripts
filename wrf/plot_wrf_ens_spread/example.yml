@@ -1,0 +1,36 @@
+# Example input YAML file for plot_wrf_ens_spread.py
+#
+#===================================================================================================
+
+# Paths to ensemble output
+# All paths in 'ens_mem' are relative to the path in 'parent'
+# Include placeholder for date/time following dt.datetime conventions
+paths:
+  parent: '/work/ahouston/smurdzek/WRF_ens_init_CM1_rst04/skeb_6mem'
+  ens_mem:
+    - 'skeb1/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+    - 'skeb2/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+    - 'skeb3/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+    - 'skeb4/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+    - 'skeb5/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+    - 'skeb6/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+
+# Start, stop, and time step of simulations
+# Start and stop have format YYYY-MM-DD-HH-MM-SS
+# Step is in seconds
+time:
+  start: 2009-04-15-20-05-00
+  stop: 2009-04-15-22-00-00
+  step: 300
+  
+# Fields to plot
+# Additional configuration options can be found in default.yml
+# Defaults can be overrode in this YAML file if desired
+fields:
+  - 'max_cref'
+  - 'min_2mT'
+  - 'max_uh25'
+  - 'max_uh02'
+  - 'max_w'
+  - 'min_w'
+  - 'sum_precip'

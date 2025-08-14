@@ -1,0 +1,76 @@
+# Default YAML settings for plot_wrf_ens_spread.py
+#
+# DO NOT MODIFY OR OVERWRITE!!
+#
+#===================================================================================================
+
+# Paths to ensemble output
+# All paths in 'ens_mem' are relative to the path in 'parent'
+# Include placeholder for date/time following dt.datetime conventions
+paths:
+  parent: './'
+  ens_mem:
+    - ''
+
+# Start, stop, and time step of simulations
+# Start and stop have format YYYY-MM-DD-HH-MM-SS
+# Step is in seconds
+time:
+  start: 1900-01-01-12-00-00
+  step: 3600
+  
+# Fields to plot
+fields:
+  - 'max_cref'
+
+# Plotting options for each field in "fields"
+# At a minimum, each field must have the following:
+#     var: WRF variable name recognized by wrf.getvar()
+#     stat: Statistic applied to the WRF variable in var for each ensemble member.
+#     ptype: Plot type 
+opt:
+  max_cref:
+    var: 'REFL_10CM'
+    stat: 'max'
+    ptype: 'timeseries'
+  min_2mT:
+    var: 'T2'
+    stat: 'min'
+    ptype: 'timeseries'
+  max_uh25:
+    var: 'updraft_helicity'
+    stat: 'max'
+    ptype: 'timeseries'
+    get_kw:
+      bottom: 2000.
+      top: 5000.
+  max_uh02:
+    var: 'updraft_helicity'
+    stat: 'max'
+    ptype: 'timeseries'
+    get_kw:
+      bottom: 0.
+      top: 2000.
+  max_w:
+    var: 'W'
+    stat: 'max'
+    ptype: 'timeseries'
+  min_w:
+    var: 'W'
+    stat: 'min'
+    ptype: 'timeseries'
+  min_psfc:
+    var: 'PSFC'
+    stat: 'min'
+    ptype: 'timeseries'
+  sum_precip:
+    var: 'RAINNC'
+    stat: 'sum'
+    ptype: 'timeseries'
+  test:
+    var: 'hello'
+    stat: 'mean'
+    ptype: 'timeseries'
+
+# Debugging level. Larger value = more debugging output
+debug: 0
