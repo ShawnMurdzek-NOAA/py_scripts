@@ -206,9 +206,23 @@ def compute_wrf_field_stat(fname, fields, opt):
             stats[f] = np.mean(v)
         elif opt[f]['stat'] == 'sum':
             stats[f] = np.sum(v)
+        elif opt[f]['stat'] == 'max_loc_2d':
+            idx = np.unravel_index(np.argmax(v.values), v.shape)
+        elif opt[f]['stat'] == 'min_loc_2d':
+            idx = np.unravel_index(np.argmin(v.values), v.shape)
         else:
             print(f"Statistic option {opt[f]['stat']} is not supported. Returning NaN.")
             stats[f] = np.nan
+        
+        # Additional processing for 2D locations
+        if 'loc_2d' in opt[f]['stat']:
+            ny, nx = v.shape
+            dx = wrf.extract_global_attrs(fptr, 'DX')['DX']
+            dy = wrf.extract_global_attrs(fptr, 'DY')['DY']
+            stats[f] = np.array([idx[1]*dx - 0.5*(nx-1)*dx, 
+                                 idx[0]*dy - 0.5*(ny-1)*dy])
+            v.attrs['x_grid'] = np.arange(nx)*dx - 0.5*(nx-1)*dx
+            v.attrs['y_grid'] = np.arange(ny)*dy - 0.5*(ny-1)*dy
         
         # Extract metadata
         meta[f] = v.attrs
@@ -243,7 +257,10 @@ def main_time_loop(config):
     # Initialize output dictionary
     out_dict = {}
     for f in config['fields']:
-        out_dict[f] = np.zeros([len(times), len(config['paths']['ens_mem'])])
+        if 'loc_2d' in config['opt'][f]['stat']:
+            out_dict[f] = np.zeros([len(times), len(config['paths']['ens_mem']), 2])
+        else:
+            out_dict[f] = np.zeros([len(times), len(config['paths']['ens_mem'])])
     
     # Compute statistics for each WRF field
     for i, t in enumerate(times):
@@ -306,6 +323,50 @@ def plot_timeseries(stat_dict, times, opt, meta):
             plt.close()
 
 
+def plot_spatial_2d(stat_dict, times, opt, meta):
+    """
+    Make 2D spatial plots
+
+    Parameters
+    ----------
+    stat_dict : dictionary
+        Statistics from each WRF ensemble member
+    times : list of dt.datetimes
+        Times corresponding to the statistics in mem_stat_dict
+    opt : dictionary
+        Plotting options
+    meta : dictionary
+        Metadata for variables being plotted
+
+    Returns
+    -------
+    None.
+
+    """
+    
+    for f in mem_stat_dict.keys():
+        if opt[f]['ptype'] == 'spatial_2d':
+            print(f"Making 2D spatial plot for {f}")
+            
+            fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
+            
+            for j in range(stat_dict[f].shape[1]):
+                ax.plot(stat_dict[f][:, j, 0], stat_dict[f][:, j, 1], 'k-', lw=0.5)
+            
+            ax.set_xlim([np.amin(meta[f]['x_grid']), np.amax(meta[f]['x_grid'])])
+            ax.set_ylim([np.amin(meta[f]['y_grid']), np.amax(meta[f]['y_grid'])])
+            ax.axes.set_aspect('equal')
+            
+            # Add temporally averaged standard deviation
+            xstd = np.mean(np.std(stat_dict[f][:, :, 0], axis=1))
+            ystd = np.mean(np.std(stat_dict[f][:, :, 1], axis=1))
+            ax.set_title(f"{f}\nTemporally averaged X std dev = {xstd:.3e}\n" +
+                         f"Temporally averaged Y std dev = {ystd:.3e}", size=16)
+            
+            plt.savefig(f"{f}_spatial_2d.png")
+            plt.close()
+
+
 if __name__ == '__main__':
 
     start = dt.datetime.now()
@@ -322,6 +383,7 @@ if __name__ == '__main__':
     
     # Create plots
     plot_timeseries(mem_stat_dict, times, config['opt'], metadata)
+    plot_spatial_2d(mem_stat_dict, times, config['opt'], metadata)
     
     print('\nProgram finished!')
     print(f"Elapsed time = {(dt.datetime.now() - start).total_seconds()} s")

@@ -34,3 +34,4 @@ fields:
   - 'max_w'
   - 'min_w'
   - 'sum_precip'
+  - 'max_uh25_loc'

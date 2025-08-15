@@ -44,6 +44,13 @@ opt:
     get_kw:
       bottom: 2000.
       top: 5000.
+  max_uh25_loc:
+    var: 'updraft_helicity'
+    stat: 'max_loc_2d'
+    ptype: 'spatial_2d'
+    get_kw:
+      bottom: 2000.
+      top: 5000.
   max_uh02:
     var: 'updraft_helicity'
     stat: 'max'
