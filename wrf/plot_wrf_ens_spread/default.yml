@@ -7,6 +7,7 @@
 # Paths to ensemble output
 # All paths in 'ens_mem' are relative to the path in 'parent'
 # Include placeholder for date/time following dt.datetime conventions
+# Set "ctrl" to True to plot the first ensemble member in a different color
 paths:
   parent: './'
   ens_mem:
@@ -81,3 +82,8 @@ opt:
 
 # Debugging level. Larger value = more debugging output
 debug: 0
+
+# Additional plotting options
+# Set ctrl to True to plot the first ensemble member in a different color
+plot:
+  ctrl: False

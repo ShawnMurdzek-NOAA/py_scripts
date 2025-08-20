@@ -273,7 +273,7 @@ def main_time_loop(config):
     return out_dict, times, meta
 
 
-def plot_timeseries(stat_dict, times, opt, meta):
+def plot_timeseries(stat_dict, times, opt, meta, plot_dict):
     """
     Make timeseries plots
 
@@ -284,9 +284,11 @@ def plot_timeseries(stat_dict, times, opt, meta):
     times : list of dt.datetimes
         Times corresponding to the statistics in mem_stat_dict
     opt : dictionary
-        Plotting options
+        Specific plotting options for each plot
     meta : dictionary
         Metadata for variables being plotted
+    plot_dict : dictionary
+        General plotting options
 
     Returns
     -------
@@ -305,10 +307,12 @@ def plot_timeseries(stat_dict, times, opt, meta):
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
             
             for j in range(stat_dict[f].shape[1]):
-                ax.plot(times, stat_dict[f][:, j], 'k-', lw=0.5)
-            ax.plot(times, np.mean(stat_dict[f], axis=1), 'b-', lw=1.5, 
+                ax.plot(times, stat_dict[f][:, j], c='gray', ls='-', lw=0.5)
+            if plot_dict['ctrl']:
+                ax.plot(times, stat_dict[f][:, 0], 'k-', lw=1)
+            ax.plot(times, np.mean(stat_dict[f], axis=1), 'b-', lw=2, 
                     label=f"mean ({np.mean(np.mean(stat_dict[f], axis=1)):.3e})")
-            ax.plot(times, np.std(stat_dict[f], axis=1), 'r--', lw=1.5, 
+            ax.plot(times, np.std(stat_dict[f], axis=1), 'r--', lw=2, 
                     label=f"std dev ({np.mean(np.std(stat_dict[f], axis=1)):.3e})")
             
             ax.grid(lw=0.25)
@@ -323,7 +327,7 @@ def plot_timeseries(stat_dict, times, opt, meta):
             plt.close()
 
 
-def plot_spatial_2d(stat_dict, times, opt, meta):
+def plot_spatial_2d(stat_dict, times, opt, meta, plot_dict):
     """
     Make 2D spatial plots
 
@@ -337,6 +341,8 @@ def plot_spatial_2d(stat_dict, times, opt, meta):
         Plotting options
     meta : dictionary
         Metadata for variables being plotted
+    plot_dict : dictionary
+        General plotting options
 
     Returns
     -------
@@ -351,7 +357,9 @@ def plot_spatial_2d(stat_dict, times, opt, meta):
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
             
             for j in range(stat_dict[f].shape[1]):
-                ax.plot(stat_dict[f][:, j, 0], stat_dict[f][:, j, 1], 'k-', lw=0.5)
+                ax.plot(stat_dict[f][:, j, 0], stat_dict[f][:, j, 1], c='gray', ls='-', lw=0.5)
+            if plot_dict['ctrl']:
+                ax.plot(stat_dict[f][:, 0, 0], stat_dict[f][:, 0, 1], 'k-', lw=1)
             
             ax.set_xlim([np.amin(meta[f]['x_grid']), np.amax(meta[f]['x_grid'])])
             ax.set_ylim([np.amin(meta[f]['y_grid']), np.amax(meta[f]['y_grid'])])
@@ -382,8 +390,8 @@ if __name__ == '__main__':
     print()
     
     # Create plots
-    plot_timeseries(mem_stat_dict, times, config['opt'], metadata)
-    plot_spatial_2d(mem_stat_dict, times, config['opt'], metadata)
+    plot_timeseries(mem_stat_dict, times, config['opt'], metadata, config['plot'])
+    plot_spatial_2d(mem_stat_dict, times, config['opt'], metadata, config['plot'])
     
     print('\nProgram finished!')
     print(f"Elapsed time = {(dt.datetime.now() - start).total_seconds()} s")
