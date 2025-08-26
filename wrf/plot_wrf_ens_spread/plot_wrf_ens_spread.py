@@ -302,7 +302,9 @@ def plot_timeseries(stat_dict, times, opt, meta, plot_dict):
     
     for f in mem_stat_dict.keys():
         if opt[f]['ptype'] == 'timeseries':
-            print(f"Making timeseries plot for {f}")
+            avg_mean = np.mean(np.mean(stat_dict[f], axis=1))
+            avg_std = np.mean(np.std(stat_dict[f], axis=1))
+            print(f"Making timeseries plot for {f} (avg std = {avg_std:.3e})")
             
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 6))
             
@@ -311,9 +313,9 @@ def plot_timeseries(stat_dict, times, opt, meta, plot_dict):
             if plot_dict['ctrl']:
                 ax.plot(times, stat_dict[f][:, 0], 'k-', lw=1)
             ax.plot(times, np.mean(stat_dict[f], axis=1), 'b-', lw=2, 
-                    label=f"mean ({np.mean(np.mean(stat_dict[f], axis=1)):.3e})")
+                    label=f"mean ({avg_mean:.3e})")
             ax.plot(times, np.std(stat_dict[f], axis=1), 'r--', lw=2, 
-                    label=f"std dev ({np.mean(np.std(stat_dict[f], axis=1)):.3e})")
+                    label=f"std dev ({avg_std:.3e})")
             
             ax.grid(lw=0.25)
             ax.legend()
@@ -352,7 +354,9 @@ def plot_spatial_2d(stat_dict, times, opt, meta, plot_dict):
     
     for f in mem_stat_dict.keys():
         if opt[f]['ptype'] == 'spatial_2d':
-            print(f"Making 2D spatial plot for {f}")
+            xstd = np.mean(np.std(stat_dict[f][:, :, 0], axis=1))
+            ystd = np.mean(np.std(stat_dict[f][:, :, 1], axis=1))
+            print(f"Making 2D spatial plot for {f} (avg stds = {xstd:.3e}, {ystd:.3e})")
             
             fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(8, 8))
             
@@ -364,10 +368,6 @@ def plot_spatial_2d(stat_dict, times, opt, meta, plot_dict):
             ax.set_xlim([np.amin(meta[f]['x_grid']), np.amax(meta[f]['x_grid'])])
             ax.set_ylim([np.amin(meta[f]['y_grid']), np.amax(meta[f]['y_grid'])])
             ax.axes.set_aspect('equal')
-            
-            # Add temporally averaged standard deviation
-            xstd = np.mean(np.std(stat_dict[f][:, :, 0], axis=1))
-            ystd = np.mean(np.std(stat_dict[f][:, :, 1], axis=1))
             ax.set_title(f"{f}\nTemporally averaged X std dev = {xstd:.3e}\n" +
                          f"Temporally averaged Y std dev = {ystd:.3e}", size=16)
             
