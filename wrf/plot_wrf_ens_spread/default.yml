@@ -13,6 +13,13 @@ paths:
   ens_mem:
     - ''
 
+# Paths to ensemble output when plotting several ensembles
+# First set of keys in 'paths_multi' give the ensemble names
+# All paths in 'ens_mem' are relative to the path in 'parent'
+# Include placeholder for date/time following dt.datetime conventions
+# Only used for plot_spread_multiple_ens.py
+#paths_multi:
+
 # Start, stop, and time step of simulations
 # Start and stop have format YYYY-MM-DD-HH-MM-SS
 # Step is in seconds

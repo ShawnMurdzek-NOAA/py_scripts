@@ -2,9 +2,10 @@
 #
 #===================================================================================================
 
-# Paths to ensemble output
+# Paths to ensemble output when plotting 1 ensemble
 # All paths in 'ens_mem' are relative to the path in 'parent'
 # Include placeholder for date/time following dt.datetime conventions
+# Only used for plot_wrf_ens_spread.py
 paths:
   parent: '/work/ahouston/smurdzek/WRF_ens_skeb_tests/psi1e-5_t1e-6_ztau10800_exp1.83'
   ens_mem:
@@ -13,26 +14,31 @@ paths:
     - 'skeb2/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
     - 'skeb3/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
     - 'skeb4/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb5/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb6/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb7/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb8/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb9/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb10/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb11/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb12/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb13/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb14/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb15/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb16/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
-#    - 'skeb17/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+
+# Paths to ensemble output when plotting several ensembles
+# First set of keys in 'paths_multi' give the ensemble names
+# All paths in 'ens_mem' are relative to the path in 'parent'
+# Include placeholder for date/time following dt.datetime conventions
+# Only used for plot_spread_multiple_ens.py
+paths_multi:
+  1: &ens1
+    parent: '/work/ahouston/smurdzek/WRF_ens_skeb_tests/psi1e-5_t1e-6_ztau1800_exp1.83'
+    ens_mem:
+      - 'ctrl/WRF/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+      - 'skeb1/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+      - 'skeb2/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+      - 'skeb3/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+      - 'skeb4/run/wrfout_d01_%Y-%m-%d_%H:%M:%S'
+  2:
+    <<: *ens1
+    parent: '/work/ahouston/smurdzek/WRF_ens_skeb_tests/psi5e-5_t5e-6_ztau1800_exp1.83'
 
 # Start, stop, and time step of simulations
 # Start and stop have format YYYY-MM-DD-HH-MM-SS
 # Step is in seconds
 time:
   start: 2009-04-15-20-30-00
-  stop: 2009-04-15-22-00-00
+  stop: 2009-04-15-21-00-00
   step: 300
   
 # Fields to plot
@@ -49,6 +55,6 @@ fields:
   - 'max_uh25_loc'
 
 # Additional plotting options
-# Set ctrl to True to plot the first ensemble member in a different color
+# Set 'ctrl' to True to plot the first ensemble member in a different color
 plot:
   ctrl: True

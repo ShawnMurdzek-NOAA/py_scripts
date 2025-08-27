@@ -107,10 +107,13 @@ def read_yaml(in_yaml):
     check_yaml_contents(out_dict)
     
     # Add parent directory to ensemble member directories
+    out_dict['paths']['_mem'] = []
     if 'parent' in out_dict['paths']:
         root = out_dict['paths']['parent']
         for i in range(len(out_dict['paths']['ens_mem'])):
-            out_dict['paths']['ens_mem'][i] = f"{root}/{out_dict['paths']['ens_mem'][i]}"
+            out_dict['paths']['_mem'].append(f"{root}/{out_dict['paths']['ens_mem'][i]}")
+    else:
+        out_dict['paths']['_mem'] = out_dict['paths']['ens_mem']
     
     # Change times to datetimes and time differences to timedeltas
     for key in ['start', 'stop']:
@@ -258,14 +261,14 @@ def main_time_loop(config):
     out_dict = {}
     for f in config['fields']:
         if 'loc_2d' in config['opt'][f]['stat']:
-            out_dict[f] = np.zeros([len(times), len(config['paths']['ens_mem']), 2])
+            out_dict[f] = np.zeros([len(times), len(config['paths']['_mem']), 2])
         else:
-            out_dict[f] = np.zeros([len(times), len(config['paths']['ens_mem'])])
+            out_dict[f] = np.zeros([len(times), len(config['paths']['_mem'])])
     
     # Compute statistics for each WRF field
     for i, t in enumerate(times):
         print(f"Reading WRF output for {t.strftime('%Y%m%d %H:%M:%S')}")
-        for j, p in enumerate(config['paths']['ens_mem']):
+        for j, p in enumerate(config['paths']['_mem']):
             stats, meta = compute_wrf_field_stat(t.strftime(p), config['fields'], config['opt'])
             for f in config['fields']:
                 out_dict[f][i, j] = stats[f]
@@ -282,7 +285,7 @@ def plot_timeseries(stat_dict, times, opt, meta, plot_dict):
     stat_dict : dictionary
         Statistics from each WRF ensemble member
     times : list of dt.datetimes
-        Times corresponding to the statistics in mem_stat_dict
+        Times corresponding to the statistics in stat_dict
     opt : dictionary
         Specific plotting options for each plot
     meta : dictionary
