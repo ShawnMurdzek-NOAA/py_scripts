@@ -163,6 +163,8 @@ def read_process_data(param):
         Longitudes (deg E)
     cbar_label : string
         Label for colorbar
+    avg_z : float
+        Average height of the horizontal cross sections (m AGL)
     
     """
 
@@ -208,10 +210,14 @@ def read_process_data(param):
     lat = np.rad2deg(fix_ds['latCell'].values)
     lon = np.rad2deg(fix_ds['lonCell'].values)
 
-    return data, lat, lon, cbar_label
+    # Height AGL
+    zgrid_mass = 0.5*(fix_ds['zgrid'][:, 1:].values + fix_ds['zgrid'][:, :-1].values)
+    avg_z = np.mean(zgrid_mass[:, param.level] - ds['ter'].values)
+
+    return data, lat, lon, cbar_label, avg_z
 
 
-def make_plot(data, lat, lon, cbar_label, param):
+def make_plot(data, lat, lon, cbar_label, avg_z, param):
     """
     Create plot
 
@@ -225,6 +231,8 @@ def make_plot(data, lat, lon, cbar_label, param):
         Longitudes (deg E)
     cbar_label : string
         Label for colorbar
+    avg_z : float
+        Average height of this cross section (m AGL)
     param : argparse.Namespace
         Command-line arguments
     
@@ -257,6 +265,9 @@ def make_plot(data, lat, lon, cbar_label, param):
                                            name='admin_1_states_provinces')
     ax.add_feature(borders, linewidth=0.25, edgecolor='gray')
 
+    # Add title
+    ax.set_title(f"Average height = {avg_z:.2f} m AGL", size=16)
+
     return fig
 
 
@@ -269,10 +280,10 @@ if __name__ == '__main__':
     param = parse_in_args(sys.argv[1:])
 
     print('Reading in MPAS data...')
-    data, lat, lon, cbar_label = read_process_data(param)
+    data, lat, lon, cbar_label, avg_z = read_process_data(param)
 
     print('Creating plot...')
-    fig = make_plot(data, lat, lon, cbar_label, param)
+    fig = make_plot(data, lat, lon, cbar_label, avg_z, param)
     if param.reduction == 'none':
         lvl_str = str(param.level)
     else:
