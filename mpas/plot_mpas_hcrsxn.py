@@ -212,7 +212,7 @@ def read_process_data(param):
 
     # Height AGL
     zgrid_mass = 0.5*(fix_ds['zgrid'][:, 1:].values + fix_ds['zgrid'][:, :-1].values)
-    avg_z = np.mean(zgrid_mass[:, param.level] - ds['ter'].values)
+    avg_z = np.mean(zgrid_mass[:, param.level] - fix_ds['ter'].values)
 
     return data, lat, lon, cbar_label, avg_z
 
