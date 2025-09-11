@@ -92,7 +92,7 @@ for season in all_seasons:
 # Create plot
 print('\nMaking plot')
 fig, axes = plt.subplots(nrows=2, ncols=1, sharex=True, sharey=True, figsize=(6, 8))
-plt.subplots_adjust(left=0.12, bottom=0.12, right=0.98, top=0.93)
+plt.subplots_adjust(left=0.16, bottom=0.08, right=0.98, top=0.94)
 for season, ax in zip(all_seasons, axes):
 
     for tag, label, c in zip(['icing_', ''], ['icing limit', 'no icing limit'], ['b', 'r']):
@@ -108,16 +108,17 @@ for season, ax in zip(all_seasons, axes):
         ax.plot(xdata, ydata, c=c, ls='-', marker='o', label=label)
 
     # Add plot annotations
-    ax.legend(fontsize=14)
+    ax.legend(fontsize=16)
     ax.grid()
     xlabels = [str(n) for n in all_wspd] + ['None']
     ax.set_xticks(all_wspd + [all_wspd[-1] + 10], labels=xlabels)
-    ax.set_title(season, size=20)
-    ax.set_ylabel('Percent Reduction in Ob Counts (%)', size=12)
+    ax.tick_params(axis='both', which='major', labelsize=16)
+    ax.set_title(season, size=24)
+    ax.set_ylabel('% Reduction in Ob Counts', size=18)
     if season == all_seasons[-1]:
-        ax.set_xlabel('Wind Speed Limit (m/s)', size=14)
+        ax.set_xlabel('Wind Speed Limit (m s$^{-1}$)', size=18)
 
-plt.savefig(out_fname)
+plt.savefig(out_fname, dpi=700)
 
 
 """
