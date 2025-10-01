@@ -203,7 +203,10 @@ def read_process_data(param):
         data = data_ls[0]
 
     # Create colorbar label
-    cbar_label = f"{atm_ds[0][param.field].long_name} ({atm_ds[0][param.field].units})"
+    try:
+        cbar_label = f"{atm_ds[0][param.field].long_name} ({atm_ds[0][param.field].units})"
+    except AttributeError:
+        cbar_label = param.field
     if diff: cbar_label = f"diff {cbar_label}"
 
     # Cell coordinate information
