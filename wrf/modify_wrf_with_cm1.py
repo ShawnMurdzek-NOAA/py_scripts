@@ -74,50 +74,14 @@ def parse_in_args(argv):
                               concentration is predicted in CM1',
                         type=float)
 
-    '''
-    parser.add_argument('-s',
-                        dest='sopt',
-                        default='none',
-                        help='Smoothing option. Options: "none"',
-                        type=str)
+    parser.add_argument('--use_thm',
+                        dest='use_thm',
+                        default=1,
+                        help='Option to use moist theta (THM) as the prognostic temperature \
+                              variable in WRF. Value should match use_theta_m in WRF namelist, \
+                              which is 1 (True) by default in WRFv4. To not use THM, set to 0.',
+                        type=int)
 
-    parser.add_argument('--bmag',
-                        dest='bubble_mag',
-                        default=0,
-                        help='Warm bubble magnitude (K). Set to 0 to not include a warm bubble',
-                        type=float)
-
-    # Default bubble configuration comes from CM1v18, init3d.F, iinit = 1
-    parser.add_argument('--bx',
-                        dest='bubble_x',
-                        default=0,
-                        help='Warm bubble x coordinate (m)',
-                        type=float)
-
-    parser.add_argument('--by',
-                        dest='bubble_y',
-                        default=0,
-                        help='Warm bubble y coordinate (m)',
-                        type=float)
-
-    parser.add_argument('--bz',
-                        dest='bubble_z',
-                        default=1400,
-                        help='Warm bubble z coordinate (m)',
-                        type=float)
-
-    parser.add_argument('--bhrad',
-                        dest='bubble_hrad',
-                        default=10000,
-                        help='Warm bubble horizontal radius (m)',
-                        type=float)
-
-    parser.add_argument('--bvrad',
-                        dest='bubble_vrad',
-                        default=1400,
-                        help='Warm bubble vertical radius (m)',
-                        type=float)
-    '''
     return parser.parse_args(argv)
 
 
@@ -264,7 +228,7 @@ def interp_cm1_to_wrf(wrf_ds, cm1_ds, cm1_base, wrf_grid, fields, method='neares
         # Interpolate
         wrf_ds = interp_1_field(wrf_ds, cm1_ds, f, fields[f], wrf_grid, method=method)
 
-        # Postprocess (e.g., convert from "full" value back to perturbation
+        # Postprocess (e.g., convert from "full" value back to perturbation)
         if f == 'T':
             # Convert regular potential temperature to perturbation potential temperature
             # Value of 300K is hard coded in share/module_model_constants.F in WRF
@@ -349,7 +313,6 @@ if __name__ == '__main__':
               'V':'va',
               'W':'wa',
               'T':'tha',
-              'THM':'thm',
               'QVAPOR':'qv',
               'QCLOUD':'qc',
               'QRAIN':'qr',
@@ -361,6 +324,10 @@ if __name__ == '__main__':
               'QNSNOW':'ncs',
               'QNGRAUPEL':'ncg'}
 
+    # Add THM if use_thm = True
+    if (param.use_thm == 1):
+        fields['THM'] = 'thm'
+
     # Add cloud droplet number mixing ratio
     if np.isclose(param.ndcnst, 0):
         fields['QNDROP'] = 'nc'
@@ -371,7 +338,9 @@ if __name__ == '__main__':
         print('Interpolating QNDROP')
         wrf_ds = interp_const_droplet_number(wrf_ds, param.ndcnst)
 
-    # Add warm bubble
+    # Set T = THM if use_thm = False
+    if (param.use_thm == 0):
+        wrf_ds['THM'].values = wrf_ds['T'].values
 
     # Recompute inverse perturbation density + rebalance hydrostatically
     print('Recomputing inverse perturbation density and perturbation geopotential')
