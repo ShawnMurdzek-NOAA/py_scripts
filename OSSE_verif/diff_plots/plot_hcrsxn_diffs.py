@@ -91,6 +91,7 @@ if time_info['use']:
                     dum = dum.replace('{vDD}', (itime + dt.timedelta(hours=fhr)).strftime('%d'))
                     dum = dum.replace('{vHH}', (itime + dt.timedelta(hours=fhr)).strftime('%H'))
                     dum = dum.replace('{FFF}', f'{fhr:03d}')
+                    dum = dum.replace('{FF}', f'{fhr:02d}')
                     files.append(dum)
             model_info[comp_name][mname]['files'] = files
 

@@ -19,18 +19,19 @@
 #         {vMM} = Valid month
 #         {vDD} = Valid day
 #         {vHH} = Valid hour
-#         {FFF} = Forecast hour
+#         {FFF} = 3-digit forecast hour
+#         {FF} = 2-digit forecast hour
 model_info:
-  winter_ctrl_vs_NR:
-    winter_ctrl:
+  spring_ctrl_vs_NR:
+    spring_ctrl:
       files:
-        - /work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.{iYYYY}{iMM}{iDD}/{iHH}/rrfs.t{iHH}z.prslev.f{FFF}.conus_3km.grib2
+        - /work2/noaa/wrfruc/murdzek/HRRR_OSSE/syn_data_WRF_FCST_OSSE_hercules/spring/WRF_FCST_OSSE/run/{iYYYY}{iMM}{iDD}{iHH}/postprd/wrfprs_hrconus_{FF}.grib2
       indices:
         - 
       ceil_name: 'CEIL_EXP2'
     NR:
       files:
-        - /work2/noaa/wrfruc/murdzek/nature_run_winter/UPP/{vYYYY}{vMM}{vDD}/wrfprs_{vYYYY}{vMM}{vDD}{vHH}00_er.grib2
+        - /work2/noaa/wrfruc/murdzek/nature_run_spring/UPP/{vYYYY}{vMM}{vDD}/wrfprs_{vYYYY}{vMM}{vDD}{vHH}00_er.grib2
       indices:
         - 
           - 2
@@ -48,8 +49,8 @@ model_info:
 #     - init_step follows "freq" conventions from pd.date_range()
 time_info:
   use: True
-  init_start: '2022020110'
-  init_end: '2022020110'
+  init_start: '2022043001'
+  init_end: '2022043002'
   init_step: '1h'
   fcst_hr:
     - 0
@@ -61,20 +62,8 @@ time_info:
 #     'WDIR' : Wind direction
 #     'CEIL' : Cloud ceiling height. Must specify which ceiling using the ceil_name field in modelX_info
 field_info: 
-  CEIL:
-    prslev: 0
-    cmap: 'plasma'
-    lvls: 
-      start: 0
-      stop: 1201
-      step: 50
-    diff_lvls: 
-      start: -340
-      stop: 340.1
-      step: 40
-    extend: 'max'
   TMP_P0_L100_GLC0:
-    prslev: 92500
+    prslev: 85000
     cmap: 'plasma'
     lvls: 
       start: 250
@@ -86,7 +75,7 @@ field_info:
       step: 0.5
     extend: 'both'
   WSPD:
-    prslev: 92500
+    prslev: 85000
     cmap: 'plasma'
     lvls: 
       start: 0
@@ -108,30 +97,6 @@ field_info:
       start: -12.5
       stop: 12.6
       step: 1
-    extend: 'max'
-  VIS_P0_L1_GLC0:
-    prslev: 0
-    cmap: 'plasma'
-    lvls: 
-      start: 0
-      stop: 12000
-      step: 500
-    diff_lvls: 
-      start: -4750
-      stop: 4760
-      step: 500
-    extend: 'max'
-  HPBL_P0_L1_GLC0:
-    prslev: 0
-    cmap: 'plasma'
-    lvls: 
-      start: 0
-      stop: 2001
-      step: 100
-    diff_lvls: 
-      start: -750
-      stop: 750.1
-      step: 100
     extend: 'max'
 
 # Domain (set to None to use defaults)
