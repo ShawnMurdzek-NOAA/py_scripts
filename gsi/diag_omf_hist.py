@@ -9,7 +9,6 @@ Date Created: 18 April 2023
 # Import Modules
 #---------------------------------------------------------------------------------------------------
 
-import xarray as xr
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -23,18 +22,18 @@ import pyDA_utils.gsi_fcts as gsi
 #---------------------------------------------------------------------------------------------------
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
-omb_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_ges.%s.nc4'
-oma_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/tune_conv_ob_err/winter1/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_uv_anl.%s.nc4'
-dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(18)]
+omb_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_ges.%s.nc4'
+oma_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_anl.%s.nc4'
+dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
 omb_fnames = [omb_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
 oma_fnames = [oma_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
 
 # Observation types
-ob_types = [280, 281, 282, 284, 287]
+ob_types = [188]
 
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'adpsfc_sfcshp_fake'
+out_str = 'real'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -94,9 +93,11 @@ for i, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
             hist_out = ax.hist(data, bins=30, range=plot_lims)
             max_hist_val[k] = max(hist_out[0].max(), max_hist_val[k])
             ax.set_xlabel(xlabel, size=12)
-            ax.set_title('%s%s ($\mu$=%.3f, $\sigma$=%.3f)' % 
+            ax.set_title('%s%s ($\mu$=%.2e, $\sigma$=%.2e)' % 
                          (v, subset, np.mean(data), np.std(data)), size=14)
             ax.grid() 
+            if omf_var in ['q']:
+                ax.ticklabel_format(style="sci", axis="both", scilimits=(0, 0))
             axes[k, nx] = ax
 
 for i in range(nrows):
@@ -104,13 +105,13 @@ for i in range(nrows):
         ax.set_ylim([0, 1.05*max_hist_val[i]])
     axes[i, 0].set_ylabel('counts', size=12)
 
-plt.subplots_adjust(hspace=0.3, wspace=0.3, left=0.07, bottom=0.07, right=0.97, top=0.85)
+plt.subplots_adjust(hspace=0.36, wspace=0.3, left=0.08, bottom=0.07, right=0.97, top=0.82)
 
 # Add additional metrics
 ttl = 'TYP ='
 for typ in ob_types:
     ttl = '%s %d,' % (ttl, typ)
-ttl = ('%s\nstart=%d, end=%d,   n_obs=%d, n_assimilated=%d' % 
+ttl = ('%s\nstart=%d, end=%d,\nn_obs=%d, n_assimilated=%d' % 
        (ttl, np.amin(omf_dates), np.amax(omf_dates), len(omf_df['oma']), 
         np.sum(omf_df['oma']['Analysis_Use_Flag'] == 1))) 
 
