@@ -11,6 +11,7 @@ shawn.s.murdzek@noaa.gov
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as colors
 import datetime as dt
 import sys
 import argparse
@@ -37,7 +38,7 @@ def parse_in_args(argv):
 
     """
 
-    parser = argparse.ArgumentParser(description='Plot OmF vs obs value')
+    parser = argparse.ArgumentParser(description='Plot OmF vs obs value using a 2D histogram')
     
     # Positional arguments
     parser.add_argument('diag_tmpl', 
@@ -67,6 +68,19 @@ def parse_in_args(argv):
                         help="Observation types to use. Set to 'all' to retain all obs types",
                         type=str)
 
+    parser.add_argument('--plot_log',
+                        dest='plot_log',
+                        default=0,
+                        help="Option to make plot logarithmic",
+                        type=int)
+
+    parser.add_argument('--pseudo_rh',
+                        dest='pseudo_rh',
+                        default=0,
+                        help="Option toconvert observations to pseudo relative humidities by \
+                              dividing by the forecast saturation specific humidity",
+                        type=int)
+
     return parser.parse_args(argv)
 
 
@@ -93,13 +107,19 @@ def read_diag(diag_tmpl, diag_type, start, end, ob_type='all'):
     return df
 
 
-def plot_omf_vs_ob(df, ttl=''):
+def plot_omf_vs_ob(df, ttl='', log=0, pseudo_rh=0):
     """
     Plot OmF vs observation value
     """
 
+    # Compute pseudo RH
+    if pseudo_rh == 1:
+        df['pseudo_rh'] = df['Observation'] / df['Forecast_Saturation_Spec_Hum']
+        xname = 'pseudo_rh'
+    else:
+        xname = 'Observation'
+
     # Determine min and max plotting value
-    xname = 'Observation'
     yname = 'Obs_Minus_Forecast_adjusted'
     max_xval = np.percentile(df[xname], 99.5)
     min_xval = np.percentile(df[xname], 0.5)
@@ -115,18 +135,23 @@ def plot_omf_vs_ob(df, ttl=''):
             xdata = df[xname].values
             ydata = df[yname].values
         elif subset == 'assim':
-            xdata = df[xname].loc[df['Analysis_Use_Flag'] == 1].values
-            ydata = df[yname].loc[df['Analysis_Use_Flag'] == 1].values
-        hist = np.histogram2d(xdata, ydata, bins=25, range=[[min_xval, max_xval], [min_yval, max_yval]], density=True)
+            cond = df['Analysis_Use_Flag'] == 1
+            xdata = df[xname].loc[cond].values
+            ydata = df[yname].loc[cond].values
+        hist = np.histogram2d(xdata, ydata, bins=40, range=[[min_xval, max_xval], [min_yval, max_yval]], density=True)
         hist[0][hist[0] == 0] = np.nan
         if subset == 'all': vmax = np.nanmax(hist[0])
-        cax = ax.pcolormesh(hist[1], hist[2], hist[0].T, shading='flat', cmap='plasma', vmin=1, vmax=vmax)
+        if log == 1:
+            cax = ax.pcolormesh(hist[1], hist[2], hist[0].T, shading='flat', cmap='plasma', 
+                                norm=colors.LogNorm(vmin=1, vmax=vmax))
+        else:
+            cax = ax.pcolormesh(hist[1], hist[2], hist[0].T, shading='flat', cmap='plasma', vmin=1, vmax=vmax)
 
         ax.ticklabel_format(style="sci", axis="both", scilimits=(0, 0))
         ax.set_title(f"{subset} (n = {len(xdata)})", size=14)
         ax.grid()
-        ax.set_xlabel('observation', size=12)
-        if i == 0: ax.set_ylabel('OmF', size=12)
+        ax.set_xlabel(xname, size=12)
+        if i == 0: ax.set_ylabel(yname, size=12)
 
     # Add colorbar and other annotations
     cbar = plt.colorbar(cax, ax=axes, orientation='horizontal', aspect=35)
@@ -149,7 +174,7 @@ if __name__ == '__main__':
 
     # Make plot
     ttl = f"{param.start_time}$-${param.end_time} type={param.ob_type}"
-    fig = plot_omf_vs_ob(omf_df, ttl=ttl)
+    fig = plot_omf_vs_ob(omf_df, ttl=ttl, log=param.plot_log, pseudo_rh=param.pseudo_rh)
     plt.savefig(f"omf_vs_ob_{param.start_time}_{param.end_time}_{param.ob_type}_{param.tag}.png")
 
     print('Program finished!')
