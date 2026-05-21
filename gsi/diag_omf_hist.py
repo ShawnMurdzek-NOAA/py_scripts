@@ -22,8 +22,8 @@ import pyDA_utils.gsi_fcts as gsi
 #---------------------------------------------------------------------------------------------------
 
 # O-Bs are found in the "ges" files and O-As are found in the "anl" files
-omb_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_ges.%s.nc4'
-oma_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/real_red_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_anl.%s.nc4'
+omb_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_ges.%s.nc4'
+oma_template = '/work2/noaa/wrfruc/murdzek/RRFS_OSSE/syn_data_rrfs-workflow_orion/winter/NCO_dirs/ptmp/prod/rrfs.%s/%s/diag_conv_q_anl.%s.nc4'
 dates = [dt.datetime(2022, 2, 1, 9) + dt.timedelta(hours=i) for i in range(159)]
 omb_fnames = [omb_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
 oma_fnames = [oma_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime('%Y%m%d%H')) for d in dates]
@@ -31,9 +31,12 @@ oma_fnames = [oma_template % (d.strftime('%Y%m%d'), d.strftime('%H'), d.strftime
 # Observation types
 ob_types = [188]
 
+# Option to compute pseudo-RH for moisture measurements (as a decimal)
+pseudo_RH = True
+
 # Output directory and string to add to output file names
 out_dir = './'
-out_str = 'real'
+out_str = 'OSSE_RH'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -54,6 +57,15 @@ for omf in ['omb', 'oma']:
     for typ in ob_types:
         partial_df.append(omf_df[omf].loc[omf_df[omf]['Observation_Type'] == typ].copy())
     omf_df[omf] = pd.concat(partial_df)
+
+# Option to compute pseudo-RH for moisture measures
+if pseudo_RH:
+    qs_field = 'Forecast_Saturation_Spec_Hum'
+    if (qs_field in omf_df['omb'].columns) and (qs_field in omf_df['oma'].columns):
+        print('Computing pseudo RH')
+        for omf in ['oma', 'omb']:
+            omf_field = 'Obs_Minus_Forecast_adjusted'
+            omf_df[omf][omf_field] = omf_df[omf][omf_field] / omf_df[omf][qs_field]
 
 maxvals = []
 minvals = []
@@ -90,6 +102,7 @@ for i, (omf, xlabel) in enumerate(zip(['omb', 'oma'], ['O$-$B', 'O$-$A'])):
                 data = omf_df[omf][vname].values
             elif subset == 'assim':
                 data = omf_df[omf][vname].loc[omf_df[omf]['Analysis_Use_Flag'] == 1].values
+                #data = omf_df[omf][vname].loc[(omf_df[omf]['Analysis_Use_Flag'] == 1) & (omf_df[omf]['Prep_QC_Mark'] < 3)].values
             hist_out = ax.hist(data, bins=30, range=plot_lims)
             max_hist_val[k] = max(hist_out[0].max(), max_hist_val[k])
             ax.set_xlabel(xlabel, size=12)
