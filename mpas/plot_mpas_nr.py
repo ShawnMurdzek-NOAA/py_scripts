@@ -30,8 +30,9 @@ import copy
 
 # Dictionary with plotting parameters
 plot_param = {'refl10cm_max' : {'cmin': 5, 'cmax': 80, 'cmap': 'turbo'},
-              'ceil' : {'cmin': 0, 'cmax': 5000, 'cmap': 'plasma'},
-              'cldfrac_max' : {'cmin': 0, 'cmax': 1, 'cmap': 'plasma_r'}}
+              'ceil' : {'cmin': 0, 'cmax': 4000, 'cmap': 'plasma'},
+              'cldfrac_max' : {'cmin': 0, 'cmax': 1, 'cmap': 'plasma_r'},
+              't2m' : {'cmin': 255, 'cmax': 310, 'cmap': 'plasma'}}
 
 def parse_in_args(argv):
     """
@@ -97,8 +98,8 @@ def compute_ceil(ds, z_agl):
     # Add ceiling to dataset
     ds['ceil'] = copy.deepcopy(ds['t2m'])
     ds['ceil'].values[0, :] = ceil
-    ds['ceil'].attrs.update({'units': 'm AGL',
-                             'long_name': 'cloud ceiling (cldfrac >= 0.5'})
+    ds['ceil'] = ds['ceil'].assign_attrs(units = 'm AGL',
+                                         long_name ='cloud ceiling (cldfrac >= 0.5)')
 
     return ds
 
@@ -116,8 +117,8 @@ def compute_max_cldfrac(ds, z_agl, thres=3657):
     # Add max cldfrac to dataset
     ds['cldfrac_max'] = copy.deepcopy(ds['t2m'])
     ds['cldfrac_max'].values[0, :] = cldfrac_max
-    ds['cldfrac_max'].attrs.update({'units': 'unitless',
-                                    'long_name': f"max cldfrac below {thres} m AGL"})
+    ds['cldfrac_max'] = ds['cldfrac_max'].assign_attrs(units = 'unitless',
+                                                       long_name = f"max cldfrac below {thres} m AGL")
 
     return ds
 
@@ -140,7 +141,7 @@ def plot_mpas_2d_raster(ds, param, tag=''):
         fig, ax = plt.subplots(subplot_kw={'projection': ccrs.LambertConformal()},
                                figsize=(8, 6),
                                constrained_layout=True)
-        ax.set_extent([-112, -66, 16, 56])
+        ax.set_extent([-110, -70, 18, 55])
 
         # Rasterize and plot with imshow
         uxvar = ds[key].isel(Time=0)
