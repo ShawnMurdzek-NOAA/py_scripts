@@ -3,6 +3,8 @@ Plot Synthetic MRMS Output
 
 Plots are intentionally similar to pygraf for easier comparisons to model data
 
+Should also work with real MRMS output
+
 Shawn Murdzek
 """
 
@@ -70,7 +72,7 @@ def compute_mrms_cref(path, time):
     """
 
     # Create list of files
-    files = glob.glob(f"{path}/*{time[:8]}-{time[8:]}_processed.grib2")
+    files = glob.glob(f"{path}/*{time[:8]}-{time[8:]}*grib2")
     files.sort()
 
     # Open a sample file
@@ -163,8 +165,8 @@ if __name__ == '__main__':
     # Debugging: Only plot REF from a single level
     #fname = '/work2/noaa/wrfruc/RRFS2_RETRO_DATA/May2024/reflectivity/MergedReflectivityQC_05.00_20240508-210042.grib2'
     #title = 'Real MRMS: 5 km ASL, 20240508-210042'
-    #fname = '/work/noaa/wrfruc/jdduda/RadarNext/processed_reflectivity/20220501-010000/MergedReflectivityQC_05.00_20220501-010000_processed.grib2'
-    #title = 'Syn MRMS: 5 km ASL, 20220501-010000'
+    #fname = '/work/noaa/wrfruc/jdduda/RadarNext/processed_reflectivity/20220502-120000/MergedReflectivityQC_05.00_20220502-120000_processed.grib2'
+    #title = 'Syn MRMS: 5 km ASL, 20220502-120000'
     #ds = xr.open_dataset(fname, engine='pynio')
     #mrms_cref = ds['CONUSMergedReflectivityQC_P0_L102_GLL0'].values
     #mrms_lat = ds['lat_0'].values
