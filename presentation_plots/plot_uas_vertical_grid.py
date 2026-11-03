@@ -27,8 +27,12 @@ superob_file = '/work/noaa/wrfruc/murdzek/nature_run_spring/obs/uas_obs_150km/su
 
 superob_grid = '/work2/noaa/wrfruc/murdzek/src/osse_ob_creator/fix_data/RRFS_grid_mean_twice_gspacing.nc'
 
-med_out_file = 'uas_vgrid.png'
-lowest_superob_hist_file = 'lowest_superob_hist.png'
+exclude_nan_obs = True
+
+med_out_file = 'uas_vgrid_noNaN.png'
+lowest_superob_hist_file = 'lowest_superob_hist_noNaN.png'
+highest_superob_hist_file = 'highest_superob_hist_noNaN.png'
+nlev_superob_file = 'nlev_superob_hist_noNaN.png'
 
 
 #---------------------------------------------------------------------------------------------------
@@ -48,6 +52,11 @@ raw_df = bufr.bufrCSV(raw_file).df
 raw_df = raw_df.loc[raw_df['TYP'] == 136]
 superob_df = bufr.bufrCSV(superob_file).df
 superob_df = superob_df.loc[superob_df['TYP'] == 136]
+
+# Drop rows with NaN obs
+if exclude_nan_obs:
+    superob_df = superob_df.loc[~np.isnan(superob_df['TOB']), :]
+    superob_df.reset_index(drop=True, inplace=True)
 
 # Compute height agl
 all_sid = np.unique(bogus_df['SID'].values)
@@ -89,15 +98,15 @@ for i, s in enumerate(all_sid):
 
 med_hgt_agl = np.nanmedian(hgt_agl, axis=0)
 
-# Plot median height AGL
+# Plot median UAS superob heights AGL
 fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 6))
 for z in med_hgt_agl:
     ax.axhline(z, color='b', lw=2, ls='-')
 ax.set_xlim([0, 1])
-ax.set_ylim([0, np.nanmax(med_hgt_agl) + 5])
+ax.set_ylim([0, 2000])
 ax.set_ylabel('height AGL (m)', size=14)
 ax.set_xticks([])
-ax.set_title(f"Vertical Location of UAS Superobs\nLowest = {np.nanmin(med_hgt_agl):.1f} m, Highest = {np.nanmax(med_hgt_agl):.1f} m", size=18)
+ax.set_title(f"Median Vertical Location of UAS Superobs\nLowest = {np.nanmin(med_hgt_agl):.1f} m, Highest = {np.nanmax(med_hgt_agl):.1f} m", size=18)
 plt.savefig(med_out_file)
 
 # Plot histogram of lowest UAS superob
@@ -107,8 +116,29 @@ ax.grid()
 ax.set_xlabel('height (m AGL)', size=15)
 ax.set_ylabel('count', size=15)
 ax.tick_params(axis='both', labelsize=12)
-ax.set_title(f"Lowest UAS Superob in the 150-km Network\nMin = {np.nanmin(hgt_agl[:, 0]):.1f} m, Max = {np.nanmax(hgt_agl[:, 0]):.1f} m", size=18)
+ax.set_title(f"Lowest UAS Superob in the 150-km Network\nMin = {np.amin(hgt_agl[:, 0]):.1f} m, Max = {np.amax(hgt_agl[:, 0]):.1f} m", size=18)
 plt.savefig(lowest_superob_hist_file, dpi=500)
+
+# Plot histogram of highest UAS superob
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 6))
+hgt_agl_max = np.nanmax(hgt_agl, axis=1)
+ax.hist(hgt_agl_max, bins=np.arange(1780, 2005, 5))
+ax.grid()
+ax.set_xlabel('height (m AGL)', size=15)
+ax.set_ylabel('count', size=15)
+ax.tick_params(axis='both', labelsize=12)
+ax.set_title(f"Highest UAS Superob in the 150-km Network\nMin = {np.nanmin(hgt_agl_max):.1f} m, Max = {np.nanmax(hgt_agl_max):.1f} m", size=18)
+plt.savefig(highest_superob_hist_file, dpi=500)
+
+# Plot histogram of number of superob vertical levels
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 6))
+ax.hist(nlev[2, :], bins=np.arange(9, 15, 1))
+ax.grid()
+ax.set_xlabel('number of vertical levels', size=15)
+ax.set_ylabel('count', size=15)
+ax.tick_params(axis='both', labelsize=12)
+ax.set_title(f"N UAS Superob Levels in the 150-km Network\nMin = {np.amin(nlev[2, :]):.0f}, Max = {np.amax(nlev[2, :]):.0f}", size=18)
+plt.savefig(nlev_superob_file, dpi=500)
 
 
 """
